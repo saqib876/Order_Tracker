@@ -25,10 +25,16 @@ interface TrackingResult {
   history: { status: OrderStatus; note: string | null; changed_at: string }[]
 }
 
-function daysBetween(a: string, b: string) {
-  const d1 = new Date(a); d1.setHours(0, 0, 0, 0)
-  const d2 = new Date(b); d2.setHours(0, 0, 0, 0)
-  return Math.floor((d2.getTime() - d1.getTime()) / 86400000)
+function workingDaysBetween(a: string, b: string) {
+  const start = new Date(a); start.setHours(0, 0, 0, 0)
+  const end = new Date(b); end.setHours(0, 0, 0, 0)
+  let count = 0
+  const cur = new Date(start)
+  while (cur < end) {
+    cur.setDate(cur.getDate() + 1)
+    if (cur.getDay() !== 0) count++ // 0 = Sunday, skip
+  }
+  return count
 }
 
 function todayStr() {
@@ -54,14 +60,15 @@ function fmtDateTime(iso: string) {
 
 // in_process: 10–15 day window, never goes negative (min 1)
 // shipped: 3-day window from shippedAt, never goes negative
+// Sundays are excluded from countdown
 function calcCountdown(order: TrackingResult['order']) {
   const today = todayStr()
 
-if (order.status !== 'shipped' && order.status !== 'delivered') {
+  if (order.status !== 'shipped' && order.status !== 'delivered') {
     const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
     const maxD = new Date(confirmed); maxD.setDate(confirmed.getDate() + 15)
-    const passed = daysBetween(order.createdAt, today)
+    const passed = workingDaysBetween(order.createdAt, today)
     const daysLeft = Math.max(1, 15 - passed)
     const prog = Math.min(95, Math.round((passed / 15) * 100))
     return {
@@ -76,7 +83,7 @@ if (order.status !== 'shipped' && order.status !== 'delivered') {
   if (order.status === 'shipped' && order.shippedAt) {
     const shipped = new Date(order.shippedAt); shipped.setHours(0, 0, 0, 0)
     const deadlineD = new Date(shipped); deadlineD.setDate(shipped.getDate() + 3)
-    const passed = daysBetween(order.shippedAt, today)
+    const passed = workingDaysBetween(order.shippedAt, today)
     const daysLeft = Math.max(1, 3 - passed)
     const prog = Math.min(95, Math.round((passed / 3) * 100))
     return {
@@ -99,10 +106,11 @@ async function fetchPostEx(trackingId: string): Promise<{ ok: boolean; data?: an
     )
     if (!res.ok) return { ok: false }
     const json = await res.json()
-    if (json?.statusCode === 200 && json?.dist?.length) {
-      const events = json.dist.map((ev: any, i: number) => ({
-        label: ev.orderStatus || ev.status,
-        time: ev.dateTime || ev.date || '',
+    const list = json?.dist ?? json?.data?.dist ?? json?.data ?? []
+    if (json?.statusCode === 200 && Array.isArray(list) && list.length) {
+      const events = list.map((ev: any, i: number) => ({
+        label: ev.orderStatus ?? ev.status ?? ev.StatusDescription ?? 'Update',
+        time: ev.dateTime ?? ev.date ?? ev.DateTime ?? '',
         state: i === 0 ? 'active' : 'done',
       }))
       return { ok: true, data: { events } }
@@ -427,7 +435,7 @@ export default function TrackPage() {
               </div>
               <a
                 className="px-link"
-                href={o.postexUrl || `https://postex.pk/tracking/${o.trackingId}`}
+                href={`https://postex.pk/tracking?tracking_id=${o.trackingId}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
