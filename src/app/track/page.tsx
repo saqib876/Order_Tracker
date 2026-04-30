@@ -57,7 +57,7 @@ function fmtDateTime(iso: string) {
 function calcCountdown(order: TrackingResult['order']) {
   const today = todayStr()
 
-  if (order.status === 'in_process') {
+if (order.status !== 'shipped' && order.status !== 'delivered') {
     const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
     const maxD = new Date(confirmed); maxD.setDate(confirmed.getDate() + 15)
@@ -68,7 +68,7 @@ function calcCountdown(order: TrackingResult['order']) {
       daysLeft, prog,
       startFmt: fmtFull(confirmed),
       maxDate: fmtFull(maxD),
-      estRange: `${fmtShort(minD)} – ${fmtFull(maxD)}`,
+      estRange: `${fmtShort(minD)} – ${fmtShort(maxD)}`,
       shippedMode: false,
     }
   }
@@ -373,7 +373,7 @@ export default function TrackPage() {
             <div className="tile">
               <div className="tile-lbl">Est. Delivery</div>
               <div className={`tile-val${cd ? ' sm' : ''}`}>
-                {cd ? (cd.estRange || `By ${cd.maxDate}`) : '—'}
+                {cd ? cd.estRange : '10 – 15 days after confirmation'}
               </div>
             </div>
           )}
