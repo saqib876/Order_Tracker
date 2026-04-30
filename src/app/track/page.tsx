@@ -480,7 +480,7 @@ export default function TrackPage() {
       <style>{css}</style>
       <div className="page">
         <div className="topbar">
-          <div className="logo">MYZAN</div>
+          <div className="logo">MYZANN</div>
           <span className="topbar-sub">Order Tracker</span>
         </div>
         <div className="container">
