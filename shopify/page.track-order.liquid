@@ -1,0 +1,44 @@
+{% comment %}
+  Shopify Page Template: page.track-order.liquid
+  ─────────────────────────────────────────────────────────────
+  1. In Shopify Admin → Online Store → Themes → Edit code
+  2. Under "Templates", click "Add a new template"
+  3. Choose "page", select "liquid", name it "track-order"
+  4. Paste this file's contents
+  5. Create a new Page in Shopify Admin → Pages
+     - Title: "Track Your Order"
+     - Template: page.track-order
+  ─────────────────────────────────────────────────────────────
+{% endcomment %}
+
+{% layout 'theme' %}
+
+{% block content %}
+<div class="track-order-wrapper">
+  <iframe
+    src="https://YOUR-VERCEL-APP.vercel.app/track"
+    title="Track Your Order"
+    frameborder="0"
+    scrolling="no"
+    id="track-order-frame"
+    style="width:100%;border:none;min-height:600px;display:block;"
+  ></iframe>
+</div>
+
+<script>
+  // Auto-resize iframe to fit content (no scroll bars)
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'resize') {
+      document.getElementById('track-order-frame').style.height = e.data.height + 'px';
+    }
+  });
+</script>
+
+<style>
+  .track-order-wrapper {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+</style>
+{% endblock %}
