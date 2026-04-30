@@ -144,7 +144,7 @@ function buildTimeline(order: TrackingResult['order'], history: TrackingResult['
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html,body{height:100%;overflow-y:auto}
 :root{
   --blue:#0A85D1;--blue-dk:#0872b3;--blue-lt:#e8f4fd;--blue-mid:#b3d9f5;
   --green:#16a34a;--green-lt:#dcfce7;
@@ -154,7 +154,7 @@ html,body{height:100%}
   --border:#e2e8f0;--surface:#f8fafc;--white:#ffffff;
   --font:'Plus Jakarta Sans',sans-serif;
 }
-.page{background:#eef5ff;min-height:100vh;font-family:var(--font);padding-bottom:80px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page{background:#eef5ff;min-height:100vh;font-family:var(--font);padding-bottom:80px;-webkit-overflow-scrolling:touch}
 
 /* topbar */
 .topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;box-shadow:0 1px 3px rgba(0,0,0,.04)}
