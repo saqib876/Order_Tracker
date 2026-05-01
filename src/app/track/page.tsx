@@ -447,7 +447,7 @@ export default function TrackPage() {
                   if (o.trackingId) {
                     navigator.clipboard.writeText(o.trackingId).catch(() => {})
                   }
-                  window.open('https://callcourier.com.pk/tracking', '_blank')
+                  window.open(`https://callcourier.com.pk/tracking/?tc=${o.trackingId}`, '_blank')
                 }}
               >
                 Track on Call Courier website → (CN copied ✓)
