@@ -32,7 +32,7 @@ function workingDaysBetween(a: string, b: string) {
   const cur = new Date(start)
   while (cur < end) {
     cur.setDate(cur.getDate() + 1)
-    if (cur.getDay() !== 0) count++ // 0 = Sunday, skip
+    if (cur.getDay() !== 0) count++
   }
   return count
 }
@@ -57,10 +57,14 @@ function fmtDateTime(iso: string) {
     hour: '2-digit', minute: '2-digit',
   })
 }
+function fmtCCDate(iso: string) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('en-PK', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
 
-// in_process: 10–15 day window, never goes negative (min 1)
-// shipped: 3-day window from shippedAt, never goes negative
-// Sundays are excluded from countdown
 function calcCountdown(order: TrackingResult['order']) {
   const today = todayStr()
 
@@ -98,24 +102,28 @@ function calcCountdown(order: TrackingResult['order']) {
   return null
 }
 
-async function fetchPostEx(trackingId: string): Promise<{ ok: boolean; data?: any }> {
+// CallCourier public API — no token needed
+async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data?: any }> {
   try {
     const res = await fetch(
-      `https://api.postex.pk/services/integration/api/order/v3/track-order?trackingNumber=${trackingId}`,
-      { headers: { token: process.env.NEXT_PUBLIC_POSTEX_TOKEN || '' } }
+      `http://cod.callcourier.com.pk/api/CallCourier/GetTackingHistory?cn=${trackingId}`
     )
     if (!res.ok) return { ok: false }
     const json = await res.json()
-    const list = json?.dist ?? json?.data?.dist ?? json?.data ?? []
-    if (json?.statusCode === 200 && Array.isArray(list) && list.length) {
-      const events = list.map((ev: any, i: number) => ({
-        label: ev.orderStatus ?? ev.status ?? ev.StatusDescription ?? 'Update',
-        time: ev.dateTime ?? ev.date ?? ev.DateTime ?? '',
-        state: i === 0 ? 'active' : 'done',
-      }))
-      return { ok: true, data: { events } }
-    }
-    return { ok: false }
+    if (!Array.isArray(json) || json.length === 0) return { ok: false }
+
+    // Sort newest first
+    const sorted = [...json].sort(
+      (a, b) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
+    )
+
+    const events = sorted.map((ev: any, i: number) => ({
+      label: ev.ProcessDescForPortal || ev.OperationDesc || 'Update',
+      time: fmtCCDate(ev.TransactionDate),
+      state: i === 0 ? 'active' : 'done',
+    }))
+
+    return { ok: true, data: { events } }
   } catch {
     return { ok: false }
   }
@@ -233,7 +241,7 @@ html,body{height:100%;overflow-y:auto}
 /* section label */
 .sec-lbl{font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin:20px 0 10px 2px}
 
-/* postex */
+/* courier tracking */
 .px-card{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:12px}
 .px-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .px-head-lbl{font-size:11px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
@@ -251,7 +259,7 @@ html,body{height:100%;overflow-y:auto}
 .px-label{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;margin-bottom:2px;flex-wrap:wrap}
 .px-now{font-size:10px;color:var(--blue);background:var(--blue-lt);padding:2px 8px;border-radius:4px;border:1px solid var(--blue-mid);font-weight:700}
 .px-time{font-size:12px;color:var(--text3);font-weight:500}
-.px-link{display:block;padding:13px 20px;border-top:1px solid var(--border);font-size:13px;color:var(--blue);text-decoration:none;text-align:center;font-weight:700;transition:background .2s}
+.px-link{display:block;padding:13px 20px;border-top:1px solid var(--border);font-size:13px;color:var(--blue);text-decoration:none;text-align:center;font-weight:700;transition:background .2s;cursor:pointer;background:transparent;width:100%;border-left:none;border-right:none;border-bottom:none;font-family:var(--font)}
 .px-link:hover{background:var(--blue-lt)}
 
 /* timeline */
@@ -277,8 +285,8 @@ html,body{height:100%;overflow-y:auto}
 .item-qty{font-size:12px;color:var(--blue);background:var(--blue-lt);padding:4px 12px;border-radius:20px;font-weight:700;border:1px solid var(--blue-mid)}
 `
 
-function PostExEvents({ events }: { events: any[] | null }) {
-  const icons = ['🚚', '📦', '✅', '📍']
+function CourierEvents({ events }: { events: any[] | null }) {
+  const icons = ['🚚', '📦', '🏢', '➡️', '✅', '📍', '🔄', '↩️', '📋', '🏠', '🎯']
   if (!events) {
     return <div className="px-loading"><div className="px-dot" />Fetching live courier status…</div>
   }
@@ -293,7 +301,7 @@ function PostExEvents({ events }: { events: any[] | null }) {
           <div>
             <div className="px-label">
               {ev.label}
-              {ev.state === 'active' && <span className="px-now">NOW</span>}
+              {ev.state === 'active' && <span className="px-now">LATEST</span>}
             </div>
             <div className="px-time">{ev.time}</div>
           </div>
@@ -309,14 +317,14 @@ export default function TrackPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<TrackingResult | null>(null)
-  const [postexEvents, setPostexEvents] = useState<any[] | null | undefined>(undefined)
+  const [courierEvents, setCourierEvents] = useState<any[] | null | undefined>(undefined)
 
   async function handleTrack() {
     if (!query.trim()) {
       setError('Please enter your ' + (tab === 'order' ? 'order number.' : 'phone number.'))
       return
     }
-    setLoading(true); setError(''); setResult(null); setPostexEvents(undefined)
+    setLoading(true); setError(''); setResult(null); setCourierEvents(undefined)
     try {
       const res = await fetch('/api/track', {
         method: 'POST',
@@ -327,9 +335,9 @@ export default function TrackPage() {
       if (!res.ok) { setError(data.error || 'Order not found.'); return }
       setResult(data)
       if ((data.order.status === 'shipped' || data.order.status === 'delivered') && data.order.trackingId) {
-        setPostexEvents(null)
-        const px = await fetchPostEx(data.order.trackingId)
-        setPostexEvents(px.ok ? px.data.events : [])
+        setCourierEvents(null)
+        const cc = await fetchCallCourier(data.order.trackingId)
+        setCourierEvents(cc.ok ? cc.data.events : [])
       }
     } catch {
       setError('Network error. Please try again.')
@@ -339,7 +347,7 @@ export default function TrackPage() {
   }
 
   function switchTab(t: 'order' | 'phone') {
-    setTab(t); setQuery(''); setError(''); setResult(null); setPostexEvents(undefined)
+    setTab(t); setQuery(''); setError(''); setResult(null); setCourierEvents(undefined)
   }
 
   function renderResult() {
@@ -421,26 +429,29 @@ export default function TrackPage() {
           </div>
         )}
 
-        {/* PostEx live tracking */}
+        {/* CallCourier live tracking */}
         {(isShipped || isDelivered) && o.trackingId && (
           <>
             <div className="sec-lbl">Live Courier Tracking</div>
             <div className="px-card">
               <div className="px-head">
-                <span className="px-head-lbl">PostEx Status</span>
+                <span className="px-head-lbl">Call Courier Status</span>
                 <span className="px-tid">{o.trackingId}</span>
               </div>
               <div className="px-body">
-                <PostExEvents events={postexEvents === undefined ? null : postexEvents} />
+                <CourierEvents events={courierEvents === undefined ? null : courierEvents} />
               </div>
-              <a
+              <button
                 className="px-link"
-                href={`https://postex.pk/tracking?tracking_id=${o.trackingId}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => {
+                  if (o.trackingId) {
+                    navigator.clipboard.writeText(o.trackingId).catch(() => {})
+                  }
+                  window.open('https://callcourier.com.pk/tracking', '_blank')
+                }}
               >
-                Track on PostEx website →
-              </a>
+                Track on Call Courier website → (CN copied ✓)
+              </button>
             </div>
           </>
         )}
@@ -488,7 +499,7 @@ export default function TrackPage() {
       <style>{css}</style>
       <div className="page">
         <div className="topbar">
-          <div className="logo">MYZAN</div>
+          <div className="logo">MYZANN</div>
           <span className="topbar-sub">Order Tracker</span>
         </div>
         <div className="container">
