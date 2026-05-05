@@ -66,8 +66,9 @@ function fmtCCDate(iso: string) {
 }
 
 function calcCountdown(order: TrackingResult['order']) {
-  const today = todayStr()
+  if (order.status === 'delivered') return null   // ← YEH LINE ADD KARO
 
+  const today = todayStr()
   if (order.status !== 'shipped' && order.status !== 'delivered') {
     const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
