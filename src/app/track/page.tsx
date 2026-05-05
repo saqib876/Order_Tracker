@@ -69,7 +69,7 @@ function calcCountdown(order: TrackingResult['order']) {
   if (order.status === 'delivered') return null   // ← YEH LINE ADD KARO
 
   const today = todayStr()
-  if (order.status !== 'shipped' && order.status !== 'delivered') {
+  if (if (order.status !== 'shipped')) {
     const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
     const maxD = new Date(confirmed); maxD.setDate(confirmed.getDate() + 15)
