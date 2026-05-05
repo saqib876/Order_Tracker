@@ -65,8 +65,16 @@ function fmtCCDate(iso: string) {
   })
 }
 
-function calcCountdown(order: TrackingResult['order']) {
-  if (order.status === 'delivered') return null   // ← YEH LINE ADD KARO
+// Returns true if the latest courier event contains "deliver"
+function isCourierDelivered(events: any[] | null | undefined): boolean {
+  if (!events || events.length === 0) return false
+  const label: string = (events[0]?.label || '').toLowerCase()
+  return label.includes('deliver')
+}
+
+function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
+  // Hide countdown if DB says delivered OR courier API says delivered
+  if (order.status === 'delivered' || courierDone) return null
 
   const today = todayStr()
   if (order.status !== 'shipped') {
@@ -103,7 +111,6 @@ function calcCountdown(order: TrackingResult['order']) {
   return null
 }
 
-// CallCourier public API — no token needed
 async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data?: any }> {
   try {
     const res = await fetch(
@@ -113,7 +120,6 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
     const json = await res.json()
     if (!Array.isArray(json) || json.length === 0) return { ok: false }
 
-    // Sort newest first
     const sorted = [...json].sort(
       (a, b) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
     )
@@ -173,15 +179,12 @@ html,body{height:100%;overflow-y:auto}
 }
 .page{background:#eef5ff;min-height:100vh;font-family:var(--font);padding-bottom:80px;-webkit-overflow-scrolling:touch}
 
-/* topbar */
 .topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .logo{background:var(--blue);color:#fff;font-weight:800;font-size:11px;letter-spacing:2px;padding:5px 10px;border-radius:6px}
 .topbar-sub{font-size:12px;color:var(--text3);font-weight:600;letter-spacing:1px;text-transform:uppercase}
 
-/* layout */
 .container{max-width:580px;margin:0 auto;padding:28px 16px 0}
 
-/* search card */
 .search-card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:24px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
 .search-title{font-size:20px;font-weight:800;color:var(--text);margin-bottom:3px}
 .search-sub{font-size:13px;color:var(--text3);font-weight:500;margin-bottom:18px}
@@ -198,7 +201,6 @@ html,body{height:100%;overflow-y:auto}
 .track-btn:disabled{background:#90c4e8;cursor:not-allowed;box-shadow:none}
 .err{background:var(--red-lt);border:1px solid #fecaca;border-radius:10px;padding:12px 16px;color:var(--red);font-size:13px;margin-top:14px;font-weight:600}
 
-/* hero */
 .hero{background:linear-gradient(135deg,#0A85D1 0%,#0565a8 100%);border-radius:20px;padding:26px 24px;margin-bottom:12px;position:relative;overflow:hidden}
 .hero::before{content:'';position:absolute;top:-50px;right:-50px;width:180px;height:180px;background:rgba(255,255,255,.07);border-radius:50%}
 .hero::after{content:'';position:absolute;bottom:-70px;left:-30px;width:220px;height:220px;background:rgba(255,255,255,.04);border-radius:50%}
@@ -211,7 +213,6 @@ html,body{height:100%;overflow-y:auto}
 .hb-shipped{background:#1a0f00;color:#f59e0b;border:1px solid #f59e0b44}
 .hb-date{background:rgba(255,255,255,.1);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.15)}
 
-/* info tiles */
 .info-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .tile{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
 .tile-lbl{font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;font-weight:700;margin-bottom:6px}
@@ -219,13 +220,11 @@ html,body{height:100%;overflow-y:auto}
 .tile-val.sm{font-size:13px;font-weight:600;color:var(--text2)}
 .tile-val.green{color:var(--green)}
 
-/* note */
 .note{background:var(--blue-lt);border:1px solid var(--blue-mid);border-radius:14px;padding:16px 18px;margin-bottom:12px;display:flex;gap:14px;align-items:flex-start}
 .note-icon{width:38px;height:38px;background:var(--blue);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .note-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:3px}
 .note-body{font-size:12px;color:var(--text2);line-height:1.6;font-weight:500}
 
-/* countdown */
 .cd-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:12px}
 .cd-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
 .cd-lbl{font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:4px}
@@ -239,10 +238,8 @@ html,body{height:100%;overflow-y:auto}
 .cd-dates span{font-size:12px;color:var(--text3);font-weight:500}
 .cd-dates .cd-end{color:var(--text);font-weight:700}
 
-/* section label */
 .sec-lbl{font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin:20px 0 10px 2px}
 
-/* courier tracking */
 .px-card{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:12px}
 .px-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .px-head-lbl{font-size:11px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
@@ -263,7 +260,6 @@ html,body{height:100%;overflow-y:auto}
 .px-link{display:block;padding:13px 20px;border-top:1px solid var(--border);font-size:13px;color:var(--blue);text-decoration:none;text-align:center;font-weight:700;transition:background .2s;cursor:pointer;background:transparent;width:100%;border-left:none;border-right:none;border-bottom:none;font-family:var(--font)}
 .px-link:hover{background:var(--blue-lt)}
 
-/* timeline */
 .tl-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:12px}
 .tl-item{display:flex;gap:16px;position:relative;padding-bottom:20px}
 .tl-item:last-child{padding-bottom:0}
@@ -277,7 +273,6 @@ html,body{height:100%;overflow-y:auto}
 .tl-tag-amber{font-size:10px;color:var(--amber);background:var(--amber-lt);padding:2px 8px;border-radius:4px;border:1px solid #fde68a;font-weight:700}
 .tl-sub{font-size:12px;color:var(--text3);font-weight:500}
 
-/* items */
 .items-card{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:12px}
 .items-head{padding:13px 20px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:700}
 .item-row{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border)}
@@ -358,14 +353,16 @@ export default function TrackPage() {
     const isShipped = o.status === 'shipped'
     const isInProcess = o.status === 'in_process'
     const label = STATUS_LABEL[o.status] ?? o.status
-    const cd = calcCountdown(o)
-    const timeline = buildTimeline(o, result.history)
 
+    // True if courier API latest event says "delivered" (even if DB is still 'shipped')
+    const courierDone = isCourierDelivered(courierEvents)
+
+    const cd = calcCountdown(o, courierDone)
+    const timeline = buildTimeline(o, result.history)
     const heroBadge = isDelivered ? 'hb hb-delivered' : isShipped ? 'hb hb-shipped' : 'hb hb-status'
 
     return (
       <>
-        {/* Hero */}
         <div className="hero">
           <div className="hero-no">Order #{o.orderNumber}</div>
           <div className="hero-name">{o.customerName || 'Your Order'}</div>
@@ -375,13 +372,12 @@ export default function TrackPage() {
           </div>
         </div>
 
-        {/* Info tiles */}
         <div className="info-row">
           <div className="tile">
             <div className="tile-lbl">Ordered On</div>
             <div className="tile-val">{fmtDate(o.createdAt)}</div>
           </div>
-          {isDelivered ? (
+          {isDelivered || courierDone ? (
             <div className="tile">
               <div className="tile-lbl">Delivered On</div>
               <div className="tile-val green">{fmtDate(o.updatedAt)}</div>
@@ -396,7 +392,6 @@ export default function TrackPage() {
           )}
         </div>
 
-        {/* Note */}
         {isInProcess && (
           <div className="note">
             <div className="note-icon">🎨</div>
@@ -407,8 +402,8 @@ export default function TrackPage() {
           </div>
         )}
 
-        {/* Countdown */}
-        {cd && !isDelivered && (
+        {/* Countdown hidden if DB delivered OR courier says delivered */}
+        {cd && !isDelivered && !courierDone && (
           <div className="cd-card">
             <div className="cd-top">
               <div>
@@ -430,7 +425,6 @@ export default function TrackPage() {
           </div>
         )}
 
-        {/* CallCourier live tracking */}
         {(isShipped || isDelivered) && o.trackingId && (
           <>
             <div className="sec-lbl">Live Courier Tracking</div>
@@ -457,7 +451,6 @@ export default function TrackPage() {
           </>
         )}
 
-        {/* Status history */}
         <div className="sec-lbl">Status History</div>
         <div className="tl-card">
           {timeline.map((item, i) => (
@@ -476,7 +469,6 @@ export default function TrackPage() {
           ))}
         </div>
 
-        {/* Items */}
         {(o.lineItems || []).length > 0 && (
           <>
             <div className="sec-lbl">Items</div>
@@ -500,7 +492,7 @@ export default function TrackPage() {
       <style>{css}</style>
       <div className="page">
         <div className="topbar">
-          <div className="logo">MYZANN</div>
+          <div className="logo">MYZAN</div>
           <span className="topbar-sub">Order Tracker</span>
         </div>
         <div className="container">
@@ -525,7 +517,6 @@ export default function TrackPage() {
             </div>
             {error && <div className="err">{error}</div>}
           </div>
-
           {renderResult()}
         </div>
       </div>
