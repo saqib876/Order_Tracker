@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 type OrderStatus = 'in_process' | 'shipped' | 'delivered'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  in_process: 'Making in Progress',
+  in_process: 'Making in progress',
   shipped: 'Shipped',
   delivered: 'Delivered',
 }
@@ -25,6 +25,7 @@ interface TrackingResult {
   history: { status: OrderStatus; note: string | null; changed_at: string }[]
 }
 
+/* ---------- date / working-day helpers ---------- */
 function workingDaysBetween(a: string, b: string) {
   const start = new Date(a); start.setHours(0, 0, 0, 0)
   const end = new Date(b); end.setHours(0, 0, 0, 0)
@@ -36,12 +37,10 @@ function workingDaysBetween(a: string, b: string) {
   }
   return count
 }
-
 function todayStr() {
   const t = new Date(); t.setHours(0, 0, 0, 0)
   return t.toISOString().slice(0, 10)
 }
-
 function fmtShort(d: Date) {
   return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })
 }
@@ -53,19 +52,16 @@ function fmtDate(iso: string) {
 }
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-PK', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   })
 }
 function fmtCCDate(iso: string) {
   if (!iso) return ''
   return new Date(iso).toLocaleString('en-PK', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   })
 }
 
-// Returns true if the latest courier event contains "deliver"
 function isCourierDelivered(events: any[] | null | undefined): boolean {
   if (!events || events.length === 0) return false
   const label: string = (events[0]?.label || '').toLowerCase()
@@ -73,17 +69,16 @@ function isCourierDelivered(events: any[] | null | undefined): boolean {
 }
 
 function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
-  // Hide countdown if DB says delivered OR courier API says delivered
   if (order.status === 'delivered' || courierDone) return null
-
   const today = todayStr()
+
   if (order.status !== 'shipped') {
     const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
     const maxD = new Date(confirmed); maxD.setDate(confirmed.getDate() + 15)
     const passed = workingDaysBetween(order.createdAt, today)
     const daysLeft = Math.max(1, 15 - passed)
-    const prog = Math.min(95, Math.round((passed / 15) * 100))
+    const prog = Math.min(95, Math.max(6, Math.round((passed / 15) * 100)))
     return {
       daysLeft, prog,
       startFmt: fmtFull(confirmed),
@@ -98,7 +93,7 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
     const deadlineD = new Date(shipped); deadlineD.setDate(shipped.getDate() + 3)
     const passed = workingDaysBetween(order.shippedAt, today)
     const daysLeft = Math.max(1, 3 - passed)
-    const prog = Math.min(95, Math.round((passed / 3) * 100))
+    const prog = Math.min(95, Math.max(10, Math.round((passed / 3) * 100)))
     return {
       daysLeft, prog,
       startFmt: fmtFull(shipped),
@@ -107,7 +102,6 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
       shippedMode: true,
     }
   }
-
   return null
 }
 
@@ -119,213 +113,221 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
     if (!res.ok) return { ok: false }
     const json = await res.json()
     if (!Array.isArray(json) || json.length === 0) return { ok: false }
-
     const sorted = [...json].sort(
       (a, b) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
     )
-
     const events = sorted.map((ev: any, i: number) => ({
       label: ev.ProcessDescForPortal || ev.OperationDesc || 'Update',
       time: fmtCCDate(ev.TransactionDate),
       state: i === 0 ? 'active' : 'done',
     }))
-
     return { ok: true, data: { events } }
   } catch {
     return { ok: false }
   }
 }
 
-function buildTimeline(order: TrackingResult['order'], history: TrackingResult['history']) {
-  const isDelivered = order.status === 'delivered'
-  const isShipped = order.status === 'shipped'
-  const historyTime = (s: string) => {
-    const entry = history.find(h => h.status === s)
-    return entry ? fmtDateTime(entry.changed_at) : 'Completed'
-  }
-  if (isDelivered) {
-    return [
-      { dot: 'green', label: 'Delivered', sub: historyTime('delivered'), tag: null },
-      { dot: 'green', label: 'Shipped', sub: `Tracking ID: ${order.trackingId}`, tag: null },
-      { dot: 'green', label: 'Making in Progress', sub: 'Completed', tag: null },
-      { dot: 'green', label: 'Order Confirmed', sub: fmtDate(order.createdAt), tag: null },
-    ]
-  }
-  if (isShipped) {
-    return [
-      { dot: 'amber', label: 'Shipped', sub: `Tracking ID: ${order.trackingId}`, tag: 'current' },
-      { dot: 'green', label: 'Making in Progress', sub: 'Completed', tag: null },
-      { dot: 'green', label: 'Order Confirmed', sub: fmtDate(order.createdAt), tag: null },
-    ]
+/* ---------- stepper stages ---------- */
+function buildStages(order: TrackingResult['order'], history: TrackingResult['history'], courierDone: boolean) {
+  const done = courierDone || order.status === 'delivered'
+  const shipped = done || order.status === 'shipped'
+  const timeOf = (s: OrderStatus) => {
+    const e = history.find(h => h.status === s)
+    return e ? fmtDateTime(e.changed_at) : ''
   }
   return [
-    { dot: 'blue', label: 'Making in Progress', sub: 'In progress', tag: 'current' },
-    { dot: 'green', label: 'Order Confirmed', sub: fmtDate(order.createdAt), tag: null },
+    { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as const },
+    { label: 'Making', sub: shipped ? 'Completed' : 'In progress',
+      state: shipped ? 'done' : 'current' as const },
+    { label: 'Shipped', sub: order.trackingId ? `CN ${order.trackingId}` : timeOf('shipped') || '—',
+      state: done ? 'done' : shipped ? 'current' : 'pending' as const },
+    { label: 'Delivered', sub: done ? (timeOf('delivered') || 'Completed') : 'Pending',
+      state: done ? 'done' : 'pending' as const },
   ]
 }
 
+/* ---------- styles ---------- */
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:auto;overflow:hidden;background:#ffffff;}
-
 :root{
-  --blue:#0A85D1;
-  --blue-dk:#0872b3;
-  --blue-lt:#e8f4fd;
-  --blue-mid:#b3d9f5;
-  --dark:#111111;
-  --gray-deep:#444444;
-  --gray-muted:#888888;
-  --border-light:#e2e8f0;
-  --bg-clean:#ffffff;
-  --white:#ffffff;
-  --font:'Plus Jakarta Sans',sans-serif;
-  --green-status:#16a34a;
-  --green-bg:#dcfce7;
+  --ink:#0B1120; --ink2:#141C2E; --ink3:#1E2A44;
+  --canvas:#EDF1F8; --card:#FFFFFF; --line:#E4E9F2;
+  --txt:#0B1120; --txt2:#5A6B85; --txt3:#93A0B8;
+  --acc:#4F46E5; --acc2:#06B6D4; --violet:#7C3AED;
+  --grn:#10B981; --grn-l:#DCFCE7; --amb:#F59E0B; --amb-l:#FEF3C7;
+  --red:#EF4444; --red-l:#FEE2E2;
+  --disp:'Space Grotesk',sans-serif; --body:'Inter',sans-serif;
 }
+html,body{background:var(--canvas)}
+.app{font-family:var(--body);color:var(--txt);background:var(--canvas);min-height:100dvh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 
-.page{background:var(--bg-clean);min-height:100vh;font-family:var(--font);padding-bottom:10px;}
-.topbar{display:none;} 
+/* top bar */
+.bar{height:56px;display:flex;align-items:center;gap:12px;padding:0 20px;background:rgba(255,255,255,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.5px;color:var(--ink)}
+.brand b{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.bar-sub{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3)}
+.bar-right{margin-left:auto;font-family:var(--disp);font-size:13px;font-weight:600;color:var(--txt2);background:#fff;border:1px solid var(--line);padding:5px 12px;border-radius:99px}
 
-/* Main Container: Expanded to utilize side spaces fully */
-.container{max-width:1200px;margin:0 auto;padding:20px 24px 0}
+/* ===== SEARCH STAGE ===== */
+.stage{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 16px}
+.search{width:100%;max-width:440px;text-align:center}
+.eyebrow{font-family:var(--disp);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--acc);margin-bottom:14px}
+.search h1{font-family:var(--disp);font-size:34px;font-weight:700;line-height:1.1;letter-spacing:-.5px;margin-bottom:10px}
+.search p{font-size:14px;color:var(--txt2);line-height:1.55;margin-bottom:26px}
+.seg{display:flex;background:#fff;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px;box-shadow:0 1px 2px rgba(11,17,32,.04)}
+.seg button{flex:1;border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--txt2);padding:9px;border-radius:8px;cursor:pointer;transition:.2s}
+.seg button.on{background:var(--ink);color:#fff}
+.field{display:flex;gap:9px}
+.field input{flex:1;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:13px 16px;font-family:var(--body);font-size:15px;font-weight:500;color:var(--txt);outline:none;transition:.2s}
+.field input::placeholder{color:var(--txt3);font-weight:400}
+.field input:focus{border-color:var(--acc);box-shadow:0 0 0 4px rgba(79,70,229,.12)}
+.go{border:none;background:var(--ink);color:#fff;font-family:var(--body);font-weight:600;font-size:14px;padding:0 22px;border-radius:12px;cursor:pointer;white-space:nowrap;transition:.15s}
+.go:hover{background:#000}
+.go:active{transform:scale(.97)}
+.go:disabled{opacity:.5;cursor:not-allowed}
+.trust{display:flex;gap:18px;justify-content:center;margin-top:22px}
+.trust span{font-size:11.5px;color:var(--txt3);font-weight:500;display:flex;align-items:center;gap:5px}
+.trust b{color:var(--grn)}
+.alert{background:var(--red-l);border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:11px 14px;border-radius:10px;margin-top:14px;text-align:left}
 
-/* Elegant Header & Search */
-.search-card{background:transparent;border:none;padding:5px 0;margin-bottom:15px;}
-.search-title{font-size:24px;font-weight:700;color:var(--dark);letter-spacing:-0.5px;margin-bottom:4px}
-.search-sub{font-size:13px;color:var(--gray-deep);font-weight:400;margin-bottom:15px;}
+/* ===== DASHBOARD ===== */
+.dash{flex:1;padding:18px;display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1080px;margin:0 auto;width:100%;align-items:start}
 
-/* Clean Minimalist Tabs */
-.tabs{display:flex;background:#edf2f7;border-radius:20px;padding:3px;margin-bottom:14px;}
-.tab{flex:1;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:18px;color:var(--gray-deep);background:transparent;border:none;font-family:var(--font);transition:all .2s ease;}
-.tab.active{background:var(--blue);color:var(--white);box-shadow:0 2px 8px rgba(10,133,209,.2)}
+/* summary panel (dark, signature) */
+.sum{background:linear-gradient(160deg,var(--ink) 0%,var(--ink2) 60%,var(--ink3) 100%);border-radius:20px;padding:22px;color:#fff;position:relative;overflow:hidden}
+.sum::after{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(79,70,229,.35),transparent 70%)}
+.sum-top{position:relative;z-index:1;margin-bottom:20px}
+.sum-no{font-family:var(--disp);font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:6px}
+.sum-name{font-family:var(--disp);font-size:24px;font-weight:700;line-height:1.15;letter-spacing:-.3px;margin-bottom:12px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 12px;border-radius:99px}
+.pill.blue{background:rgba(79,70,229,.25);color:#c7d2fe;border:1px solid rgba(129,140,248,.4)}
+.pill.amber{background:rgba(245,158,11,.16);color:#fcd34d;border:1px solid rgba(245,158,11,.35)}
+.pill.green{background:rgba(16,185,129,.16);color:#6ee7b7;border:1px solid rgba(16,185,129,.35)}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px currentColor;opacity:.9}
 
-/* Premium Inputs and Solid Blue Button */
-.input-row{display:flex;gap:12px}
-.input-row input{flex:1;background:var(--white);border:1px solid var(--border-light);border-radius:24px;padding:11px 18px;color:var(--dark);font-family:var(--font);font-size:14px;font-weight:500;outline:none;}
-.input-row input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(10,133,209,.08)}
+/* ring */
+.ring-wrap{position:relative;z-index:1;display:flex;align-items:center;gap:18px;padding:18px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+.ring{position:relative;width:96px;height:96px;flex-shrink:0}
+.ring svg{transform:rotate(-90deg)}
+.ring-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-num{font-family:var(--disp);font-size:30px;font-weight:700;line-height:1}
+.ring-unit{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:2px}
+.ring-info .rl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:600;margin-bottom:4px}
+.ring-info .rv{font-family:var(--disp);font-size:15px;font-weight:600}
+.ring-info .rs{font-size:12px;color:rgba(255,255,255,.6);margin-top:8px;line-height:1.4}
+.done-badge{width:96px;height:96px;flex-shrink:0;border-radius:50%;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.4);display:flex;align-items:center;justify-content:center;font-size:40px}
 
-.track-btn{background:var(--blue);color:var(--white);border:none;padding:11px 24px;border-radius:24px;font-size:13px;font-family:var(--font);cursor:pointer;font-weight:600;transition:all .2s;white-space:nowrap}
-.track-btn:hover{background:var(--blue-dk);transform:translateY(-1px)}
-.err{background:#fee2e2;border:1px solid #fca5a5;border-radius:16px;padding:12px 16px;color:#b91c1c;font-size:13px;margin-top:14px;font-weight:500}
+/* items inside summary */
+.sum-items{position:relative;z-index:1;margin-top:18px}
+.sum-items .il{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:600;margin-bottom:10px}
+.iline{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.iline:last-child{border-bottom:none}
+.iname{font-size:13px;font-weight:500;color:rgba(255,255,255,.9);line-height:1.3}
+.iqty{font-family:var(--disp);font-size:12px;font-weight:600;color:#c7d2fe;background:rgba(79,70,229,.2);border:1px solid rgba(129,140,248,.3);padding:2px 9px;border-radius:99px;flex-shrink:0}
 
-/* MASTER GRID: Split into 2 premium columns on desktop */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-  margin-top: 10px;
+/* right column */
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.card-h{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--line)}
+.card-h .t{font-family:var(--disp);font-size:13px;font-weight:600;letter-spacing:.3px}
+.live-tag{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--grn)}
+.live-tag i{width:7px;height:7px;border-radius:50%;background:var(--grn);animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.cn{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--acc);background:#eef0ff;border:1px solid #dfe1ff;padding:4px 11px;border-radius:99px}
+
+/* stepper (horizontal) */
+.step{display:flex;padding:20px 20px 18px}
+.st{flex:1;position:relative;text-align:center;min-width:0}
+.st::before{content:'';position:absolute;top:9px;left:-50%;width:100%;height:2px;background:var(--line);z-index:0}
+.st:first-child::before{display:none}
+.st.done::before,.st.current::before{background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.st .d{position:relative;z-index:1;width:20px;height:20px;border-radius:50%;margin:0 auto 9px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff}
+.st.done .d{background:var(--acc);border-color:var(--acc)}
+.st.current .d{background:#fff;border-color:var(--acc);box-shadow:0 0 0 4px rgba(79,70,229,.15)}
+.st.current .d::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.st .sl{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:2px}
+.st.pending .sl{color:var(--txt3)}
+.st .ss{font-size:10.5px;color:var(--txt3);line-height:1.3;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* courier events (scroll panel) */
+.events{padding:6px 20px 8px;max-height:300px;overflow-y:auto}
+.ev{display:flex;gap:13px;padding:11px 0;border-bottom:1px solid var(--line)}
+.ev:last-child{border-bottom:none}
+.ev-dot{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.ev-dot.active{background:#eef0ff;border:1px solid #dfe1ff}
+.ev-dot.done{background:#f1f5f9;border:1px solid var(--line)}
+.ev-l{font-size:13px;font-weight:600;color:var(--txt);display:flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:1.35}
+.ev-now{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--acc);background:#eef0ff;border:1px solid #dfe1ff;padding:1px 7px;border-radius:5px}
+.ev-t{font-size:11.5px;color:var(--txt3);margin-top:2px}
+.ev-load{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--txt3);padding:14px 0}
+.ev-load i{width:8px;height:8px;border-radius:50%;background:var(--acc);animation:blink 1s infinite}
+.ev-empty{font-size:13px;color:var(--txt3);padding:14px 0}
+.track-link{display:block;width:100%;border:none;border-top:1px solid var(--line);background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--acc);padding:13px;text-align:center;cursor:pointer;transition:.2s}
+.track-link:hover{background:#f7f8ff}
+
+/* making note */
+.mnote{display:flex;gap:13px;align-items:center;padding:16px 20px;background:linear-gradient(100deg,#eef0ff,#f0fdff);border:1px solid #e0e7ff;border-radius:20px}
+.mnote .mi{width:40px;height:40px;flex-shrink:0;border-radius:12px;background:#fff;border:1px solid #e0e7ff;display:flex;align-items:center;justify-content:center;font-size:20px}
+.mnote .mt{font-size:13.5px;font-weight:700;margin-bottom:2px}
+.mnote .mb{font-size:12px;color:var(--txt2);line-height:1.45}
+
+.reset{background:transparent;border:none;color:var(--txt3);font-family:var(--body);font-size:12px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:8px}
+.reset:hover{color:var(--txt);background:#fff}
+
+/* ===== responsive ===== */
+@media(max-width:860px){
+  .dash{grid-template-columns:1fr;padding:14px;gap:12px}
+  .sum{padding:20px}
+  .events{max-height:230px}
+  .search h1{font-size:28px}
 }
-
-@media (min-width: 768px) {
-  .dashboard-grid {
-    grid-template-columns: 450px 1fr; /* Left col is fixed elegant utility, right col expands */
-    align-items: start;
-  }
-}
-
-/* Premium Solid Main Status Card */
-.hero{background:var(--blue);border-radius:16px;padding:20px;margin-bottom:14px;}
-.hero-no{font-size:10px;color:rgba(255,255,255,.7);letter-spacing:1.5px;text-transform:uppercase;font-weight:600;margin-bottom:4px;}
-.hero-name{font-size:22px;font-weight:700;color:var(--white);margin-bottom:14px;letter-spacing:-0.3px}
-.hero-badges{display:flex;gap:8px;flex-wrap:wrap;}
-.hb{font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;}
-.hb-status{background:rgba(255,255,255,.15);color:var(--white);border:1px solid rgba(255,255,255,.1)}
-.hb-delivered{background:var(--white);color:var(--blue);font-weight:700}
-.hb-shipped{background:rgba(255,255,255,.9);color:var(--dark);font-weight:700}
-.hb-date{background:rgba(0,0,0,.1);color:rgba(255,255,255,.85);border:none}
-
-/* Modern Clean Info Tiles */
-.info-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.tile{background:var(--white);border:1px solid var(--border-light);border-radius:14px;padding:12px 14px}
-.tile-lbl{font-size:9px;color:var(--gray-muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:600;margin-bottom:4px}
-.tile-val{font-size:14px;font-weight:700;color:var(--dark);}
-.tile-val.sm{font-size:12px;font-weight:500;color:var(--gray-deep)}
-.tile-val.green{color:var(--green-status)}
-
-/* Aesthetic Alert/Note */
-.note{background:var(--blue-lt);border:1px solid var(--blue-mid);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center}
-.note-icon{width:26px;height:26px;background:var(--blue);color:var(--white);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
-.note-title{font-size:12px;font-weight:700;color:var(--dark);margin-bottom:1px}
-.note-body{font-size:11px;color:var(--gray-deep);line-height:1.4}
-
-/* Clean Countdown Style */
-.cd-card{background:var(--white);border:1px solid var(--border-light);border-radius:14px;padding:14px;margin-bottom:14px}
-.cd-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.cd-lbl{font-size:9px;color:var(--gray-muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
-.cd-num{font-size:26px;font-weight:700;color:var(--dark);line-height:1;}
-.cd-unit{font-size:11px;color:var(--gray-muted);font-weight:500;}
-.cd-pill{background:var(--blue-lt);color:var(--blue);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;}
-.pbar{background:#edf2f7;border-radius:99px;height:4px;overflow:hidden;margin-bottom:10px}
-.pfill{height:100%;background:var(--blue);border-radius:99px;}
-.cd-dates{display:flex;justify-content:space-between}
-.cd-dates span{font-size:11px;color:var(--gray-muted);}
-.cd-dates .cd-end{color:var(--dark);font-weight:600}
-
-.sec-lbl{font-size:10px;color:var(--gray-muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:600;margin:0 0 8px 2px}
-
-/* Courier & Timeline Sections without heavy boxing */
-.px-card{background:var(--white);border:1px solid var(--border-light);border-radius:14px;overflow:hidden;margin-bottom:14px}
-.px-head{padding:12px 14px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center}
-.px-head-lbl{font-size:10px;color:var(--gray-muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
-.px-tid{background:var(--blue-lt);color:var(--blue);font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
-.px-body{padding:10px 14px}
-.px-item{display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light)}
-.px-item:last-child{border-bottom:none}
-.px-ico{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
-.px-ico.active{background:var(--blue-lt);color:var(--blue)}
-.px-ico.done{background:var(--green-bg);color:var(--green-status)}
-.px-ico.pending{background:#fafafa;color:var(--gray-muted);border:1px solid var(--border-light)}
-.px-label{font-size:13px;font-weight:600;color:var(--dark)}
-.px-time{font-size:11px;color:var(--gray-muted)}
-.px-link{display:block;padding:10px;background:transparent;width:100%;border:none;border-top:1px solid var(--border-light);font-size:12px;color:var(--blue);text-align:center;font-weight:600;cursor:pointer;}
-
-/* Beautiful Elegant Timeline */
-.tl-card{background:var(--white);border:1px solid var(--border-light);border-radius:14px;padding:16px;margin-bottom:14px}
-.tl-item{display:flex;gap:14px;position:relative;padding-bottom:14px}
-.tl-item:last-child{padding-bottom:0}
-.tl-line{position:absolute;left:4px;top:16px;bottom:0;width:1px;background:var(--border-light)}
-.tl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:5px;position:relative;z-index:1;background:var(--border-light)}
-.tl-dot.blue{background:var(--blue);box-shadow:0 0 0 3px var(--white),0 0 0 5px var(--blue-mid)}
-.tl-dot.amber{background:var(--dark);box-shadow:0 0 0 3px var(--white),0 0 0 4px #e2e8f0}
-.tl-dot.green{background:var(--green-status);box-shadow:0 0 0 3px var(--white),0 0 0 5px var(--green-bg)}
-.tl-label{font-size:13px;font-weight:600;color:var(--dark);margin-bottom:2px}
-.tl-tag{font-size:9px;color:var(--blue);background:var(--blue-lt);padding:2px 6px;border-radius:4px;font-weight:600}
-.tl-sub{font-size:11px;color:var(--gray-muted)}
-
-/* Items Summary List */
-.items-card{background:var(--white);border:1px solid var(--border-light);border-radius:14px;overflow:hidden;margin-bottom:14px}
-.items-head{padding:12px 14px;border-bottom:1px solid var(--border-light);font-size:10px;color:var(--gray-muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
-.item-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border-light)}
-.item-row:last-child{border-bottom:none}
-.item-name{font-size:13px;color:var(--dark);font-weight:500}
-.item-qty{font-size:11px;color:var(--blue);background:var(--blue-lt);padding:2px 8px;border-radius:12px;font-weight:600}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 `
 
+/* ---------- courier events sub-view ---------- */
 function CourierEvents({ events }: { events: any[] | null }) {
   const icons = ['🚚', '📦', '🏢', '➡️', '✅', '📍', '🔄', '↩️', '📋', '🏠', '🎯']
-  if (!events) {
-    return <div className="px-loading"><div className="px-dot" />Fetching live courier status…</div>
-  }
-  if (events.length === 0) {
-    return <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>Tracking info not available yet.</div>
-  }
+  if (!events) return <div className="ev-load"><i />Fetching live courier status…</div>
+  if (events.length === 0) return <div className="ev-empty">Tracking info not available yet.</div>
   return (
     <>
       {events.map((ev, i) => (
-        <div key={i} className="px-item">
-          <div className={`px-ico ${ev.state}`}>{icons[i] || '📍'}</div>
-          <div>
-            <div className="px-label">
-              {ev.label}
-              {ev.state === 'active' && <span className="px-now">LATEST</span>}
-            </div>
-            <div className="px-time">{ev.time}</div>
+        <div key={i} className="ev">
+          <div className={`ev-dot ${ev.state}`}>{icons[i] || '📍'}</div>
+          <div style={{ minWidth: 0 }}>
+            <div className="ev-l">{ev.label}{ev.state === 'active' && <span className="ev-now">LATEST</span>}</div>
+            <div className="ev-t">{ev.time}</div>
           </div>
         </div>
       ))}
     </>
+  )
+}
+
+/* ---------- circular ring ---------- */
+function Ring({ prog, days }: { prog: number; days: number }) {
+  const r = 42, c = 2 * Math.PI * r
+  const off = c * (1 - prog / 100)
+  return (
+    <div className="ring">
+      <svg width="96" height="96" viewBox="0 0 96 96">
+        <defs>
+          <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#4F46E5" />
+            <stop offset="1" stopColor="#06B6D4" />
+          </linearGradient>
+        </defs>
+        <circle cx="48" cy="48" r={r} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="7" />
+        <circle cx="48" cy="48" r={r} fill="none" stroke="url(#rg)" strokeWidth="7"
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off}
+          style={{ transition: 'stroke-dashoffset .9s ease' }} />
+      </svg>
+      <div className="ring-mid">
+        <div className="ring-num">{days}</div>
+        <div className="ring-unit">day{days === 1 ? '' : 's'} left</div>
+      </div>
+    </div>
   )
 }
 
@@ -336,10 +338,25 @@ export default function TrackPage() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<TrackingResult | null>(null)
   const [courierEvents, setCourierEvents] = useState<any[] | null | undefined>(undefined)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  /* auto-resize the parent iframe (Shopify listens for {type:'resize', height}) */
+  useEffect(() => {
+    const send = () => {
+      const h = rootRef.current?.offsetHeight || document.body.scrollHeight
+      try { window.parent?.postMessage({ type: 'resize', height: h + 24 }, '*') } catch {}
+    }
+    send()
+    const ro = new ResizeObserver(send)
+    if (rootRef.current) ro.observe(rootRef.current)
+    window.addEventListener('load', send)
+    const t = setTimeout(send, 400)
+    return () => { ro.disconnect(); window.removeEventListener('load', send); clearTimeout(t) }
+  }, [result, courierEvents, error, loading, tab])
 
   async function handleTrack() {
     if (!query.trim()) {
-      setError('Please enter your ' + (tab === 'order' ? 'order number.' : 'phone number.'))
+      setError('Enter your ' + (tab === 'order' ? 'order number to continue.' : 'phone number to continue.'))
       return
     }
     setLoading(true); setError(''); setResult(null); setCourierEvents(undefined)
@@ -350,7 +367,7 @@ export default function TrackPage() {
         body: JSON.stringify(tab === 'order' ? { orderNumber: query.trim() } : { phone: query.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Order not found.'); return }
+      if (!res.ok) { setError(data.error || 'We couldn’t find that order. Check the number and try again.'); return }
       setResult(data)
       if ((data.order.status === 'shipped' || data.order.status === 'delivered') && data.order.trackingId) {
         setCourierEvents(null)
@@ -358,190 +375,176 @@ export default function TrackPage() {
         setCourierEvents(cc.ok ? cc.data.events : [])
       }
     } catch {
-      setError('Network error. Please try again.')
+      setError('Network error. Please try again in a moment.')
     } finally {
       setLoading(false)
     }
   }
 
   function switchTab(t: 'order' | 'phone') {
-    setTab(t); setQuery(''); setError(''); setResult(null); setCourierEvents(undefined)
+    setTab(t); setQuery(''); setError('')
+  }
+  function reset() {
+    setResult(null); setCourierEvents(undefined); setQuery(''); setError('')
   }
 
-  function renderResult() {
-    if (!result) return null
-    const o = result.order
-    const isDelivered = o.status === 'delivered'
-    const isShipped = o.status === 'shipped'
-    const isInProcess = o.status === 'in_process'
-    const label = STATUS_LABEL[o.status] ?? o.status
-
-    // True if courier API latest event says "delivered" (even if DB is still 'shipped')
-    const courierDone = isCourierDelivered(courierEvents)
-
-    const cd = calcCountdown(o, courierDone)
-    const timeline = buildTimeline(o, result.history)
-    const heroBadge = isDelivered ? 'hb hb-delivered' : isShipped ? 'hb hb-shipped' : 'hb hb-status'
-
-    return (
-      <>
-        <div className="hero">
-          <div className="hero-no">Order #{o.orderNumber}</div>
-          <div className="hero-name">{o.customerName || 'Your Order'}</div>
-          <div className="hero-badges">
-            <span className={heroBadge}>{label}</span>
-            <span className="hb hb-date">{fmtDate(o.createdAt)}</span>
-          </div>
-        </div>
-
-        <div className="info-row">
-          <div className="tile">
-            <div className="tile-lbl">Ordered On</div>
-            <div className="tile-val">{fmtDate(o.createdAt)}</div>
-          </div>
-          {isDelivered || courierDone ? (
-            <div className="tile">
-              <div className="tile-lbl">Delivered On</div>
-              <div className="tile-val green">{fmtDate(o.updatedAt)}</div>
-            </div>
-          ) : (
-            <div className="tile">
-              <div className="tile-lbl">Est. Delivery</div>
-              <div className={`tile-val${cd ? ' sm' : ''}`}>
-                {cd ? cd.estRange : '10 – 15 days after confirmation'}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {isInProcess && (
-          <div className="note">
-            <div className="note-icon">🎨</div>
-            <div>
-              <div className="note-title">Crafting your order</div>
-              <div className="note-body">We're carefully making your custom order. You'll be notified as soon as it ships.</div>
-            </div>
-          </div>
-        )}
-
-        {/* Countdown hidden if DB delivered OR courier says delivered */}
-        {cd && !isDelivered && !courierDone && (
-          <div className="cd-card">
-            <div className="cd-top">
-              <div>
-                <div className="cd-lbl">{isShipped ? 'Delivery Window' : 'Delivery Countdown'}</div>
-                <div className="cd-num">{cd.daysLeft}</div>
-                <div className="cd-unit">day{cd.daysLeft === 1 ? '' : 's'} remaining</div>
-              </div>
-              <div className={`cd-pill${isShipped ? ' amber' : ''}`}>
-                {isShipped
-                  ? cd.daysLeft === 1 ? 'Arriving soon' : `Est. ${cd.daysLeft} days`
-                  : cd.estRange || `By ${cd.maxDate}`}
-              </div>
-            </div>
-            <div className="pbar"><div className="pfill" style={{ width: `${cd.prog}%` }} /></div>
-            <div className="cd-dates">
-              <span>{isShipped ? `Shipped ${cd.startFmt}` : `Confirmed ${cd.startFmt}`}</span>
-              <span className="cd-end">By {cd.maxDate}</span>
-            </div>
-          </div>
-        )}
-
-        {(isShipped || isDelivered) && o.trackingId && (
-          <>
-            <div className="sec-lbl">Live Courier Tracking</div>
-            <div className="px-card">
-              <div className="px-head">
-                <span className="px-head-lbl">Call Courier Status</span>
-                <span className="px-tid">{o.trackingId}</span>
-              </div>
-              <div className="px-body">
-                <CourierEvents events={courierEvents === undefined ? null : courierEvents} />
-              </div>
-              <button
-                className="px-link"
-                onClick={() => {
-                  if (o.trackingId) {
-                    navigator.clipboard.writeText(o.trackingId).catch(() => {})
-                  }
-                  window.open(`https://callcourier.com.pk/tracking/?tc=${o.trackingId}`, '_blank')
-                }}
-              >
-                Track on Call Courier website → (CN copied ✓)
-              </button>
-            </div>
-          </>
-        )}
-
-        <div className="sec-lbl">Status History</div>
-        <div className="tl-card">
-          {timeline.map((item, i) => (
-            <div key={i} className="tl-item" style={i === timeline.length - 1 ? { paddingBottom: 0 } : {}}>
-              {i < timeline.length - 1 && <div className="tl-line" />}
-              <div className={`tl-dot ${item.dot}`} />
-              <div>
-                <div className="tl-label">
-                  {item.label}
-                  {item.tag === 'current' && !isShipped && <span className="tl-tag">current</span>}
-                  {item.tag === 'current' && isShipped && <span className="tl-tag-amber">current</span>}
-                </div>
-                <div className="tl-sub">{item.sub}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {(o.lineItems || []).length > 0 && (
-          <>
-            <div className="sec-lbl">Items</div>
-            <div className="items-card">
-              <div className="items-head">Products in this order</div>
-              {o.lineItems.map((item, i) => (
-                <div key={i} className="item-row">
-                  <span className="item-name">{item.name}</span>
-                  <span className="item-qty">×{item.quantity}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </>
-    )
-  }
+  const o = result?.order
+  const courierDone = isCourierDelivered(courierEvents)
+  const cd = o ? calcCountdown(o, courierDone) : null
+  const delivered = o ? (o.status === 'delivered' || courierDone) : false
+  const shipped = o?.status === 'shipped'
+  const inProcess = o?.status === 'in_process'
+  const pillCls = delivered ? 'green' : shipped ? 'amber' : 'blue'
+  const stages = o ? buildStages(o, result!.history, courierDone) : []
 
   return (
-    <>
+    <div className="app" ref={rootRef}>
       <style>{css}</style>
-      <div className="page">
-        <div className="topbar">
-          <div className="logo">MYZAN</div>
-          <span className="topbar-sub">Order Tracker</span>
-        </div>
-        <div className="container">
-          <div className="search-card">
-            <div className="search-title">Track your order</div>
-            <div className="search-sub">Enter your order number or phone to get live updates</div>
-            <div className="tabs">
-              <button className={`tab${tab === 'order' ? ' active' : ''}`} onClick={() => switchTab('order')}>Order Number</button>
-              <button className={`tab${tab === 'phone' ? ' active' : ''}`} onClick={() => switchTab('phone')}>Phone Number</button>
+
+      <div className="bar">
+        <span className="brand">MY<b>ZAN</b></span>
+        <span className="bar-sub">Order Tracker</span>
+        {o && <span className="bar-right">#{o.orderNumber}</span>}
+      </div>
+
+      {/* ---------- SEARCH ---------- */}
+      {!result && (
+        <div className="stage">
+          <div className="search">
+            <div className="eyebrow">Live order status</div>
+            <h1>Track your order</h1>
+            <p>Enter your order number or phone number to see the real-time status, delivery window, and courier updates — all on one screen.</p>
+
+            <div className="seg">
+              <button className={tab === 'order' ? 'on' : ''} onClick={() => switchTab('order')}>Order number</button>
+              <button className={tab === 'phone' ? 'on' : ''} onClick={() => switchTab('phone')}>Phone number</button>
             </div>
-            <div className="input-row">
+            <div className="field">
               <input
                 type={tab === 'phone' ? 'tel' : 'text'}
                 placeholder={tab === 'order' ? 'e.g. 2087' : 'e.g. 03001234567'}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleTrack()}
+                autoFocus
               />
-              <button className="track-btn" onClick={handleTrack} disabled={loading}>
-                {loading ? 'Searching…' : 'Track →'}
+              <button className="go" onClick={handleTrack} disabled={loading}>
+                {loading ? 'Searching…' : 'Track'}
               </button>
             </div>
-            {error && <div className="err">{error}</div>}
+            {error && <div className="alert">{error}</div>}
+            <div className="trust">
+              <span><b>●</b> Real-time courier feed</span>
+              <span><b>●</b> No account needed</span>
+            </div>
           </div>
-          {renderResult()}
         </div>
-      </div>
-    </>
+      )}
+
+      {/* ---------- DASHBOARD ---------- */}
+      {o && (
+        <div className="dash">
+          {/* LEFT — summary */}
+          <div className="sum">
+            <div className="sum-top">
+              <div className="sum-no">Order #{o.orderNumber}</div>
+              <div className="sum-name">{o.customerName || 'Your order'}</div>
+              <span className={`pill ${pillCls}`}><i />{delivered ? 'Delivered' : STATUS_LABEL[o.status]}</span>
+            </div>
+
+            <div className="ring-wrap">
+              {delivered ? (
+                <>
+                  <div className="done-badge">✓</div>
+                  <div className="ring-info">
+                    <div className="rl">Delivered on</div>
+                    <div className="rv">{fmtDate(o.updatedAt)}</div>
+                    <div className="rs">Thanks for shopping with Myzan.</div>
+                  </div>
+                </>
+              ) : cd ? (
+                <>
+                  <Ring prog={cd.prog} days={cd.daysLeft} />
+                  <div className="ring-info">
+                    <div className="rl">{shipped ? 'Out for delivery' : 'Est. delivery'}</div>
+                    <div className="rv">{shipped ? `By ${cd.maxDate}` : cd.estRange}</div>
+                    <div className="rs">{shipped ? 'On the way with the courier.' : `Confirmed ${cd.startFmt}`}</div>
+                  </div>
+                </>
+              ) : (
+                <div className="ring-info">
+                  <div className="rl">Estimated delivery</div>
+                  <div className="rv">10–15 days</div>
+                  <div className="rs">after confirmation</div>
+                </div>
+              )}
+            </div>
+
+            {(o.lineItems || []).length > 0 && (
+              <div className="sum-items">
+                <div className="il">Items ({o.lineItems.length})</div>
+                {o.lineItems.map((it, i) => (
+                  <div key={i} className="iline">
+                    <span className="iname">{it.name}</span>
+                    <span className="iqty">×{it.quantity}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT — progress + tracking */}
+          <div className="col">
+            {inProcess && (
+              <div className="mnote">
+                <div className="mi">🎨</div>
+                <div>
+                  <div className="mt">Crafting your order</div>
+                  <div className="mb">We’re carefully making your custom skin. You’ll get an update the moment it ships.</div>
+                </div>
+              </div>
+            )}
+
+            <div className="card">
+              <div className="card-h"><span className="t">Progress</span></div>
+              <div className="step">
+                {stages.map((s, i) => (
+                  <div key={i} className={`st ${s.state}`}>
+                    <div className="d">{s.state === 'done' ? '✓' : ''}</div>
+                    <div className="sl">{s.label}</div>
+                    <div className="ss">{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {(shipped || delivered) && o.trackingId && (
+              <div className="card">
+                <div className="card-h">
+                  <span className="t">Live courier tracking</span>
+                  <span className="cn">{o.trackingId}</span>
+                </div>
+                <div className="events">
+                  <CourierEvents events={courierEvents === undefined ? null : courierEvents} />
+                </div>
+                <button
+                  className="track-link"
+                  onClick={() => {
+                    if (o.trackingId) navigator.clipboard?.writeText(o.trackingId).catch(() => {})
+                    window.open(`https://callcourier.com.pk/tracking/?tc=${o.trackingId}`, '_blank')
+                  }}
+                >
+                  Open on Call Courier · CN copied ✓
+                </button>
+              </div>
+            )}
+
+            <div style={{ textAlign: 'center' }}>
+              <button className="reset" onClick={reset}>← Track another order</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
