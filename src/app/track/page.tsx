@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 
-type OrderStatus = 'in_process' | 'shipped' | 'delivered'
+type OrderStatus = 'in_process' | 'shipped' | 'delivered' | 'cancelled'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   in_process: 'Making Process',
   shipped: 'Shipped - Check Live Courier Tracking',
   delivered: 'Delivered',
+  cancelled: 'Order Cancelled',
 }
 
 interface TrackingResult {
@@ -62,10 +63,46 @@ function fmtCCDate(iso: string) {
   })
 }
 
+/* Delivered must NOT match "Undelivered" (which contains the substring
+   "delivered"), so undelivered is excluded explicitly. */
 function isCourierDelivered(events: any[] | null | undefined): boolean {
   if (!events || events.length === 0) return false
   const label: string = (events[0]?.label || '').toLowerCase()
-  return label.includes('delivered')
+  return label.includes('delivered') && !label.includes('undelivered')
+}
+
+/* Classify the courier's own live status into a small set of buckets we can
+   react to in the UI. Only used for deciding what to show/highlight — the
+   original courier wording is still shown to the customer untouched. */
+type CourierCategory = 'delivered' | 'undelivered' | 'contacting' | 'returning' | 'forward' | null
+function classifyCourier(rawLabel: string | null | undefined): CourierCategory {
+  if (!rawLabel) return null
+  const l = rawLabel.toLowerCase()
+  if (l.includes('undelivered')) return 'undelivered'
+  if (l.includes('delivered')) return 'delivered'
+  if (l.includes('contacting consignee')) return 'contacting'
+  if (
+    l.includes('moved to origin') ||
+    l.includes('reached at origin') ||
+    l.includes('out for return') ||
+    l.includes('returned submitted') ||
+    l.includes('return submission')
+  ) return 'returning'
+  return 'forward'
+}
+/* Same buckets, used to tint individual events in the live timeline. */
+function courierSeverity(rawLabel: string): 'red' | 'amber' | null {
+  const l = (rawLabel || '').toLowerCase()
+  if (l.includes('undelivered')) return 'red'
+  if (
+    l.includes('contacting consignee') ||
+    l.includes('moved to origin') ||
+    l.includes('reached at origin') ||
+    l.includes('out for return') ||
+    l.includes('returned submitted') ||
+    l.includes('return submission')
+  ) return 'amber'
+  return null
 }
 
 /* Keep the courier's own status wording. Only tidy ALL-CAPS to readable case;
@@ -80,7 +117,7 @@ function prettyCourier(raw?: string): string {
 }
 
 function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
-  if (order.status === 'delivered' || courierDone) return null
+  if (order.status === 'delivered' || order.status === 'cancelled' || courierDone) return null
   const today = todayStr()
 
   if (order.status !== 'shipped') {
@@ -127,11 +164,15 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
     const sorted = [...json].sort(
       (a, b) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
     )
-    const events = sorted.map((ev: any, i: number) => ({
-      label: prettyCourier(ev.ProcessDescForPortal || ev.OperationDesc),
-      time: fmtCCDate(ev.TransactionDate),
-      state: i === 0 ? 'active' : 'done',
-    }))
+    const events = sorted.map((ev: any, i: number) => {
+      const label = prettyCourier(ev.ProcessDescForPortal || ev.OperationDesc)
+      return {
+        label,
+        time: fmtCCDate(ev.TransactionDate),
+        state: i === 0 ? 'active' : 'done',
+        sev: courierSeverity(label),
+      }
+    })
     return { ok: true, data: { events } }
   } catch {
     return { ok: false }
@@ -139,20 +180,47 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
 }
 
 /* ---------- stepper stages ---------- */
-function buildStages(order: TrackingResult['order'], history: TrackingResult['history'], courierDone: boolean) {
-  const done = courierDone || order.status === 'delivered'
-  const shipped = done || order.status === 'shipped'
+function buildStages(
+  order: TrackingResult['order'],
+  history: TrackingResult['history'],
+  courierCategory: CourierCategory,
+  latestCourierLabel: string | null
+) {
+  if (order.status === 'cancelled') {
+    return [
+      { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as string },
+      { label: 'Order Cancelled', sub: fmtDate(order.updatedAt), state: 'problem' as string },
+    ]
+  }
+
+  const done = order.status === 'delivered' || courierCategory === 'delivered'
+  const problem = courierCategory === 'undelivered' || courierCategory === 'contacting' || courierCategory === 'returning'
+  const shipped = done || problem || order.status === 'shipped'
   const timeOf = (s: OrderStatus) => {
     const e = history.find(h => h.status === s)
     return e ? fmtDateTime(e.changed_at) : ''
   }
+
+  const stage4 = done
+    ? { label: 'Delivered', sub: timeOf('delivered') || 'Completed', state: 'done' as string }
+    : problem
+      ? {
+          label: latestCourierLabel || 'Delivery issue',
+          sub: courierCategory === 'undelivered'
+            ? 'Delivery attempt failed'
+            : courierCategory === 'contacting'
+              ? 'Courier is contacting you'
+              : 'Returning to shipper',
+          state: (courierCategory === 'undelivered' ? 'problem' : 'warn') as string,
+        }
+      : { label: 'Delivered', sub: 'Pending', state: 'pending' as string }
+
   return [
     { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as string },
     { label: 'Making Process', sub: shipped ? 'Completed' : 'In progress', state: shipped ? 'done' : 'current' },
     { label: 'Shipped - Check Live Courier Tracking', sub: order.trackingId ? `Tracking No ${order.trackingId}` : timeOf('shipped') || '—',
-      state: done ? 'done' : shipped ? 'current' : 'pending' },
-    { label: 'Delivered', sub: done ? (timeOf('delivered') || 'Completed') : 'Pending',
-      state: done ? 'done' : 'pending' },
+      state: (done || problem) ? 'done' : shipped ? 'current' : 'pending' },
+    stage4,
   ]
 }
 
@@ -166,7 +234,8 @@ const css = `
   --canvas:#F2F5F8; --card:#FFFFFF; --line:#E6EAEF; --line2:#EFF2F6;
   --txt:#111111; --txt2:#5C6672; --txt3:#95A0AD;
   --grn:#16A34A; --grn-l:#4ED883;
-  --red:#DC2626; --red-bg:#FDECEC;
+  --red:#DC2626; --red-bg:#FDECEC; --red-br:#F3CACA;
+  --amb:#B5750A; --amb-bg:#FFF6E5; --amb-br:#FBE3AE; --amb-ic:#F5A623;
   --disp:'Jost',sans-serif; --body:'Poppins',sans-serif;
 }
 html,body{background:var(--canvas)}
@@ -219,6 +288,8 @@ html,body{background:var(--canvas)}
 .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:6px 15px;border-radius:99px}
 .pill.blue{background:var(--blue-bg);color:var(--blue-d);border:1px solid var(--blue-br)}
 .pill.green{background:#E7F7ED;color:#127a38;border:1px solid #BCE9CB}
+.pill.red{background:var(--red-bg);color:#b42323;border:1px solid var(--red-br)}
+.pill.amber{background:var(--amb-bg);color:var(--amb);border:1px solid var(--amb-br)}
 .pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* ring */
@@ -234,10 +305,12 @@ html,body{background:var(--canvas)}
 .ring-info .rv{font-family:var(--disp);font-size:16px;font-weight:600;color:var(--ink);line-height:1.25}
 .ring-info .rs{font-size:12px;color:var(--txt2);margin-top:9px;line-height:1.45}
 .done-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;background:#E7F7ED;border:1px solid #BCE9CB;display:flex;align-items:center;justify-content:center;color:var(--grn)}
+.cancel-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;background:var(--red-bg);border:1px solid var(--red-br);display:flex;align-items:center;justify-content:center;color:var(--red)}
+.warn-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.warn-badge.red{background:var(--red-bg);border:1px solid var(--red-br);color:var(--red)}
+.warn-badge.amber{background:var(--amb-bg);border:1px solid var(--amb-br);color:var(--amb)}
 
 /* items */
-.sum-items{position:relative;z-index:1;margin-top:22px}
-.sum-items .il{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);font-weight:600;margin-bottom:13px}
 .items-list{padding:6px 22px 16px}
 .iline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line2)}
 .iline:last-child{border-bottom:none}
@@ -257,12 +330,18 @@ html,body{background:var(--canvas)}
 .st::before{content:'';position:absolute;top:11px;left:-50%;width:100%;height:2px;background:var(--line);z-index:0}
 .st:first-child::before{display:none}
 .st.done::before,.st.current::before{background:linear-gradient(90deg,var(--blue),var(--blue-l))}
+.st.warn::before{background:linear-gradient(90deg,var(--blue),var(--amb-ic))}
+.st.problem::before{background:linear-gradient(90deg,var(--blue),var(--red))}
 .st .d{position:relative;z-index:1;width:24px;height:24px;border-radius:50%;margin:0 auto 11px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:#fff}
 .st.done .d{background:var(--blue);border-color:var(--blue)}
 .st.current .d{background:#fff;border-color:var(--blue);box-shadow:0 0 0 4px rgba(10,133,209,.14)}
 .st.current .d::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--blue)}
+.st.warn .d{background:var(--amb-ic);border-color:var(--amb-ic)}
+.st.problem .d{background:var(--red);border-color:var(--red)}
 .st .sl{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:3px}
 .st.pending .sl{color:var(--txt3)}
+.st.warn .sl{color:var(--amb)}
+.st.problem .sl{color:var(--red)}
 .st .ss{font-size:10.5px;color:var(--txt3);line-height:1.3;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* live tracking header dot */
@@ -277,8 +356,12 @@ html,body{background:var(--canvas)}
 .tl-i:last-child::before{display:none}
 .tl-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-top:3px;position:relative;z-index:1;background:#CFE4F3}
 .tl-i.active .tl-dot{background:var(--blue);box-shadow:0 0 0 4px rgba(10,133,209,.14)}
+.tl-i.active.sev-red .tl-dot{background:var(--red);box-shadow:0 0 0 4px rgba(220,38,38,.14)}
+.tl-i.active.sev-amber .tl-dot{background:var(--amb-ic);box-shadow:0 0 0 4px rgba(245,166,35,.18)}
 .tl-l{font-size:13px;font-weight:600;color:var(--txt);display:flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:1.35}
 .tl-now{font-size:9px;font-weight:700;letter-spacing:.5px;color:#fff;background:var(--blue);padding:2px 8px;border-radius:5px}
+.tl-i.sev-red .tl-now{background:var(--red)}
+.tl-i.sev-amber .tl-now{background:var(--amb-ic)}
 .tl-t{font-size:11.5px;color:var(--txt3);margin-top:3px}
 .tl-load{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--txt3);padding:16px 22px}
 .tl-load i{width:8px;height:8px;border-radius:50%;background:var(--blue);animation:blink 1s infinite}
@@ -323,7 +406,7 @@ function CourierEvents({ events }: { events: any[] | null }) {
   return (
     <div className="tl">
       {events.map((ev, i) => (
-        <div key={i} className={`tl-i ${ev.state}`}>
+        <div key={i} className={`tl-i ${ev.state}${ev.sev ? ' sev-' + ev.sev : ''}`}>
           <span className="tl-dot" />
           <div style={{ minWidth: 0 }}>
             <div className="tl-l">{ev.label}{ev.state === 'active' && <span className="tl-now">LATEST</span>}</div>
@@ -380,6 +463,21 @@ const IconExt = () => (
 const IconStepCheck = () => (
   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 6L9 17l-5-5" />
+  </svg>
+)
+const IconStepWarn = () => (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 8v5M12 16h.01" />
+  </svg>
+)
+const IconAlert = () => (
+  <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+  </svg>
+)
+const IconX = () => (
+  <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 6L6 18M6 6l12 12" />
   </svg>
 )
 
@@ -446,14 +544,30 @@ export default function TrackPage() {
   const courierDone = isCourierDelivered(courierEvents)
   const cd = o ? calcCountdown(o, courierDone) : null
   const delivered = o ? (o.status === 'delivered' || courierDone) : false
+  const cancelled = o?.status === 'cancelled'
   const shipped = o?.status === 'shipped'
   const inProcess = o?.status === 'in_process'
-  const pillCls = delivered ? 'green' : 'blue'
-  const stages = o ? buildStages(o, result!.history, courierDone) : []
+
   /* Prefer the courier's own live status text. If the parcel hasn't reached
      the courier yet (no live events), fall back to the same status the
      progress bar is showing instead of a hardcoded "Out for delivery". */
   const latestCourierLabel = courierEvents && courierEvents.length > 0 ? courierEvents[0].label : null
+  const courierCategory = classifyCourier(latestCourierLabel)
+  const courierProblem = courierCategory === 'undelivered' || courierCategory === 'contacting' || courierCategory === 'returning'
+
+  const realStages = o ? buildStages(o, result!.history, courierCategory, latestCourierLabel) : []
+
+  const pillLabel = !o ? '' :
+    delivered ? 'Delivered' :
+    cancelled ? 'Order Cancelled' :
+    courierCategory === 'undelivered' ? 'Undelivered' :
+    courierCategory === 'contacting' ? 'Contacting Consignee' :
+    courierCategory === 'returning' ? 'Return In Progress' :
+    STATUS_LABEL[o.status]
+  const pillCls = delivered ? 'green' :
+    (cancelled || courierCategory === 'undelivered') ? 'red' :
+    (courierCategory === 'contacting' || courierCategory === 'returning') ? 'amber' :
+    'blue'
 
   return (
     <div className="app" ref={rootRef}>
@@ -517,7 +631,7 @@ export default function TrackPage() {
             <div className="sum-top">
               <div className="sum-no">Order #{o.orderNumber}</div>
               <div className="sum-name">{o.customerName || 'Your order'}</div>
-              <span className={`pill ${pillCls}`}><i />{delivered ? 'Delivered' : STATUS_LABEL[o.status]}</span>
+              <span className={`pill ${pillCls}`}><i />{pillLabel}</span>
             </div>
 
             <div className="ring-wrap">
@@ -528,6 +642,32 @@ export default function TrackPage() {
                     <div className="rl">Delivered on</div>
                     <div className="rv">{fmtDate(o.updatedAt)}</div>
                     <div className="rs">Thank You For Shopping With Myzan.</div>
+                  </div>
+                </>
+              ) : cancelled ? (
+                <>
+                  <div className="cancel-badge"><IconX /></div>
+                  <div className="ring-info">
+                    <div className="rl">Order status</div>
+                    <div className="rv">Order Cancelled</div>
+                    <div className="rs">This order has been cancelled.</div>
+                  </div>
+                </>
+              ) : courierProblem ? (
+                <>
+                  <div className={`warn-badge ${courierCategory === 'undelivered' ? 'red' : 'amber'}`}><IconAlert /></div>
+                  <div className="ring-info">
+                    <div className="rl">Courier status</div>
+                    <div className="rv">
+                      {courierCategory === 'undelivered' ? 'Undelivered' : courierCategory === 'contacting' ? 'Contacting Consignee' : 'Return'}
+                    </div>
+                    <div className="rs">
+                      {courierCategory === 'undelivered'
+                        ? 'Delivery attempt failed. Courier will retry or contact you.'
+                        : courierCategory === 'contacting'
+                          ? 'Courier is contacting you to arrange delivery.'
+                          : 'Parcel is being returned to the shipper.'}
+                    </div>
                   </div>
                 </>
               ) : cd ? (
@@ -566,9 +706,11 @@ export default function TrackPage() {
             <div className="card">
               <div className="card-h"><span className="t">Progress</span></div>
               <div className="step">
-                {stages.map((s, i) => (
+                {realStages.map((s, i) => (
                   <div key={i} className={`st ${s.state}`}>
-                    <div className="d">{s.state === 'done' ? <IconStepCheck /> : null}</div>
+                    <div className="d">
+                      {s.state === 'done' ? <IconStepCheck /> : (s.state === 'problem' || s.state === 'warn') ? <IconStepWarn /> : null}
+                    </div>
                     <div className="sl">{s.label}</div>
                     <div className="ss">{s.sub}</div>
                   </div>
