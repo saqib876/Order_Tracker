@@ -160,7 +160,7 @@ const css = `
   --disp:'Space Grotesk',sans-serif; --body:'Inter',sans-serif;
 }
 html,body{background:var(--canvas)}
-.app{font-family:var(--body);color:var(--txt);background:var(--canvas);min-height:100dvh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.app{font-family:var(--body);color:var(--txt);background:var(--canvas);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 
 /* top bar */
 .bar{height:56px;display:flex;align-items:center;gap:12px;padding:0 20px;background:rgba(255,255,255,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
@@ -170,7 +170,7 @@ html,body{background:var(--canvas)}
 .bar-right{margin-left:auto;font-family:var(--disp);font-size:13px;font-weight:600;color:var(--txt2);background:#fff;border:1px solid var(--line);padding:5px 12px;border-radius:99px}
 
 /* ===== SEARCH STAGE ===== */
-.stage{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 16px}
+.stage{min-height:440px;display:flex;align-items:center;justify-content:center;padding:40px 16px}
 .search{width:100%;max-width:440px;text-align:center}
 .eyebrow{font-family:var(--disp);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--acc);margin-bottom:14px}
 .search h1{font-family:var(--disp);font-size:34px;font-weight:700;line-height:1.1;letter-spacing:-.5px;margin-bottom:10px}
@@ -192,7 +192,7 @@ html,body{background:var(--canvas)}
 .alert{background:var(--red-l);border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:11px 14px;border-radius:10px;margin-top:14px;text-align:left}
 
 /* ===== DASHBOARD ===== */
-.dash{flex:1;padding:18px;display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1080px;margin:0 auto;width:100%;align-items:start}
+.dash{padding:18px 18px 28px;display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1080px;margin:0 auto;width:100%;align-items:start}
 
 /* summary panel (dark, signature) */
 .sum{background:linear-gradient(160deg,var(--ink) 0%,var(--ink2) 60%,var(--ink3) 100%);border-radius:20px;padding:22px;color:#fff;position:relative;overflow:hidden}
@@ -340,17 +340,23 @@ export default function TrackPage() {
   const [courierEvents, setCourierEvents] = useState<any[] | null | undefined>(undefined)
   const rootRef = useRef<HTMLDivElement>(null)
 
-  /* auto-resize the parent iframe (Shopify listens for {type:'resize', height}) */
+  /* auto-resize the parent iframe (Shopify listens for {type:'resize', height}).
+     Only fires when the height genuinely changes, so it can never feed back into itself. */
+  const lastH = useRef(0)
   useEffect(() => {
     const send = () => {
-      const h = rootRef.current?.offsetHeight || document.body.scrollHeight
-      try { window.parent?.postMessage({ type: 'resize', height: h + 24 }, '*') } catch {}
+      const el = rootRef.current
+      if (!el) return
+      const h = Math.ceil(el.getBoundingClientRect().height) + 16
+      if (Math.abs(h - lastH.current) < 4) return   // ignore sub-pixel / no change → no loop
+      lastH.current = h
+      try { window.parent?.postMessage({ type: 'resize', height: h }, '*') } catch {}
     }
     send()
-    const ro = new ResizeObserver(send)
+    const ro = new ResizeObserver(() => window.requestAnimationFrame(send))
     if (rootRef.current) ro.observe(rootRef.current)
     window.addEventListener('load', send)
-    const t = setTimeout(send, 400)
+    const t = setTimeout(send, 500)
     return () => { ro.disconnect(); window.removeEventListener('load', send); clearTimeout(t) }
   }, [result, courierEvents, error, loading, tab])
 
