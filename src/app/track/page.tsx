@@ -174,10 +174,10 @@ html,body{background:var(--canvas)}
 
 /* top bar */
 .bar{height:62px;display:flex;align-items:center;gap:13px;padding:0 24px;background:rgba(255,255,255,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-.brand{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:2.5px;color:var(--ink)}
-.brand b{font-weight:700;color:var(--blue)}
 .bar-sub{font-size:10.5px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--txt3)}
-.bar-right{margin-left:auto;font-family:var(--disp);font-size:14px;font-weight:600;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-br);padding:5px 14px;border-radius:99px}
+.bar-right{margin-left:auto;font-family:var(--disp);font-size:14px;font-weight:600;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-br);padding:5px 14px;border-radius:99px;white-space:nowrap;flex-shrink:0}
+.bar-reset{border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--blue);cursor:pointer;padding:7px 11px;border-radius:9px;transition:.2s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.bar-reset:hover{background:var(--blue-bg)}
 
 /* ===== SEARCH ===== */
 .stage{min-height:480px;display:flex;align-items:center;justify-content:center;padding:46px 16px}
@@ -187,17 +187,19 @@ html,body{background:var(--canvas)}
 .search p{font-size:14px;color:var(--txt2);line-height:1.65;margin-bottom:28px;max-width:406px;margin-left:auto;margin-right:auto}
 .card-search{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 24px 60px -28px rgba(17,25,40,.28)}
 .seg{display:flex;background:var(--canvas);border:1px solid var(--line);border-radius:13px;padding:4px;margin-bottom:12px}
-.seg button{flex:1;border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--txt2);padding:10px;border-radius:9px;cursor:pointer;transition:.2s}
+.seg button{flex:1;border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--txt2);padding:9px 6px;border-radius:9px;cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.25}
+.seg button small{font-size:9.5px;font-weight:500;color:inherit;opacity:.65}
 .seg button.on{background:var(--ink);color:#fff;box-shadow:0 4px 14px -6px rgba(17,17,17,.5)}
+.seg button.on small{opacity:.85}
 .field{display:flex;gap:9px}
-.field input{flex:1;background:var(--canvas);border:1.5px solid var(--line);border-radius:13px;padding:14px 17px;font-family:var(--body);font-size:15px;font-weight:500;color:var(--txt);outline:none;transition:.2s}
+.field input{flex:1;background:var(--canvas);border:1.5px solid var(--line);border-radius:13px;padding:14px 17px;font-family:var(--body);font-size:15px;font-weight:500;color:var(--txt);outline:none;transition:.2s;min-width:0}
 .field input::placeholder{color:var(--txt3);font-weight:400}
 .field input:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 4px rgba(10,133,209,.1)}
-.go{border:none;background:var(--blue);color:#fff;font-family:var(--body);font-weight:600;font-size:14px;padding:0 25px;border-radius:13px;cursor:pointer;white-space:nowrap;transition:.15s;box-shadow:0 8px 18px -7px rgba(10,133,209,.6)}
+.go{border:none;background:var(--blue);color:#fff;font-family:var(--body);font-weight:600;font-size:14px;padding:0 25px;border-radius:13px;cursor:pointer;white-space:nowrap;transition:.15s;box-shadow:0 8px 18px -7px rgba(10,133,209,.6);flex-shrink:0}
 .go:hover{background:var(--blue-d)}
 .go:active{transform:scale(.97)}
 .go:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-.trust{display:flex;gap:22px;justify-content:center;margin-top:22px}
+.trust{display:flex;gap:22px;justify-content:center;margin-top:22px;flex-wrap:wrap}
 .trust span{font-size:11.5px;color:var(--txt3);font-weight:500;display:flex;align-items:center;gap:6px}
 .trust b{color:var(--blue)}
 .alert{background:var(--red-bg);border:1px solid #f7cccc;color:#b42323;font-size:13px;font-weight:500;padding:11px 14px;border-radius:11px;margin-top:14px;text-align:left}
@@ -212,7 +214,7 @@ html,body{background:var(--canvas)}
 .sum::before{content:'';position:absolute;inset:0;background:radial-gradient(300px 190px at 96% -10%,rgba(10,133,209,.07),transparent 62%);pointer-events:none}
 .sum::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--blue-l))}
 .sum-top{position:relative;z-index:1;margin-bottom:22px}
-.sum-no{font-size:10.5px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--txt3);margin-bottom:9px}
+.sum-no{display:inline-flex;align-items:center;font-family:var(--disp);font-size:12.5px;font-weight:700;letter-spacing:1px;color:var(--blue-d);background:var(--blue-bg);border:1px solid var(--blue-br);padding:5px 14px;border-radius:99px;margin-bottom:13px}
 .sum-name{font-family:var(--disp);font-size:27px;font-weight:600;line-height:1.14;letter-spacing:-.2px;margin-bottom:15px;color:var(--ink)}
 .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:6px 15px;border-radius:99px}
 .pill.blue{background:var(--blue-bg);color:var(--blue-d);border:1px solid var(--blue-br)}
@@ -220,7 +222,7 @@ html,body{background:var(--canvas)}
 .pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* ring */
-.ring-wrap{position:relative;z-index:1;display:flex;align-items:center;gap:22px;padding:22px 0;border-top:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.ring-wrap{position:relative;z-index:1;display:flex;align-items:center;gap:22px;padding:20px 16px;margin:0 -2px;border-radius:16px;background:linear-gradient(135deg,rgba(10,133,209,.07),rgba(56,182,255,.02));border-top:1px solid var(--line2);border-bottom:1px solid var(--line2)}
 .ring{position:relative;width:106px;height:106px;flex-shrink:0}
 .ring svg{transform:rotate(-90deg)}
 .ring-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -236,6 +238,7 @@ html,body{background:var(--canvas)}
 /* items */
 .sum-items{position:relative;z-index:1;margin-top:22px}
 .sum-items .il{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);font-weight:600;margin-bottom:13px}
+.items-list{padding:6px 22px 16px}
 .iline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line2)}
 .iline:last-child{border-bottom:none}
 .iname{font-size:13px;font-weight:500;color:var(--txt);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -244,9 +247,9 @@ html,body{background:var(--canvas)}
 /* right column */
 .col{display:flex;flex-direction:column;gap:16px;min-width:0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:0 8px 26px -16px rgba(17,25,40,.18)}
-.card-h{display:flex;align-items:center;justify-content:space-between;padding:17px 22px;border-bottom:1px solid var(--line2)}
+.card-h{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;padding:17px 22px;border-bottom:1px solid var(--line2)}
 .card-h .t{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:.2px;color:var(--ink);display:flex;align-items:center;gap:9px}
-.cn{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-br);padding:4px 13px;border-radius:99px}
+.cn{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-br);padding:4px 13px;border-radius:99px;white-space:nowrap;flex-shrink:0}
 
 /* stepper */
 .step{display:flex;padding:24px 22px 22px}
@@ -299,6 +302,16 @@ html,body{background:var(--canvas)}
   .dash{grid-template-columns:1fr;padding:16px 14px 26px;gap:14px}
   .sum{padding:22px}
   .search h1{font-size:33px}
+}
+@media(max-width:480px){
+  .bar{padding:0 14px;gap:8px}
+  .bar-reset{font-size:12px;padding:6px 8px}
+  .bar-right{font-size:12px;padding:4px 11px}
+  .cn{font-size:11px;padding:4px 10px}
+}
+@media(max-width:400px){
+  .field{flex-direction:column}
+  .go{width:100%;padding:13px 25px}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 `
@@ -437,14 +450,21 @@ export default function TrackPage() {
   const inProcess = o?.status === 'in_process'
   const pillCls = delivered ? 'green' : 'blue'
   const stages = o ? buildStages(o, result!.history, courierDone) : []
+  /* Prefer the courier's own live status text. If the parcel hasn't reached
+     the courier yet (no live events), fall back to the same status the
+     progress bar is showing instead of a hardcoded "Out for delivery". */
+  const latestCourierLabel = courierEvents && courierEvents.length > 0 ? courierEvents[0].label : null
 
   return (
     <div className="app" ref={rootRef}>
       <style>{css}</style>
 
       <div className="bar">
-        <span className="brand">MY<b>ZAN</b></span>
-        <span className="bar-sub">Order Tracker</span>
+        {o ? (
+          <button className="bar-reset" onClick={reset}>← Track another order</button>
+        ) : (
+          <span className="bar-sub">Order Tracker</span>
+        )}
         {o && <span className="bar-right">#{o.orderNumber}</span>}
       </div>
 
@@ -457,8 +477,14 @@ export default function TrackPage() {
             <p>Enter your order number or phone number to see the real-time status, delivery window, and courier updates — all on one screen.</p>
             <div className="card-search">
               <div className="seg">
-                <button className={tab === 'order' ? 'on' : ''} onClick={() => switchTab('order')}>Order number</button>
-                <button className={tab === 'phone' ? 'on' : ''} onClick={() => switchTab('phone')}>Phone number</button>
+                <button className={tab === 'order' ? 'on' : ''} onClick={() => switchTab('order')}>
+                  Order number
+                  <small>Track with Order No</small>
+                </button>
+                <button className={tab === 'phone' ? 'on' : ''} onClick={() => switchTab('phone')}>
+                  Phone number
+                  <small>Track with Phone Number</small>
+                </button>
               </div>
               <div className="field">
                 <input
@@ -509,7 +535,7 @@ export default function TrackPage() {
                   <Ring prog={cd.prog} days={cd.daysLeft} />
                   <div className="ring-info">
                     {shipped
-                      ? <span className="ofd"><i />Out for delivery</span>
+                      ? <span className="ofd"><i />{latestCourierLabel || STATUS_LABEL[o.status]}</span>
                       : <div className="rl">Est. delivery</div>}
                     <div className="rv">{shipped ? `By ${cd.maxDate}` : cd.estRange}</div>
                     <div className="rs">{shipped ? 'On the way with the courier.' : `Confirmed ${cd.startFmt}`}</div>
@@ -523,18 +549,6 @@ export default function TrackPage() {
                 </div>
               )}
             </div>
-
-            {(o.lineItems || []).length > 0 && (
-              <div className="sum-items">
-                <div className="il">Items ({o.lineItems.length})</div>
-                {o.lineItems.map((it, i) => (
-                  <div key={i} className="iline">
-                    <span className="iname">{it.name}</span>
-                    <span className="iqty">×{it.quantity}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* right */}
@@ -582,9 +596,19 @@ export default function TrackPage() {
               </div>
             )}
 
-            <div style={{ textAlign: 'center' }}>
-              <button className="reset" onClick={reset}>← Track another order</button>
-            </div>
+            {(o.lineItems || []).length > 0 && (
+              <div className="card">
+                <div className="card-h"><span className="t">Items ({o.lineItems.length})</span></div>
+                <div className="items-list">
+                  {o.lineItems.map((it, i) => (
+                    <div key={i} className="iline">
+                      <span className="iname">{it.name}</span>
+                      <span className="iqty">×{it.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
