@@ -461,7 +461,7 @@ export default function TrackPage() {
 
       <div className="bar">
         {o ? (
-          <button className="bar-reset" onClick={reset}>← Track another order</button>
+          <button className="bar-reset" onClick={reset}>← Track Another Order</button>
         ) : (
           <span className="bar-sub">Order Tracker</span>
         )}
@@ -473,17 +473,17 @@ export default function TrackPage() {
         <div className="stage">
           <div className="search">
             <div className="eyebrow">Live order status</div>
-            <h1>Track your order</h1>
-            <p>Enter your order number or phone number to see the real-time status, delivery window, and courier updates — all on one screen.</p>
+            <h1>Track Your Order</h1>
+            <p>Enter Your Order Number or Phone Number To See The Real-Time Status, Delivery Window, & Courier Updates — All On One Screen.</p>
             <div className="card-search">
               <div className="seg">
                 <button className={tab === 'order' ? 'on' : ''} onClick={() => switchTab('order')}>
-                  Order number
-                  <small>Track with Order No</small>
+                  Order Number
+                  <small>Track With Order No</small>
                 </button>
                 <button className={tab === 'phone' ? 'on' : ''} onClick={() => switchTab('phone')}>
-                  Phone number
-                  <small>Track with Phone Number</small>
+                  Phone Number
+                  <small>Track With Phone No</small>
                 </button>
               </div>
               <div className="field">
@@ -502,8 +502,8 @@ export default function TrackPage() {
               {error && <div className="alert">{error}</div>}
             </div>
             <div className="trust">
-              <span><b>●</b> Real-time courier feed</span>
-              <span><b>●</b> No account needed</span>
+              <span><b>●</b> Real-Time Courier Feed</span>
+              <span><b>●</b> No Account Needed</span>
             </div>
           </div>
         </div>
@@ -527,7 +527,7 @@ export default function TrackPage() {
                   <div className="ring-info">
                     <div className="rl">Delivered on</div>
                     <div className="rv">{fmtDate(o.updatedAt)}</div>
-                    <div className="rs">Thank you for shopping with Myzan.</div>
+                    <div className="rs">Thank You For Shopping With Myzan.</div>
                   </div>
                 </>
               ) : cd ? (
@@ -557,7 +557,7 @@ export default function TrackPage() {
               <div className="mnote">
                 <div className="mi"><IconSpark /></div>
                 <div>
-                  <div className="mt">Crafting your order</div>
+                  <div className="mt">Crafting Your Order</div>
                   <div className="mb">We’re carefully making your order. You’ll get an update the moment it ships.</div>
                 </div>
               </div>
@@ -579,7 +579,7 @@ export default function TrackPage() {
             {(shipped || delivered) && o.trackingId && (
               <div className="card">
                 <div className="card-h">
-                  <span className="t"><span className="live-i" />Live courier tracking</span>
+                  <span className="t"><span className="live-i" />Live Courier Tracking</span>
                   <span className="cn">{o.trackingId}</span>
                 </div>
                 <CourierEvents events={courierEvents === undefined ? null : courierEvents} />
@@ -591,7 +591,7 @@ export default function TrackPage() {
                     window.open(url, '_blank')
                   }}
                 >
-                  Track on PostEx <IconExt />
+                  Track on PostEx Courier <IconExt />
                 </button>
               </div>
             )}
