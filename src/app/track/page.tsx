@@ -6,7 +6,7 @@ type OrderStatus = 'in_process' | 'shipped' | 'delivered'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   in_process: 'Making Process',
-  shipped: 'Shipped Check Live Courier Tracking',
+  shipped: 'Shipped - Check Live Courier Tracking',
   delivered: 'Delivered',
 }
 
