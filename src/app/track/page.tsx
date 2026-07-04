@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 type OrderStatus = 'in_process' | 'shipped' | 'delivered'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  in_process: 'Making in progress',
+  in_process: 'In production',
   shipped: 'Shipped',
   delivered: 'Delivered',
 }
@@ -65,7 +65,32 @@ function fmtCCDate(iso: string) {
 function isCourierDelivered(events: any[] | null | undefined): boolean {
   if (!events || events.length === 0) return false
   const label: string = (events[0]?.label || '').toLowerCase()
-  return label.includes('deliver')
+  return label.includes('delivered')
+}
+
+/* Turn raw courier labels (ALL CAPS, terse) into clean professional wording */
+function prettyCourier(raw?: string): string {
+  const t = (raw || '').trim()
+  if (!t) return 'Status update'
+  const map: Record<string, string> = {
+    'PICKED FROM SHIPPER': 'Picked up from seller',
+    'ARRIVED AT ORIGIN BRANCH': 'Arrived at origin hub',
+    'MOVED TO DEST. BRANCH': 'In transit to destination',
+    'MOVED TO DEST BRANCH': 'In transit to destination',
+    'REACHED AT DEST. BRANCH': 'Arrived at destination hub',
+    'REACHED AT DEST BRANCH': 'Arrived at destination hub',
+    'ASSIGNED TO COURIER': 'Assigned to delivery rider',
+    'OUT FOR DELIVERY': 'Out for delivery',
+    'DELIVERED': 'Delivered',
+    'RETURN TO SHIPPER': 'Returned to seller',
+    'CONSIGNMENT BOOKED': 'Shipment booked',
+  }
+  const up = t.toUpperCase()
+  if (map[up]) return map[up]
+  return t.toLowerCase()
+    .replace(/\bdest\.?\b/g, 'destination')
+    .replace(/\bbranch\b/g, 'hub')
+    .replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
@@ -117,7 +142,7 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
       (a, b) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
     )
     const events = sorted.map((ev: any, i: number) => ({
-      label: ev.ProcessDescForPortal || ev.OperationDesc || 'Update',
+      label: prettyCourier(ev.ProcessDescForPortal || ev.OperationDesc),
       time: fmtCCDate(ev.TransactionDate),
       state: i === 0 ? 'active' : 'done',
     }))
@@ -138,7 +163,7 @@ function buildStages(order: TrackingResult['order'], history: TrackingResult['hi
   return [
     { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as string },
     { label: 'Making', sub: shipped ? 'Completed' : 'In progress', state: shipped ? 'done' : 'current' },
-    { label: 'Shipped', sub: order.trackingId ? `CN ${order.trackingId}` : timeOf('shipped') || '—',
+    { label: 'Shipped', sub: order.trackingId ? `Tracking No ${order.trackingId}` : timeOf('shipped') || '—',
       state: done ? 'done' : shipped ? 'current' : 'pending' },
     { label: 'Delivered', sub: done ? (timeOf('delivered') || 'Completed') : 'Pending',
       state: done ? 'done' : 'pending' },
@@ -159,7 +184,7 @@ const css = `
   --disp:'Jost',sans-serif; --body:'Poppins',sans-serif;
 }
 html,body{background:var(--canvas)}
-.app{font-family:var(--body);color:var(--txt);background:var(--canvas);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.app{font-family:var(--body);color:var(--txt);background:var(--canvas);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%;max-width:100%}
 
 /* top bar */
 .bar{height:62px;display:flex;align-items:center;gap:13px;padding:0 24px;background:rgba(255,255,255,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
@@ -192,7 +217,9 @@ html,body{background:var(--canvas)}
 .alert{background:var(--red-bg);border:1px solid #f7cccc;color:#b42323;font-size:13px;font-weight:500;padding:11px 14px;border-radius:11px;margin-top:14px;text-align:left}
 
 /* ===== DASHBOARD ===== */
-.dash{padding:22px 18px 32px;display:grid;grid-template-columns:356px 1fr;gap:16px;max-width:1100px;margin:0 auto;width:100%;align-items:start}
+.dash{padding:22px 18px 32px;display:grid;grid-template-columns:356px minmax(0,1fr);gap:16px;max-width:1100px;margin:0 auto;width:100%;align-items:start}
+.dash>*{min-width:0}
+.cn{overflow-wrap:anywhere}
 
 /* summary panel (ink, signature) */
 .sum{background:linear-gradient(158deg,#191B1F 0%,#111214 60%,#0C0D0F 100%);border-radius:24px;padding:26px;color:#fff;position:relative;overflow:hidden;box-shadow:0 26px 55px -26px rgba(12,14,18,.62)}
@@ -214,6 +241,8 @@ html,body{background:var(--canvas)}
 .ring-num{font-family:var(--disp);font-size:35px;font-weight:600;line-height:1;color:#fff}
 .ring-unit{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:3px}
 .ring-info .rl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.46);font-weight:600;margin-bottom:6px}
+.ofd{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9bd5f8;background:rgba(56,182,255,.14);border:1px solid rgba(56,182,255,.4);padding:5px 12px;border-radius:99px;margin-bottom:10px}
+.ofd i{width:6px;height:6px;border-radius:50%;background:#38B6FF;box-shadow:0 0 8px #38B6FF;animation:blink 1.4s infinite}
 .ring-info .rv{font-family:var(--disp);font-size:16px;font-weight:600;color:#fff;line-height:1.25}
 .ring-info .rs{font-size:12px;color:rgba(255,255,255,.6);margin-top:9px;line-height:1.45}
 .done-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;background:rgba(78,216,131,.13);border:1px solid rgba(78,216,131,.4);display:flex;align-items:center;justify-content:center;color:#8fe8ae}
@@ -496,7 +525,9 @@ export default function TrackPage() {
                 <>
                   <Ring prog={cd.prog} days={cd.daysLeft} />
                   <div className="ring-info">
-                    <div className="rl">{shipped ? 'Out for delivery' : 'Est. delivery'}</div>
+                    {shipped
+                      ? <span className="ofd"><i />Out for delivery</span>
+                      : <div className="rl">Est. delivery</div>}
                     <div className="rv">{shipped ? `By ${cd.maxDate}` : cd.estRange}</div>
                     <div className="rs">{shipped ? 'On the way with the courier.' : `Confirmed ${cd.startFmt}`}</div>
                   </div>
@@ -559,10 +590,11 @@ export default function TrackPage() {
                   className="track-link"
                   onClick={() => {
                     if (o.trackingId) navigator.clipboard?.writeText(o.trackingId).catch(() => {})
-                    window.open(`https://callcourier.com.pk/tracking/?tc=${o.trackingId}`, '_blank')
+                    const url = o.postexUrl || `https://callcourier.com.pk/tracking/?tc=${o.trackingId}`
+                    window.open(url, '_blank')
                   }}
                 >
-                  Track on Call Courier <IconExt />
+                  Track on PostEx <IconExt />
                 </button>
               </div>
             )}
