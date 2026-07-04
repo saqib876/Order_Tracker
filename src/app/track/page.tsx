@@ -68,29 +68,15 @@ function isCourierDelivered(events: any[] | null | undefined): boolean {
   return label.includes('delivered')
 }
 
-/* Turn raw courier labels (ALL CAPS, terse) into clean professional wording */
+/* Keep the courier's own status wording. Only tidy ALL-CAPS to readable case;
+   never substitute or invent words. */
 function prettyCourier(raw?: string): string {
   const t = (raw || '').trim()
   if (!t) return 'Status update'
-  const map: Record<string, string> = {
-    'PICKED FROM SHIPPER': 'Picked up from seller',
-    'ARRIVED AT ORIGIN BRANCH': 'Arrived at origin hub',
-    'MOVED TO DEST. BRANCH': 'In transit to destination',
-    'MOVED TO DEST BRANCH': 'In transit to destination',
-    'REACHED AT DEST. BRANCH': 'Arrived at destination hub',
-    'REACHED AT DEST BRANCH': 'Arrived at destination hub',
-    'ASSIGNED TO COURIER': 'Assigned to delivery rider',
-    'OUT FOR DELIVERY': 'Out for delivery',
-    'DELIVERED': 'Delivered',
-    'RETURN TO SHIPPER': 'Returned to seller',
-    'CONSIGNMENT BOOKED': 'Shipment booked',
-  }
-  const up = t.toUpperCase()
-  if (map[up]) return map[up]
-  return t.toLowerCase()
-    .replace(/\bdest\.?\b/g, 'destination')
-    .replace(/\bbranch\b/g, 'hub')
-    .replace(/\b\w/g, c => c.toUpperCase())
+  const letters = t.replace(/[^A-Za-z]/g, '')
+  const isAllCaps = letters.length > 0 && letters === letters.toUpperCase()
+  if (!isAllCaps) return t
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
 }
 
 function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
@@ -221,39 +207,39 @@ html,body{background:var(--canvas)}
 .dash>*{min-width:0}
 .cn{overflow-wrap:anywhere}
 
-/* summary panel (ink, signature) */
-.sum{background:linear-gradient(158deg,#191B1F 0%,#111214 60%,#0C0D0F 100%);border-radius:24px;padding:26px;color:#fff;position:relative;overflow:hidden;box-shadow:0 26px 55px -26px rgba(12,14,18,.62)}
-.sum::before{content:'';position:absolute;inset:0;background:radial-gradient(320px 210px at 94% -8%,rgba(56,182,255,.3),transparent 60%);pointer-events:none}
-.sum::after{content:'';position:absolute;top:0;left:26px;right:26px;height:1px;background:linear-gradient(90deg,transparent,rgba(56,182,255,.65),transparent)}
+/* summary panel (light, on-brand) */
+.sum{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:26px;color:var(--txt);position:relative;overflow:hidden;box-shadow:0 12px 34px -20px rgba(17,25,40,.22)}
+.sum::before{content:'';position:absolute;inset:0;background:radial-gradient(300px 190px at 96% -10%,rgba(10,133,209,.07),transparent 62%);pointer-events:none}
+.sum::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--blue-l))}
 .sum-top{position:relative;z-index:1;margin-bottom:22px}
-.sum-no{font-size:10.5px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,.48);margin-bottom:9px}
-.sum-name{font-family:var(--disp);font-size:27px;font-weight:600;line-height:1.14;letter-spacing:-.2px;margin-bottom:15px;color:#fff}
+.sum-no{font-size:10.5px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--txt3);margin-bottom:9px}
+.sum-name{font-family:var(--disp);font-size:27px;font-weight:600;line-height:1.14;letter-spacing:-.2px;margin-bottom:15px;color:var(--ink)}
 .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:6px 15px;border-radius:99px}
-.pill.blue{background:rgba(56,182,255,.15);color:#9bd5f8;border:1px solid rgba(56,182,255,.32)}
-.pill.green{background:rgba(78,216,131,.14);color:#8fe8ae;border:1px solid rgba(78,216,131,.34)}
-.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.pill.blue{background:var(--blue-bg);color:var(--blue-d);border:1px solid var(--blue-br)}
+.pill.green{background:#E7F7ED;color:#127a38;border:1px solid #BCE9CB}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* ring */
-.ring-wrap{position:relative;z-index:1;display:flex;align-items:center;gap:22px;padding:22px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+.ring-wrap{position:relative;z-index:1;display:flex;align-items:center;gap:22px;padding:22px 0;border-top:1px solid var(--line2);border-bottom:1px solid var(--line2)}
 .ring{position:relative;width:106px;height:106px;flex-shrink:0}
 .ring svg{transform:rotate(-90deg)}
 .ring-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.ring-num{font-family:var(--disp);font-size:35px;font-weight:600;line-height:1;color:#fff}
-.ring-unit{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:3px}
-.ring-info .rl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.46);font-weight:600;margin-bottom:6px}
-.ofd{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9bd5f8;background:rgba(56,182,255,.14);border:1px solid rgba(56,182,255,.4);padding:5px 12px;border-radius:99px;margin-bottom:10px}
-.ofd i{width:6px;height:6px;border-radius:50%;background:#38B6FF;box-shadow:0 0 8px #38B6FF;animation:blink 1.4s infinite}
-.ring-info .rv{font-family:var(--disp);font-size:16px;font-weight:600;color:#fff;line-height:1.25}
-.ring-info .rs{font-size:12px;color:rgba(255,255,255,.6);margin-top:9px;line-height:1.45}
-.done-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;background:rgba(78,216,131,.13);border:1px solid rgba(78,216,131,.4);display:flex;align-items:center;justify-content:center;color:#8fe8ae}
+.ring-num{font-family:var(--disp);font-size:35px;font-weight:600;line-height:1;color:var(--ink)}
+.ring-unit{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);margin-top:3px}
+.ring-info .rl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);font-weight:600;margin-bottom:6px}
+.ofd{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--blue-d);background:var(--blue-bg);border:1px solid var(--blue-br);padding:5px 12px;border-radius:99px;margin-bottom:10px}
+.ofd i{width:6px;height:6px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px rgba(10,133,209,.6);animation:blink 1.4s infinite}
+.ring-info .rv{font-family:var(--disp);font-size:16px;font-weight:600;color:var(--ink);line-height:1.25}
+.ring-info .rs{font-size:12px;color:var(--txt2);margin-top:9px;line-height:1.45}
+.done-badge{width:106px;height:106px;flex-shrink:0;border-radius:50%;background:#E7F7ED;border:1px solid #BCE9CB;display:flex;align-items:center;justify-content:center;color:var(--grn)}
 
 /* items */
 .sum-items{position:relative;z-index:1;margin-top:22px}
-.sum-items .il{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.46);font-weight:600;margin-bottom:13px}
-.iline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.sum-items .il{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);font-weight:600;margin-bottom:13px}
+.iline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line2)}
 .iline:last-child{border-bottom:none}
-.iname{font-size:13px;font-weight:400;color:rgba(255,255,255,.92);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.iqty{font-family:var(--disp);font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);padding:3px 11px;border-radius:99px;flex-shrink:0}
+.iname{font-size:13px;font-weight:500;color:var(--txt);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.iqty{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--txt2);background:var(--canvas);border:1px solid var(--line);padding:3px 11px;border-radius:99px;flex-shrink:0}
 
 /* right column */
 .col{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -281,9 +267,7 @@ html,body{background:var(--canvas)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 
 /* courier timeline */
-.tl{padding:8px 22px 6px;max-height:308px;overflow-y:auto}
-.tl::-webkit-scrollbar{width:5px}
-.tl::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+.tl{padding:8px 22px 6px}
 .tl-i{display:flex;gap:15px;position:relative;padding-bottom:18px}
 .tl-i:last-child{padding-bottom:6px}
 .tl-i::before{content:'';position:absolute;left:5px;top:16px;bottom:0;width:2px;background:var(--line2)}
@@ -314,7 +298,6 @@ html,body{background:var(--canvas)}
 @media(max-width:880px){
   .dash{grid-template-columns:1fr;padding:16px 14px 26px;gap:14px}
   .sum{padding:22px}
-  .tl{max-height:250px}
   .search h1{font-size:33px}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -351,7 +334,7 @@ function Ring({ prog, days }: { prog: number; days: number }) {
             <stop offset="1" stopColor="#0A85D1" />
           </linearGradient>
         </defs>
-        <circle cx="53" cy="53" r={r} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="6" />
+        <circle cx="53" cy="53" r={r} fill="none" stroke="#E7EAEF" strokeWidth="6" />
         <circle cx="53" cy="53" r={r} fill="none" stroke="url(#rg)" strokeWidth="6"
           strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off}
           style={{ transition: 'stroke-dashoffset .9s ease', filter: 'drop-shadow(0 0 5px rgba(56,182,255,.45))' }} />
