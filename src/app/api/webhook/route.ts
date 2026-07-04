@@ -56,19 +56,6 @@ export async function POST(req: NextRequest) {
   if (trackingId) detectedStatus = 'shipped'
 
 
-
-    // ── 5b. Cancellation always wins, regardless of tags/tracking ──
-  // Shopify sends `cancelled_at` (an ISO timestamp) on the order
-  // payload once it's cancelled; it's `null`/absent otherwise.
-  // Using `as any` here so this works even before `cancelled_at` is
-  // added to the ShopifyWebhookOrder type — add it there when you can
-  // (see note below) and drop the cast.
-  if ((payload as any).cancelled_at) {
-    detectedStatus = 'cancelled'
-
-
-    
-
   // ── 6. Build line items snapshot ──────────────────────────
   const lineItems = payload.line_items.map((li) => ({
     name: li.name,
