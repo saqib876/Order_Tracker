@@ -149,7 +149,7 @@ function buildStages(order: TrackingResult['order'], history: TrackingResult['hi
   return [
     { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as string },
     { label: 'Making Process', sub: shipped ? 'Completed' : 'In progress', state: shipped ? 'done' : 'current' },
-    { label: 'Shipped', sub: order.trackingId ? `Tracking No ${order.trackingId}` : timeOf('shipped') || '—',
+    { label: 'Shipped -Check Live Courier Tracking', sub: order.trackingId ? `Tracking No ${order.trackingId}` : timeOf('shipped') || '—',
       state: done ? 'done' : shipped ? 'current' : 'pending' },
     { label: 'Delivered', sub: done ? (timeOf('delivered') || 'Completed') : 'Pending',
       state: done ? 'done' : 'pending' },
