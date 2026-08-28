@@ -33,6 +33,12 @@ export async function sendWhatsAppText(to: string, body: string) {
 /**
  * Supabase 'qna' table se keyword-match karta hai. Match milte hi wahi answer
  * return karta hai - bot khud se kabhi kuch generate nahi karta.
+ * 'keywords' column ab plain comma-separated text hai (Excel/CSV se bulk-add
+ * karne ke liye asaan), isliye yahan split karke check karte hain.
+ *
+ * Sabse zyada "specific" (lambe) keyword ka match jeetega - taake overlapping
+ * keywords wale alag Q&A entries mein customer ko sabse relevant/exact jawab mile,
+ * generic keyword wala nahi.
  */
 export async function matchQna(text: string): Promise<string | null> {
   const { data: rows, error } = await supabaseAdmin
@@ -43,10 +49,18 @@ export async function matchQna(text: string): Promise<string | null> {
   if (error || !rows) return null
 
   const lower = text.toLowerCase()
+  let bestAnswer: string | null = null
+  let bestMatchLength = 0
+
   for (const row of rows) {
-    for (const kw of row.keywords as string[]) {
-      if (lower.includes(kw.toLowerCase())) return row.answer
+    const keywords = (row.keywords as string).split(',').map((k) => k.trim().toLowerCase())
+    for (const kw of keywords) {
+      if (kw && lower.includes(kw) && kw.length > bestMatchLength) {
+        bestMatchLength = kw.length
+        bestAnswer = row.answer
+      }
     }
   }
-  return null
+
+  return bestAnswer
 }
