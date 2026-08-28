@@ -27,9 +27,23 @@ interface TrackingResult {
 }
 
 /* ---------- date / working-day helpers ---------- */
-function workingDaysBetween(a: string, b: string) {
-  const start = new Date(a); start.setHours(0, 0, 0, 0)
-  const end = new Date(b); end.setHours(0, 0, 0, 0)
+// Browser kisi bhi timezone mein ho, hamesha Pakistan (Asia/Karachi) ki calendar
+// date use karte hain - taake website aur WhatsApp bot dono exactly raat 12 baje
+// Pakistan time par hi date change karein, kahin se bhi dekha jaye.
+function toPakistanDateOnly(d: Date): Date {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit',
+  })
+  const parts = fmt.formatToParts(d)
+  const y = Number(parts.find(p => p.type === 'year')!.value)
+  const m = Number(parts.find(p => p.type === 'month')!.value)
+  const day = Number(parts.find(p => p.type === 'day')!.value)
+  return new Date(y, m - 1, day)
+}
+function workingDaysBetween(a: string | Date, b: string | Date) {
+  const start = toPakistanDateOnly(new Date(a))
+  const end = toPakistanDateOnly(new Date(b))
+  if (end <= start) return 0
   let count = 0
   const cur = new Date(start)
   while (cur < end) {
@@ -39,8 +53,11 @@ function workingDaysBetween(a: string, b: string) {
   return count
 }
 function todayStr() {
-  const t = new Date(); t.setHours(0, 0, 0, 0)
-  return t.toISOString().slice(0, 10)
+  const t = toPakistanDateOnly(new Date())
+  const y = t.getFullYear()
+  const m = String(t.getMonth() + 1).padStart(2, '0')
+  const d = String(t.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 function fmtShort(d: Date) {
   return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })
@@ -148,7 +165,7 @@ function daysForCourierStage(stage: CourierStage): number {
 }
 
 function addWorkingDaysClient(start: Date, days: number): Date {
-  const result = new Date(start)
+  const result = toPakistanDateOnly(start)
   let added = 0
   while (added < days) {
     result.setDate(result.getDate() + 1)
@@ -162,7 +179,7 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean, lat
   const today = todayStr()
 
   if (order.status !== 'shipped') {
-    const confirmed = new Date(order.createdAt); confirmed.setHours(0, 0, 0, 0)
+    const confirmed = toPakistanDateOnly(new Date(order.createdAt))
     const minD = new Date(confirmed); minD.setDate(confirmed.getDate() + 10)
     const maxD = new Date(confirmed); maxD.setDate(confirmed.getDate() + 15)
     const passed = workingDaysBetween(order.createdAt, today)
@@ -178,7 +195,7 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean, lat
   }
 
   if (order.status === 'shipped' && order.shippedAt) {
-    const shipped = new Date(order.shippedAt); shipped.setHours(0, 0, 0, 0)
+    const shipped = toPakistanDateOnly(new Date(order.shippedAt))
     const stage = latestCourierLabel ? classifyCourierStage(latestCourierLabel) : null
 
     let deadlineD: Date
@@ -187,7 +204,7 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean, lat
 
     if (stage) {
       const days = daysForCourierStage(stage)
-      const todayD = new Date(); todayD.setHours(0, 0, 0, 0)
+      const todayD = toPakistanDateOnly(new Date())
       deadlineD = addWorkingDaysClient(todayD, days)
       daysLeft = Math.max(days, 0)
       const stageProg: Record<CourierStage, number> = {
