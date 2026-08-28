@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna } from '@/lib/whatsapp'
+import { normalizeForMatch } from '@/lib/textNormalize'
 
 export const dynamic = 'force-dynamic'
 
@@ -239,9 +240,8 @@ async function buildStatusReply(order: any): Promise<string> {
 
 // Customer ke message ko clean karta hai (punctuation hata ke) taake matching
 // zyada reliable ho - "order?" aur "order" dono ek jaisa treat ho
-function cleanText(t: string): string {
-  return t.toLowerCase().replace(/[?!.,;:'"()]/g, '').replace(/\s+/g, ' ').trim()
-}
+// (Roman Urdu spelling, typos, English grammar normalization - sab
+// src/lib/textNormalize.ts mein hai, taake Q&A matching bhi wahi use kar sake)
 
 // Customer apne order ko "order", "parcel", "cover", "case" - kisi bhi naam se
 // bula sakta hai (khaas kar jab specific product ka zikar kare, jaise "mera
@@ -264,7 +264,7 @@ const NOUN_TEMPLATES = [
   '{n} aane mein kitna time', 'mera {n} kahan tak pohncha',
   'mera {n} dispatch hua', 'mera {n} tracking update', 'mera {n} kab ship hoga',
   'tracking id mil sakti hai {n}', '{n} abhi tak nahi mila', 'kab milega mera {n}',
-  'mera {n} kab tak punchay', '{n} kab tak', '{n} kahan', '{n} status', '{n} delayed',
+  'mera {n} kab tak punchay', '{n} kab tak', '{n} kahan', '{n} status', '{n} delayed', '{n} kab',
 ]
 
 const NOUN_BASED_KEYWORDS = NOUN_TEMPLATES.flatMap((tpl) =>
@@ -298,6 +298,7 @@ const ORDER_KEYWORDS = [
   // Roman Urdu - delivery timing (noun-agnostic)
   'kab tak milega', 'kab deliver', 'delivery kab tak milegi', 'kitna time',
   'kab tak aayega', 'kab tak punchay', 'kab tak pohnchega', 'kitne din lagenge',
+  'milega', 'aayega', 'lagega', 'pohoncha', // normalize hone ke baad canonical safety-net
   // Roman Urdu - status/location (noun-agnostic)
   'dispatch hua', 'tracking update', 'kab ship', 'tracking id mil',
   // Roman Urdu - delay (noun-agnostic)
@@ -306,9 +307,13 @@ const ORDER_KEYWORDS = [
   'ڈلیوری میں کتنا وقت', 'ڈلیوری میں کوئی تاخیر', 'تاخیر', 'مزید لگیں گے',
 ]
 
+// Har template ko ek dafa normalize kar lete hain (module load par) - taake
+// runtime par har message ke liye baar baar normalize na karna pade
+const ORDER_KEYWORDS_NORMALIZED = ORDER_KEYWORDS.map((k) => normalizeForMatch(k)).filter(Boolean)
+
 function looksLikeOrderQuery(text: string) {
-  const t = cleanText(text)
-  return ORDER_KEYWORDS.some((k) => t.includes(cleanText(k)))
+  const t = normalizeForMatch(text)
+  return ORDER_KEYWORDS_NORMALIZED.some((k) => t.includes(k))
 }
 
 function extractOrderNumber(text: string) {
@@ -343,6 +348,22 @@ function extractPhone(text: string): string | null {
 function isNumericOnlyMessage(text: string) {
   // Customer sirf apna number/order-number hi bhej de, kisi bhi separator format mein
   return /^[+()0-9][+()0-9.,\-/\s]{1,20}[0-9)]$/.test(text.trim())
+}
+
+// Agar customer order/phone ki jagah PostEx/Call Courier ka tracking number
+// paste kar de (jo unhe courier SMS se mila ho) - wo 10-15 digit ka number
+// hota hai jo phone-pattern se match nahi karta. Ise bhi ek fallback lookup
+// ke tor pe try karte hain.
+function extractTrackingCandidate(text: string): string | null {
+  const candidates = text.match(/[0-9][0-9.,\-/\s]{8,}[0-9]/g)
+  if (!candidates) return null
+  for (const c of candidates) {
+    const digits = c.replace(/\D/g, '')
+    if (digits.length >= 10 && digits.length <= 15 && !normalizeExtractedPhone(digits)) {
+      return digits
+    }
+  }
+  return null
 }
 
 // Meta webhook verification (ek dafa, jab tum Webhook URL configure karte ho)
@@ -413,7 +434,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // 2) Koi number nahi mila - Q&A pehle check karo. Isse "order kaise karun" jaisi
+  // 2) Order/phone na mile - shayad customer ne tracking number bhej diya ho
+  //    (jo unhe courier SMS se mila ho, order number/phone maangne ke baad)
+  const trackingCandidate = extractTrackingCandidate(text)
+  if (trackingCandidate) {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .eq('tracking_id', trackingCandidate)
+      .maybeSingle()
+
+    if (order) {
+      await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+      await sendWhatsAppText(from, await buildStatusReply(order))
+      return NextResponse.json({ ok: true })
+    }
+    // Match nahi mila to chup chaap aage badh jate hain (Q&A/unmatched try karega)
+  }
+
+  // 3) Koi number nahi mila - Q&A pehle check karo. Isse "order kaise karun" jaisi
   //    cheezein apna specific Q&A jawab paati hain, generic "order" keyword se
   //    order-lookup flow hijack nahi hota.
   const qnaAnswer = await matchQna(text)
@@ -423,7 +462,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // 3) Q&A mein match nahi mila - agar order/tracking se related lag raha hai to number maango
+  // 4) Q&A mein match nahi mila - agar order/tracking se related lag raha hai to number maango
   if (looksLikeOrderQuery(text) || isNumericOnlyMessage(text)) {
     await supabaseAdmin
       .from('wa_conversation_state')
@@ -435,7 +474,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // 4) Kuch bhi match nahi hua - khud se reply NAHI karta, sirf log kar deta hai
+  // 5) Kuch bhi match nahi hua - khud se reply NAHI karta, sirf log kar deta hai
   // taake tum manually reply kar sako (WhatsApp Manager mein ye already unread dikhega
   // kyunke koi reply nahi gaya).
   if (state) await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
