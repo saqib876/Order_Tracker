@@ -31,10 +31,24 @@ export async function sendWhatsAppText(to: string, body: string) {
 }
 
 /**
+ * Customer ke message ko clean karta hai (punctuation hata ke) taake matching
+ * zyada reliable ho - "order kab tak milega?" aur "order kab tak milega" dono
+ * ek jaisa treat honge. Urdu script (jo punctuation nahi hai) untouched rehta hai.
+ */
+function cleanText(t: string): string {
+  return t.toLowerCase().replace(/[?!.,;:'"()]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Supabase 'qna' table se keyword-match karta hai. Match milte hi wahi answer
  * return karta hai - bot khud se kabhi kuch generate nahi karta.
  * 'keywords' column ab plain comma-separated text hai (Excel/CSV se bulk-add
  * karne ke liye asaan), isliye yahan split karke check karte hain.
+ *
+ * Excel mein har row ke 'keywords' column mein ek hi sawaal ke MULTIPLE poore
+ * variants likho (jaise "order kab milega, mera order kab tak aayega, order
+ * kitne din mein milega"), na ke sirf ek chhota generic word - isse matching
+ * bohot zyada precise hoti hai.
  *
  * Sabse zyada "specific" (lambe) keyword ka match jeetega - taake overlapping
  * keywords wale alag Q&A entries mein customer ko sabse relevant/exact jawab mile,
@@ -48,14 +62,14 @@ export async function matchQna(text: string): Promise<string | null> {
 
   if (error || !rows) return null
 
-  const lower = text.toLowerCase()
+  const cleaned = cleanText(text)
   let bestAnswer: string | null = null
   let bestMatchLength = 0
 
   for (const row of rows) {
-    const keywords = (row.keywords as string).split(',').map((k) => k.trim().toLowerCase())
+    const keywords = (row.keywords as string).split(',').map((k) => cleanText(k))
     for (const kw of keywords) {
-      if (kw && lower.includes(kw) && kw.length > bestMatchLength) {
+      if (kw && cleaned.includes(kw) && kw.length > bestMatchLength) {
         bestMatchLength = kw.length
         bestAnswer = row.answer
       }
