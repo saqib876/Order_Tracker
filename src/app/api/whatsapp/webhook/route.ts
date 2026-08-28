@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { normalizePhone } from '@/lib/shopify'
 import { sendWhatsAppText, matchQna } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
@@ -163,9 +162,9 @@ async function buildStatusReply(order: any): Promise<string> {
     `📦 *Order #${order.order_number} Update*`,
     '',
     `Order Confirm Date: ${formatDate(orderDate)}`,
+    '',
     `Status: ${label} (Step ${step}/4)`,
     progressBar(step),
-    '',
   ]
 
   const hasTracking = Boolean(order.tracking_id)
@@ -178,13 +177,17 @@ async function buildStatusReply(order: any): Promise<string> {
     const passed = workingDaysBetween(orderDate, pakistanNow())
     const daysLeft = Math.max(1, MAX_WORKING_DAYS - passed)
 
+    lines.push('')
     lines.push(`📅 Total Delivery Time: ${MIN_WORKING_DAYS} to ${MAX_WORKING_DAYS} Working Days (Monday to Saturday)`)
+    lines.push('')
     lines.push(`📅 Expected Delivery Date: ${formatDate(minDate)} to ${formatDate(maxDate)}`)
+    lines.push('')
     lines.push(`⏳ Remaining: ${daysLeft} working day(s)`)
     lines.push('')
     lines.push(`🔗 Live tracking dekhein: ${WEBSITE_TRACKING_LINK}`)
   } else {
     // Tracking add ho chuki hai - live courier status se date adjust karte hain
+    lines.push('')
     lines.push(`🚚 Tracking Number: ${order.tracking_id}`)
     lines.push(`🔗 Track here: ${trackingUrl(order.tracking_id)}`)
 
@@ -192,6 +195,7 @@ async function buildStatusReply(order: any): Promise<string> {
     const stage = latest ? classifyCourierStage(latest.label) : null
 
     if (latest) {
+      lines.push('')
       lines.push(`📍 Latest Update: ${latest.label} (${latest.time})`)
     }
 
@@ -223,18 +227,51 @@ async function buildStatusReply(order: any): Promise<string> {
       const remaining = workingDaysBetween(pakistanNow(), expectedDate)
       lines.push('')
       lines.push(`📅 Expected Delivery Date: ${remaining === 0 ? 'Aaj (Today)' : formatDate(expectedDate)}`)
-      if (remaining > 0) lines.push(`⏳ Remaining: ${remaining} working day(s)`)
+      if (remaining > 0) {
+        lines.push('')
+        lines.push(`⏳ Remaining: ${remaining} working day(s)`)
+      }
     }
   }
 
   return lines.join('\n')
 }
 
-const ORDER_KEYWORDS = ['order', 'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega', 'kahan']
+// Customer ke message ko clean karta hai (punctuation hata ke) taake matching
+// zyada reliable ho - "order?" aur "order" dono ek jaisa treat ho
+function cleanText(t: string): string {
+  return t.toLowerCase().replace(/[?!.,;:'"()]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+const ORDER_KEYWORDS = [
+  // Original
+  'order', 'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega', 'kahan',
+  // English - delivery timing
+  'when will i receive', 'when will my order', 'when can i expect', 'expected delivery date',
+  'how long will it take', 'delivery date',
+  // English - status/location
+  'where is my order', 'update on my order', 'been shipped', 'tracking status',
+  'out for delivery', 'track my order', 'order status',
+  // English - delay
+  'order delayed', "hasn't arrived", 'has not arrived', 'delay in my parcel', 'any delay',
+  // Roman Urdu - delivery timing
+  'order kab tak', 'parcel kab', 'kab tak milega', 'kab deliver', 'delivery kab', 'kitna time',
+  'kab tak aayega', 'kab tak punchay', 'kab tak pohnchega', 'kitne din',
+  // Roman Urdu - status/location
+  'order kahan', 'dispatch hua', 'tracking update', 'kab ship', 'tracking id mil',
+  // Roman Urdu - delay
+  'abhi tak nahi mila', 'kab milega',
+  // Urdu script - delivery timing
+  'کب تک ملے گا', 'کب تک پہنچے گا', 'ڈلیوری میں کتنا وقت', 'کب ڈلیور ہوگا',
+  // Urdu script - status/location
+  'موجودہ لوکیشن', 'ڈسپیچ', 'ٹریکنگ آئی ڈی', 'کہاں تک پہنچا',
+  // Urdu script - delay
+  'ابھی تک کیوں نہیں ملا', 'تاخیر', 'مزید لگیں گے',
+]
 
 function looksLikeOrderQuery(text: string) {
-  const t = text.toLowerCase()
-  return ORDER_KEYWORDS.some((k) => t.includes(k))
+  const t = cleanText(text)
+  return ORDER_KEYWORDS.some((k) => t.includes(cleanText(k)))
 }
 
 function extractOrderNumber(text: string) {
@@ -243,13 +280,32 @@ function extractOrderNumber(text: string) {
   return m ? m[1] : null
 }
 
-function isNumericOnlyMessage(text: string) {
-  return /^[+]?[\d\s-]{4,15}$/.test(text.trim())
+// Customer number kisi bhi format mein bhej sakta hai:
+// +92 307 4942009, 0307-494-2009, (0092) 307.4942009, 92/307/4942009 waghera.
+// Ye function har format se digits nikaal ke standard "92XXXXXXXXXX" banata hai.
+function normalizeExtractedPhone(digits: string): string | null {
+  if (digits.length === 14 && digits.startsWith('0092')) return '92' + digits.slice(4)
+  if (digits.length === 11 && digits.startsWith('0')) return '92' + digits.slice(1)
+  if (digits.length === 12 && digits.startsWith('92')) return digits
+  return null
 }
 
-function extractPhone(text: string) {
-  const m = text.match(/(\+?\d[\d\s-]{8,14}\d)/)
-  return m ? m[1] : null
+function extractPhone(text: string): string | null {
+  // Phone-jaisa dikhne wala koi bhi block dhoondo: digits + spaces/dashes/dots/
+  // slashes/commas/parentheses/plus - phir usme se digits nikaal ke length/prefix check karo
+  const candidates = text.match(/[+()0-9][+()0-9.,\-/\s]{7,}[0-9)]/g)
+  if (!candidates) return null
+  for (const c of candidates) {
+    const digits = c.replace(/\D/g, '')
+    const normalized = normalizeExtractedPhone(digits)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function isNumericOnlyMessage(text: string) {
+  // Customer sirf apna number/order-number hi bhej de, kisi bhi separator format mein
+  return /^[+()0-9][+()0-9.,\-/\s]{1,20}[0-9)]$/.test(text.trim())
 }
 
 // Meta webhook verification (ek dafa, jab tum Webhook URL configure karte ho)
@@ -305,11 +361,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (phoneInText) {
-      const normalized = normalizePhone(phoneInText)
       const { data: order } = await supabaseAdmin
         .from('orders')
         .select('*')
-        .eq('customer_phone', normalized)
+        .eq('customer_phone', phoneInText)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -328,7 +383,7 @@ export async function POST(req: NextRequest) {
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
     await sendWhatsAppText(
       from,
-      'Please apna order number ya jis number se order kiya tha wo bhej dein, main abhi check karta hun.'
+      'Please Apna Order Number Ya Jis Mobile/ Phone Number Se Order Kiya Tha Wo Bhej Dein,Main Abhi Check Karta Hun.'
     )
     return NextResponse.json({ ok: true })
   }
