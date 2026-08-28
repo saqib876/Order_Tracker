@@ -116,7 +116,48 @@ function prettyCourier(raw?: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
 }
 
-function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
+/* Live courier status ko days-remaining estimate mein convert karta hai */
+type CourierStage =
+  | 'delivered' | 'out_for_delivery' | 'near' | 'in_transit'
+  | 'booked' | 'undelivered' | 'contacting' | 'returning'
+
+function classifyCourierStage(label: string): CourierStage {
+  const l = (label || '').toLowerCase()
+  if (l.includes('undelivered')) return 'undelivered'
+  if (l.includes('delivered')) return 'delivered'
+  if (l.includes('contacting consignee')) return 'contacting'
+  if (
+    l.includes('moved to origin') || l.includes('reached at origin') ||
+    l.includes('out for return') || l.includes('returned submitted') || l.includes('return submission')
+  ) return 'returning'
+  if (l.includes('out for delivery')) return 'out_for_delivery'
+  if (l.includes('reached at dest')) return 'near'
+  if (l.includes('moved to dest') || l.includes('en-route') || l.includes('en route')) return 'in_transit'
+  return 'booked'
+}
+
+function daysForCourierStage(stage: CourierStage): number {
+  switch (stage) {
+    case 'out_for_delivery': return 0
+    case 'near': return 1
+    case 'in_transit': return 2
+    case 'undelivered': return 1
+    case 'contacting': return 1
+    default: return 3
+  }
+}
+
+function addWorkingDaysClient(start: Date, days: number): Date {
+  const result = new Date(start)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    if (result.getDay() !== 0) added++
+  }
+  return result
+}
+
+function calcCountdown(order: TrackingResult['order'], courierDone: boolean, latestCourierLabel: string | null) {
   if (order.status === 'delivered' || order.status === 'cancelled' || courierDone) return null
   const today = todayStr()
 
@@ -138,10 +179,29 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean) {
 
   if (order.status === 'shipped' && order.shippedAt) {
     const shipped = new Date(order.shippedAt); shipped.setHours(0, 0, 0, 0)
-    const deadlineD = new Date(shipped); deadlineD.setDate(shipped.getDate() + 3)
-    const passed = workingDaysBetween(order.shippedAt, today)
-    const daysLeft = Math.max(1, 3 - passed)
-    const prog = Math.min(95, Math.max(10, Math.round((passed / 3) * 100)))
+    const stage = latestCourierLabel ? classifyCourierStage(latestCourierLabel) : null
+
+    let deadlineD: Date
+    let daysLeft: number
+    let prog: number
+
+    if (stage) {
+      const days = daysForCourierStage(stage)
+      const todayD = new Date(); todayD.setHours(0, 0, 0, 0)
+      deadlineD = addWorkingDaysClient(todayD, days)
+      daysLeft = Math.max(days, 0)
+      const stageProg: Record<CourierStage, number> = {
+        booked: 20, in_transit: 55, near: 80, out_for_delivery: 92,
+        undelivered: 85, contacting: 88, delivered: 100, returning: 50,
+      }
+      prog = stageProg[stage] ?? 50
+    } else {
+      deadlineD = new Date(shipped); deadlineD.setDate(shipped.getDate() + 3)
+      const passed = workingDaysBetween(order.shippedAt, today)
+      daysLeft = Math.max(1, 3 - passed)
+      prog = Math.min(95, Math.max(10, Math.round((passed / 3) * 100)))
+    }
+
     return {
       daysLeft, prog,
       startFmt: fmtFull(shipped),
@@ -542,16 +602,17 @@ export default function TrackPage() {
 
   const o = result?.order
   const courierDone = isCourierDelivered(courierEvents)
-  const cd = o ? calcCountdown(o, courierDone) : null
-  const delivered = o ? (o.status === 'delivered' || courierDone) : false
-  const cancelled = o?.status === 'cancelled'
-  const shipped = o?.status === 'shipped'
-  const inProcess = o?.status === 'in_process'
 
   /* Prefer the courier's own live status text. If the parcel hasn't reached
      the courier yet (no live events), fall back to the same status the
      progress bar is showing instead of a hardcoded "Out for delivery". */
   const latestCourierLabel = courierEvents && courierEvents.length > 0 ? courierEvents[0].label : null
+
+  const cd = o ? calcCountdown(o, courierDone, latestCourierLabel) : null
+  const delivered = o ? (o.status === 'delivered' || courierDone) : false
+  const cancelled = o?.status === 'cancelled'
+  const shipped = o?.status === 'shipped'
+  const inProcess = o?.status === 'in_process'
   const courierCategory = classifyCourier(latestCourierLabel)
   const courierProblem = courierCategory === 'undelivered' || courierCategory === 'contacting' || courierCategory === 'returning'
 
