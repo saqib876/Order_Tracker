@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase'
+import { normalizeForMatch } from '@/lib/textNormalize'
 
 /**
  * WhatsApp Cloud API se text message bhejta hai.
@@ -31,15 +32,6 @@ export async function sendWhatsAppText(to: string, body: string) {
 }
 
 /**
- * Customer ke message ko clean karta hai (punctuation hata ke) taake matching
- * zyada reliable ho - "order kab tak milega?" aur "order kab tak milega" dono
- * ek jaisa treat honge. Urdu script (jo punctuation nahi hai) untouched rehta hai.
- */
-function cleanText(t: string): string {
-  return t.toLowerCase().replace(/[?!.,;:'"()]/g, '').replace(/\s+/g, ' ').trim()
-}
-
-/**
  * Supabase 'qna' table se keyword-match karta hai. Match milte hi wahi answer
  * return karta hai - bot khud se kabhi kuch generate nahi karta.
  * 'keywords' column ab plain comma-separated text hai (Excel/CSV se bulk-add
@@ -49,6 +41,11 @@ function cleanText(t: string): string {
  * variants likho (jaise "order kab milega, mera order kab tak aayega, order
  * kitne din mein milega"), na ke sirf ek chhota generic word - isse matching
  * bohot zyada precise hoti hai.
+ *
+ * Roman Urdu short-forms (kb/tk/mlyga), common typos, aur English grammar
+ * variations (will/is missing) - ye sab src/lib/textNormalize.ts se automatic
+ * handle ho jate hain, order-detection wale system jaisa hi. Naya short-form
+ * dikhe to sirf textNormalize.ts mein add karna - yahan kuch nahi karna.
  *
  * Sabse zyada "specific" (lambe) keyword ka match jeetega - taake overlapping
  * keywords wale alag Q&A entries mein customer ko sabse relevant/exact jawab mile,
@@ -62,12 +59,12 @@ export async function matchQna(text: string): Promise<string | null> {
 
   if (error || !rows) return null
 
-  const cleaned = cleanText(text)
+  const cleaned = normalizeForMatch(text)
   let bestAnswer: string | null = null
   let bestMatchLength = 0
 
   for (const row of rows) {
-    const keywords = (row.keywords as string).split(',').map((k) => cleanText(k))
+    const keywords = (row.keywords as string).split(',').map((k) => normalizeForMatch(k))
     for (const kw of keywords) {
       if (kw && cleaned.includes(kw) && kw.length > bestMatchLength) {
         bestMatchLength = kw.length
