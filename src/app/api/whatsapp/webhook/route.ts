@@ -25,8 +25,13 @@ function looksLikeOrderQuery(text: string) {
 }
 
 function extractOrderNumber(text: string) {
-  const m = text.match(/#?(\d{3,6})/)
+  // Standalone 3-6 digit number only - won't match a chunk embedded inside a longer phone number
+  const m = text.match(/(?<!\d)#?(\d{3,6})(?!\d)/)
   return m ? m[1] : null
+}
+
+function isNumericOnlyMessage(text: string) {
+  return /^[+]?[\d\s-]{4,15}$/.test(text.trim())
 }
 
 function extractPhone(text: string) {
@@ -104,7 +109,7 @@ export async function POST(req: NextRequest) {
   const orderNumber = extractOrderNumber(text)
   const phoneInText = extractPhone(text)
 
-  if (looksLikeOrderQuery(text) || state) {
+  if (looksLikeOrderQuery(text) || state || isNumericOnlyMessage(text)) {
     if (orderNumber) {
       const { data: order } = await supabaseAdmin
         .from('orders')
