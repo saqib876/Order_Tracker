@@ -243,30 +243,67 @@ function cleanText(t: string): string {
   return t.toLowerCase().replace(/[?!.,;:'"()]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+// Customer apne order ko "order", "parcel", "cover", "case" - kisi bhi naam se
+// bula sakta hai (khaas kar jab specific product ka zikar kare, jaise "mera
+// cover kab milega"). Templates aur nouns ka combination banate hain taake
+// har noun ke sath automatically saare relevant phrases match ho jayein.
+// Har template tumhare diye asal sawaalon (English + Roman Urdu) se liya gaya hai.
+const ORDER_NOUNS = ['order', 'orders', 'parcel', 'parcels', 'cover', 'covers', 'case', 'cases']
+
+const NOUN_TEMPLATES = [
+  // English (tumhare diye sawaalon se)
+  'when will i receive my {n}', 'when will my {n} arrive',
+  'expected delivery date for my {n}', 'how long will it take for my {n}',
+  'where is my {n} right now', 'update on my {n} status',
+  'has my {n} been shipped', 'tracking status of my {n}',
+  'is my {n} out for delivery', 'why is my {n} delayed',
+  "why hasn't my {n} arrived", 'delay in my {n} delivery',
+  'track my {n}', 'where is my {n}', 'when will my {n}',
+  // Roman Urdu (tumhare diye sawaalon se)
+  'mera {n} kab tak milega', 'mera {n} kab aayega', '{n} kab tak deliver hoga',
+  '{n} aane mein kitna time', 'mera {n} kahan tak pohncha',
+  'mera {n} dispatch hua', 'mera {n} tracking update', 'mera {n} kab ship hoga',
+  'tracking id mil sakti hai {n}', '{n} abhi tak nahi mila', 'kab milega mera {n}',
+  'mera {n} kab tak punchay', '{n} kab tak', '{n} kahan', '{n} status', '{n} delayed',
+]
+
+const NOUN_BASED_KEYWORDS = NOUN_TEMPLATES.flatMap((tpl) =>
+  ORDER_NOUNS.map((n) => tpl.replace('{n}', n))
+)
+
+// Urdu script mein log aam tor par sirf "آرڈر" (order) aur "پارسل" (parcel)
+// hi likhte hain (cover/case Roman letters mein likhte hain, Urdu script mein nahi)
+const URDU_NOUNS = ['آرڈر', 'پارسل']
+const URDU_TEMPLATES = [
+  'میرا {u} کب تک ملے گا', 'میرا {u} کب تک پہنچے گا', '{u} کب ڈلیور ہوگا',
+  'میرے {u} کی موجودہ لوکیشن', 'میرا {u} ڈسپیچ', 'میرے {u} کی ٹریکنگ آئی ڈی',
+  'میرا {u} کہاں تک پہنچا', 'میرا {u} ابھی تک کیوں نہیں ملا', 'میرا {u} ملنے میں کتنے دن',
+]
+const URDU_NOUN_KEYWORDS = URDU_TEMPLATES.flatMap((tpl) =>
+  URDU_NOUNS.map((u) => tpl.replace('{u}', u))
+)
+
 const ORDER_KEYWORDS = [
-  // Original
-  'order', 'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega', 'kahan',
-  // English - delivery timing
-  'when will i receive', 'when will my order', 'when can i expect', 'expected delivery date',
+  ...NOUN_BASED_KEYWORDS,
+  ...URDU_NOUN_KEYWORDS,
+  // Noun-agnostic (koi bhi cheez ho, ye phrases apne aap match ho jate hain)
+  'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega',
+  // English - delivery timing (noun-agnostic)
+  'when can i expect my delivery', 'expected delivery date',
   'how long will it take', 'delivery date',
-  // English - status/location
-  'where is my order', 'update on my order', 'been shipped', 'tracking status',
-  'out for delivery', 'track my order', 'order status',
-  // English - delay
-  'order delayed', "hasn't arrived", 'has not arrived', 'delay in my parcel', 'any delay',
-  // Roman Urdu - delivery timing
-  'order kab tak', 'parcel kab', 'kab tak milega', 'kab deliver', 'delivery kab', 'kitna time',
-  'kab tak aayega', 'kab tak punchay', 'kab tak pohnchega', 'kitne din',
-  // Roman Urdu - status/location
-  'order kahan', 'dispatch hua', 'tracking update', 'kab ship', 'tracking id mil',
-  // Roman Urdu - delay
-  'abhi tak nahi mila', 'kab milega',
-  // Urdu script - delivery timing
-  'کب تک ملے گا', 'کب تک پہنچے گا', 'ڈلیوری میں کتنا وقت', 'کب ڈلیور ہوگا',
-  // Urdu script - status/location
-  'موجودہ لوکیشن', 'ڈسپیچ', 'ٹریکنگ آئی ڈی', 'کہاں تک پہنچا',
-  // Urdu script - delay
-  'ابھی تک کیوں نہیں ملا', 'تاخیر', 'مزید لگیں گے',
+  // English - status/location (noun-agnostic)
+  'been shipped', 'tracking status', 'out for delivery',
+  // English - delay (noun-agnostic)
+  "hasn't arrived", 'has not arrived', 'any delay',
+  // Roman Urdu - delivery timing (noun-agnostic)
+  'kab tak milega', 'kab deliver', 'delivery kab tak milegi', 'kitna time',
+  'kab tak aayega', 'kab tak punchay', 'kab tak pohnchega', 'kitne din lagenge',
+  // Roman Urdu - status/location (noun-agnostic)
+  'dispatch hua', 'tracking update', 'kab ship', 'tracking id mil',
+  // Roman Urdu - delay (noun-agnostic)
+  'abhi tak nahi mila',
+  // Urdu script - noun-agnostic
+  'ڈلیوری میں کتنا وقت', 'ڈلیوری میں کوئی تاخیر', 'تاخیر', 'مزید لگیں گے',
 ]
 
 function looksLikeOrderQuery(text: string) {
@@ -342,42 +379,52 @@ export async function POST(req: NextRequest) {
 
   const orderNumber = extractOrderNumber(text)
   const phoneInText = extractPhone(text)
-  const hasOrderIntent = looksLikeOrderQuery(text) || isNumericOnlyMessage(text)
 
-  if (hasOrderIntent) {
-    if (orderNumber) {
-      const { data: order } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .eq('order_number', orderNumber)
-        .maybeSingle()
+  // 1) Order number ya phone number mila - seedha unambiguous lookup, sabse pehli priority
+  if (orderNumber) {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .eq('order_number', orderNumber)
+      .maybeSingle()
 
-      await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
-      await sendWhatsAppText(
-        from,
-        order ? await buildStatusReply(order) : 'Ye order number system mein nahi mil raha, please dobara check karke bhejein.'
-      )
-      return NextResponse.json({ ok: true })
-    }
+    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    await sendWhatsAppText(
+      from,
+      order ? await buildStatusReply(order) : 'Ye order number system mein nahi mil raha, please dobara check karke bhejein.'
+    )
+    return NextResponse.json({ ok: true })
+  }
 
-    if (phoneInText) {
-      const { data: order } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .eq('customer_phone', phoneInText)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+  if (phoneInText) {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .eq('customer_phone', phoneInText)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-      await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
-      await sendWhatsAppText(
-        from,
-        order ? await buildStatusReply(order) : 'Is number se koi order nahi mila, please order number bhejein.'
-      )
-      return NextResponse.json({ ok: true })
-    }
+    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    await sendWhatsAppText(
+      from,
+      order ? await buildStatusReply(order) : 'Is number se koi order nahi mila, please order number bhejein.'
+    )
+    return NextResponse.json({ ok: true })
+  }
 
-    // Order-intent hai lekin number/phone nahi mila - maango aur state save karo
+  // 2) Koi number nahi mila - Q&A pehle check karo. Isse "order kaise karun" jaisi
+  //    cheezein apna specific Q&A jawab paati hain, generic "order" keyword se
+  //    order-lookup flow hijack nahi hota.
+  const qnaAnswer = await matchQna(text)
+  if (qnaAnswer) {
+    if (state) await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    await sendWhatsAppText(from, qnaAnswer)
+    return NextResponse.json({ ok: true })
+  }
+
+  // 3) Q&A mein match nahi mila - agar order/tracking se related lag raha hai to number maango
+  if (looksLikeOrderQuery(text) || isNumericOnlyMessage(text)) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
@@ -388,22 +435,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Order-flow mein nahi hain (na keyword na number) - purani "waiting" state ho to hata do,
-  // taake bot atka na rahe aur agle unrelated messages ko bhi order-query na samjhe
-  if (state) {
-    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
-  }
-
-  // Pre-defined Q&A
-  const answer = await matchQna(text)
-  if (answer) {
-    await sendWhatsAppText(from, answer)
-    return NextResponse.json({ ok: true })
-  }
-
-  // Kuch bhi match nahi hua - khud se reply NAHI karta, sirf log kar deta hai
+  // 4) Kuch bhi match nahi hua - khud se reply NAHI karta, sirf log kar deta hai
   // taake tum manually reply kar sako (WhatsApp Manager mein ye already unread dikhega
   // kyunke koi reply nahi gaya).
+  if (state) await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
   await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
 
   return NextResponse.json({ ok: true })
