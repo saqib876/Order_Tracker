@@ -108,8 +108,9 @@ export async function POST(req: NextRequest) {
 
   const orderNumber = extractOrderNumber(text)
   const phoneInText = extractPhone(text)
+  const hasOrderIntent = looksLikeOrderQuery(text) || isNumericOnlyMessage(text)
 
-  if (looksLikeOrderQuery(text) || state || isNumericOnlyMessage(text)) {
+  if (hasOrderIntent) {
     if (orderNumber) {
       const { data: order } = await supabaseAdmin
         .from('orders')
@@ -152,6 +153,12 @@ export async function POST(req: NextRequest) {
       'Please apna order number ya jis number se order kiya tha wo bhej dein, main abhi check karta hun.'
     )
     return NextResponse.json({ ok: true })
+  }
+
+  // Order-flow mein nahi hain (na keyword na number) - purani "waiting" state ho to hata do,
+  // taake bot atka na rahe aur agle unrelated messages ko bhi order-query na samjhe
+  if (state) {
+    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
   }
 
   // Pre-defined Q&A
