@@ -32,26 +32,40 @@ const WA_STATUS_LABEL: Record<string, string> = {
   delivered: 'Aap ka order deliver ho chuka hai',
 }
 
-// Server UTC mein chalta hai (Vercel default) lekin customer/website Pakistan time
-// (UTC+5, no DST) use karta hai - "aaj" ki date hamesha PKT ke hisaab se lena taake
-// raat 12-5am ke darmiyan bhi website se exact match rahe
+// Server UTC mein chalta hai (Vercel default), lekin customer/website Pakistan
+// time use karta hai. Intl API se seedha Asia/Karachi ki calendar date nikalte
+// hain - ye guaranteed sahi rahega chahe server kisi bhi timezone mein chale,
+// aur date exactly Pakistan midnight (raat 12 baje) pe hi change hogi.
+function toPakistanDateOnly(d: Date): Date {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Karachi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = fmt.formatToParts(d)
+  const y = Number(parts.find((p) => p.type === 'year')!.value)
+  const m = Number(parts.find((p) => p.type === 'month')!.value)
+  const day = Number(parts.find((p) => p.type === 'day')!.value)
+  return new Date(y, m - 1, day) // midnight, calendar-only date
+}
+
 function pakistanNow(): Date {
-  const now = new Date()
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000
-  return new Date(utcMs + 5 * 60 * 60000)
+  return toPakistanDateOnly(new Date())
 }
 
 function formatDate(d: Date): string {
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Karachi' })
 }
 
 function progressBar(step: number, total = 4): string {
   return '🟩'.repeat(step) + '⬜'.repeat(total - step)
 }
 
-// N working days (Mon-Sat, Sunday off) aage badhata hai kisi date se
+// N working days (Mon-Sat, Sunday off) aage badhata hai - hamesha Pakistan
+// calendar date se normalize karke shuru karta hai
 function addWorkingDays(start: Date, days: number): Date {
-  const result = new Date(start)
+  const result = toPakistanDateOnly(start)
   let added = 0
   while (added < days) {
     result.setDate(result.getDate() + 1)
@@ -60,12 +74,15 @@ function addWorkingDays(start: Date, days: number): Date {
   return result
 }
 
-// Do dates ke beech kitne working days (Mon-Sat) hain
+// Do dates ke beech kitne working days (Mon-Sat) hain - dono ko Pakistan
+// calendar date mein normalize karke compare karta hai
 function workingDaysBetween(from: Date, to: Date): number {
-  if (to <= from) return 0
+  const start = toPakistanDateOnly(from)
+  const end = toPakistanDateOnly(to)
+  if (end <= start) return 0
   let count = 0
-  const cur = new Date(from)
-  while (cur < to) {
+  const cur = new Date(start)
+  while (cur < end) {
     cur.setDate(cur.getDate() + 1)
     if (cur.getDay() !== 0) count++
   }
@@ -155,10 +172,10 @@ async function buildStatusReply(order: any): Promise<string> {
 
   if (!hasTracking) {
     // Tracking add hone se PEHLE - website jaisa hi: order date + 10/15 calendar din
-    const minDate = new Date(orderDate); minDate.setDate(orderDate.getDate() + MIN_WORKING_DAYS)
-    const maxDate = new Date(orderDate); maxDate.setDate(orderDate.getDate() + MAX_WORKING_DAYS)
-    const today = pakistanNow()
-    const passed = workingDaysBetween(orderDate, today)
+    const orderDatePK = toPakistanDateOnly(orderDate)
+    const minDate = new Date(orderDatePK); minDate.setDate(orderDatePK.getDate() + MIN_WORKING_DAYS)
+    const maxDate = new Date(orderDatePK); maxDate.setDate(orderDatePK.getDate() + MAX_WORKING_DAYS)
+    const passed = workingDaysBetween(orderDate, pakistanNow())
     const daysLeft = Math.max(1, MAX_WORKING_DAYS - passed)
 
     lines.push(`📅 Total Delivery Time: ${MIN_WORKING_DAYS} to ${MAX_WORKING_DAYS} Working Days (Monday to Saturday)`)
