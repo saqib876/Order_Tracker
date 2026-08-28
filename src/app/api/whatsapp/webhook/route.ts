@@ -5,16 +5,203 @@ import { sendWhatsAppText, matchQna } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
-const DELIVERY_WINDOW_DAYS = 3
 const trackingUrl = (id: string) => `https://postex.pk/tracking?cn=${id}`
+const WEBSITE_TRACKING_LINK = 'https://myzan.net/pages/track-your-order'
+const MIN_WORKING_DAYS = 10
+const MAX_WORKING_DAYS = 15
 
-const STATUS_MESSAGES: Record<string, string> = {
-  in_process: 'Aap ka order abhi taiyar ho raha hai (Step 1/6 - In Process).',
-  printing_done: 'Aap ke design ki printing mukammal ho chuki hai (Step 2/6 - Printing Done).',
-  packed: 'Aap ka order pack ho chuka hai (Step 3/6 - Packed).',
-  ready_to_ship: 'Aap ka order dispatch ke liye taiyar hai (Step 4/6 - Ready to Ship).',
-  shipped: 'Aap ka order dispatch ho chuka hai aur raaste mein hai (Step 5/6 - Shipped).',
-  delivered: 'Aap ka order deliver ho chuka hai (Step 6/6 - Delivered).',
+// 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
+// underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
+// (website ka apna progress bar isi purane 6-step data pe chalta rahega,
+// hum sirf WhatsApp ke message ke liye inhe group kar rahe hain)
+const WA_STEP: Record<string, number> = {
+  in_process: 1,
+  packed: 1,
+  ready_to_ship: 1,
+  printing_done: 2,
+  shipped: 3,
+  delivered: 4,
+}
+
+const WA_STATUS_LABEL: Record<string, string> = {
+  in_process: 'Aapka order process ho chuka hai aur abhi Making Process mein hai, ready ho raha hai',
+  packed: 'Aapka order process ho chuka hai aur abhi Making Process mein hai, ready ho raha hai',
+  ready_to_ship: 'Aapka order process ho chuka hai aur abhi Making Process mein hai, ready ho raha hai',
+  printing_done: 'Order ki printing mukammal ho chuki hai',
+  shipped: 'Aap ka order dispatch ho chuka hai aur raaste mein hai',
+  delivered: 'Aap ka order deliver ho chuka hai',
+}
+
+function formatDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function progressBar(step: number, total = 4): string {
+  return '🟩'.repeat(step) + '⬜'.repeat(total - step)
+}
+
+// N working days (Mon-Sat, Sunday off) aage badhata hai kisi date se
+function addWorkingDays(start: Date, days: number): Date {
+  const result = new Date(start)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    if (result.getDay() !== 0) added++ // 0 = Sunday
+  }
+  return result
+}
+
+// Do dates ke beech kitne working days (Mon-Sat) hain
+function workingDaysBetween(from: Date, to: Date): number {
+  if (to <= from) return 0
+  let count = 0
+  const cur = new Date(from)
+  while (cur < to) {
+    cur.setDate(cur.getDate() + 1)
+    if (cur.getDay() !== 0) count++
+  }
+  return count
+}
+
+function prettyCourier(raw?: string): string {
+  const t = (raw || '').trim()
+  if (!t) return ''
+  const letters = t.replace(/[^A-Za-z]/g, '')
+  const isAllCaps = letters.length > 0 && letters === letters.toUpperCase()
+  if (!isAllCaps) return t
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
+}
+
+function fmtCourierTime(iso: string): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('en-PK', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+type CourierStage =
+  | 'delivered' | 'out_for_delivery' | 'near' | 'in_transit'
+  | 'booked' | 'undelivered' | 'contacting' | 'returning'
+
+function classifyCourierStage(label: string): CourierStage {
+  const l = (label || '').toLowerCase()
+  if (l.includes('undelivered')) return 'undelivered'
+  if (l.includes('delivered')) return 'delivered'
+  if (l.includes('contacting consignee')) return 'contacting'
+  if (
+    l.includes('moved to origin') || l.includes('reached at origin') ||
+    l.includes('out for return') || l.includes('returned submitted') || l.includes('return submission')
+  ) return 'returning'
+  if (l.includes('out for delivery')) return 'out_for_delivery'
+  if (l.includes('reached at dest')) return 'near'
+  if (l.includes('moved to dest') || l.includes('en-route') || l.includes('en route')) return 'in_transit'
+  return 'booked'
+}
+
+function daysForCourierStage(stage: CourierStage): number {
+  switch (stage) {
+    case 'out_for_delivery': return 0
+    case 'near': return 1
+    case 'in_transit': return 2
+    case 'undelivered': return 1
+    case 'contacting': return 1
+    default: return 3
+  }
+}
+
+// Call Courier ki live tracking API - koi auth token nahi chahiye
+async function fetchLatestCourierRaw(trackingId: string): Promise<{ label: string; time: string } | null> {
+  try {
+    const res = await fetch(`http://cod.callcourier.com.pk/api/CallCourier/GetTackingHistory?cn=${trackingId}`)
+    if (!res.ok) return null
+    const json = await res.json()
+    if (!Array.isArray(json) || json.length === 0) return null
+
+    const sorted = [...json].sort(
+      (a: any, b: any) => new Date(b.TransactionDate).getTime() - new Date(a.TransactionDate).getTime()
+    )
+    const latest = sorted[0]
+    const label = prettyCourier(latest.ProcessDescForPortal || latest.OperationDesc)
+    if (!label) return null
+    return { label, time: fmtCourierTime(latest.TransactionDate) }
+  } catch {
+    return null
+  }
+}
+
+async function buildStatusReply(order: any): Promise<string> {
+  const status = (order.status || '').toLowerCase()
+  const step = WA_STEP[status] || 1
+  const label = WA_STATUS_LABEL[status] || `Status: ${order.status}`
+  const orderDate = new Date(order.shopify_created_at || order.created_at)
+
+  const lines = [
+    `📦 *Order #${order.order_number} Update*`,
+    '',
+    `Order Confirm Date: ${formatDate(orderDate)}`,
+    `Status: ${label} (Step ${step}/4)`,
+    progressBar(step),
+    '',
+  ]
+
+  const hasTracking = Boolean(order.tracking_id)
+
+  if (!hasTracking) {
+    // Tracking add hone se PEHLE - fixed 10-15 working-day window, order date se calculate
+    const minDate = addWorkingDays(orderDate, MIN_WORKING_DAYS)
+    const maxDate = addWorkingDays(orderDate, MAX_WORKING_DAYS)
+    const today = new Date()
+    const remainingMin = workingDaysBetween(today, minDate)
+    const remainingMax = workingDaysBetween(today, maxDate)
+
+    lines.push(`📅 Total Delivery Time: ${MIN_WORKING_DAYS} to ${MAX_WORKING_DAYS} Working Days (Monday to Saturday)`)
+    lines.push(`📅 Expected Delivery Date: ${formatDate(minDate)} to ${formatDate(maxDate)}`)
+    lines.push(`⏳ Remaining: ${remainingMin} to ${remainingMax} working days`)
+    lines.push('')
+    lines.push(`🔗 Live tracking dekhein: ${WEBSITE_TRACKING_LINK}`)
+  } else {
+    // Tracking add ho chuki hai - live courier status se date adjust karte hain
+    lines.push(`🚚 Tracking Number: ${order.tracking_id}`)
+    lines.push(`🔗 Track here: ${trackingUrl(order.tracking_id)}`)
+
+    const latest = await fetchLatestCourierRaw(order.tracking_id)
+    const stage = latest ? classifyCourierStage(latest.label) : null
+
+    if (latest) {
+      lines.push(`📍 Latest Update: ${latest.label} (${latest.time})`)
+    }
+
+    if (status === 'delivered' || stage === 'delivered') {
+      lines.push('')
+      lines.push('✅ Aapka order deliver ho chuka hai. Shopping ke liye shukriya!')
+    } else if (stage === 'returning') {
+      lines.push('')
+      lines.push('⚠️ Aapka order courier ki taraf se return ho raha hai. Hum jald aap se raabta karenge.')
+    } else {
+      let expectedDate: Date
+
+      if (stage) {
+        // Live courier status ke hisaab se estimate
+        expectedDate = addWorkingDays(new Date(), daysForCourierStage(stage))
+      } else {
+        // Live data na mile to purana fallback: shipped date + 3 working days
+        const { data: h } = await supabaseAdmin
+          .from('order_status_history')
+          .select('changed_at')
+          .eq('order_id', order.id)
+          .eq('status', 'shipped')
+          .order('changed_at', { ascending: true })
+          .limit(1)
+          .single()
+        expectedDate = h?.changed_at ? addWorkingDays(new Date(h.changed_at), 3) : addWorkingDays(new Date(), 3)
+      }
+
+      const remaining = workingDaysBetween(new Date(), expectedDate)
+      lines.push('')
+      lines.push(`📅 Expected Delivery Date: ${remaining === 0 ? 'Aaj (Today)' : formatDate(expectedDate)}`)
+      if (remaining > 0) lines.push(`⏳ Remaining: ${remaining} working day(s)`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 const ORDER_KEYWORDS = ['order', 'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega', 'kahan']
@@ -37,41 +224,6 @@ function isNumericOnlyMessage(text: string) {
 function extractPhone(text: string) {
   const m = text.match(/(\+?\d[\d\s-]{8,14}\d)/)
   return m ? m[1] : null
-}
-
-async function buildStatusReply(order: any): Promise<string> {
-  const status = (order.status || '').toLowerCase()
-  const friendly = STATUS_MESSAGES[status] || `Order ka status: ${order.status}`
-  const lines = [`Order #${order.order_number}: ${friendly}`]
-
-  if (order.tracking_id) {
-    lines.push(`Tracking link: ${trackingUrl(order.tracking_id)}`)
-  }
-
-  if (status === 'shipped') {
-    const { data: h } = await supabaseAdmin
-      .from('order_status_history')
-      .select('changed_at')
-      .eq('order_id', order.id)
-      .eq('status', 'shipped')
-      .order('changed_at', { ascending: true })
-      .limit(1)
-      .single()
-
-    if (h?.changed_at) {
-      const daysElapsed = Math.floor((Date.now() - new Date(h.changed_at).getTime()) / 86400000)
-      const remaining = Math.max(0, DELIVERY_WINDOW_DAYS - daysElapsed)
-      lines.push(
-        remaining > 0
-          ? `Estimated delivery: ~${remaining} din mein.`
-          : `Delivery window cross ho chuki hai, agar abhi tak nahi mila to hum turant check karte hain.`
-      )
-    }
-  } else if (status === 'in_process') {
-    lines.push('Dispatch hote hi tracking number bhej diya jayega.')
-  }
-
-  return lines.join('\n')
 }
 
 // Meta webhook verification (ek dafa, jab tum Webhook URL configure karte ho)
