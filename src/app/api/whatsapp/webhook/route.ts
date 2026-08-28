@@ -32,6 +32,15 @@ const WA_STATUS_LABEL: Record<string, string> = {
   delivered: 'Aap ka order deliver ho chuka hai',
 }
 
+// Server UTC mein chalta hai (Vercel default) lekin customer/website Pakistan time
+// (UTC+5, no DST) use karta hai - "aaj" ki date hamesha PKT ke hisaab se lena taake
+// raat 12-5am ke darmiyan bhi website se exact match rahe
+function pakistanNow(): Date {
+  const now = new Date()
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000
+  return new Date(utcMs + 5 * 60 * 60000)
+}
+
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
@@ -145,16 +154,16 @@ async function buildStatusReply(order: any): Promise<string> {
   const hasTracking = Boolean(order.tracking_id)
 
   if (!hasTracking) {
-    // Tracking add hone se PEHLE - fixed 10-15 working-day window, order date se calculate
-    const minDate = addWorkingDays(orderDate, MIN_WORKING_DAYS)
-    const maxDate = addWorkingDays(orderDate, MAX_WORKING_DAYS)
-    const today = new Date()
-    const remainingMin = workingDaysBetween(today, minDate)
-    const remainingMax = workingDaysBetween(today, maxDate)
+    // Tracking add hone se PEHLE - website jaisa hi: order date + 10/15 calendar din
+    const minDate = new Date(orderDate); minDate.setDate(orderDate.getDate() + MIN_WORKING_DAYS)
+    const maxDate = new Date(orderDate); maxDate.setDate(orderDate.getDate() + MAX_WORKING_DAYS)
+    const today = pakistanNow()
+    const passed = workingDaysBetween(orderDate, today)
+    const daysLeft = Math.max(1, MAX_WORKING_DAYS - passed)
 
     lines.push(`📅 Total Delivery Time: ${MIN_WORKING_DAYS} to ${MAX_WORKING_DAYS} Working Days (Monday to Saturday)`)
     lines.push(`📅 Expected Delivery Date: ${formatDate(minDate)} to ${formatDate(maxDate)}`)
-    lines.push(`⏳ Remaining: ${remainingMin} to ${remainingMax} working days`)
+    lines.push(`⏳ Remaining: ${daysLeft} working day(s)`)
     lines.push('')
     lines.push(`🔗 Live tracking dekhein: ${WEBSITE_TRACKING_LINK}`)
   } else {
@@ -180,7 +189,7 @@ async function buildStatusReply(order: any): Promise<string> {
 
       if (stage) {
         // Live courier status ke hisaab se estimate
-        expectedDate = addWorkingDays(new Date(), daysForCourierStage(stage))
+        expectedDate = addWorkingDays(pakistanNow(), daysForCourierStage(stage))
       } else {
         // Live data na mile to purana fallback: shipped date + 3 working days
         const { data: h } = await supabaseAdmin
@@ -191,10 +200,10 @@ async function buildStatusReply(order: any): Promise<string> {
           .order('changed_at', { ascending: true })
           .limit(1)
           .single()
-        expectedDate = h?.changed_at ? addWorkingDays(new Date(h.changed_at), 3) : addWorkingDays(new Date(), 3)
+        expectedDate = h?.changed_at ? addWorkingDays(new Date(h.changed_at), 3) : addWorkingDays(pakistanNow(), 3)
       }
 
-      const remaining = workingDaysBetween(new Date(), expectedDate)
+      const remaining = workingDaysBetween(pakistanNow(), expectedDate)
       lines.push('')
       lines.push(`📅 Expected Delivery Date: ${remaining === 0 ? 'Aaj (Today)' : formatDate(expectedDate)}`)
       if (remaining > 0) lines.push(`⏳ Remaining: ${remaining} working day(s)`)
