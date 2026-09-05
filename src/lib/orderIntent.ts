@@ -5,14 +5,21 @@
  * matching par chalti thi. Us mein wahi kharabi thi jo Q&A mein thi:
  * customer ke alfaz thora bhi alag hote hi match toot jata tha.
  *
- * Held-out test (asli messages par, bank se chhupa kar):
+ * Held-out test (bank sirf 2/3 phrasings se, test wale 1/3 bank mein NAHI):
  *
- *   tareeqa                  pakde        jhooti pehchan
- *   substring keywords         2%  (1/51)    0%  (0/239)
- *   word-score @ 0.40         49% (25/51)    0.4% (1/239)
+ *   tareeqa                pakde          jhooti pehchan
+ *   substring keywords      4%  (2/51)     0.4% (1/239)
+ *   word-score @ 0.40      53% (27/51)     1.7% (4/239)
+ *   word-score @ 0.45      45% (23/51)     0.8% (2/239)   <-- chuna gaya
+ *   word-score @ 0.50      35% (18/51)     0.0% (0/239)
  *
- * Yani jo order-sawaal pehle bilkul nikal jate the, un mein se aadhe ab
- * pehchane jayenge — aur ghalat pehchan ke khatre ke baghair.
+ * 0.45 is liye chuna ke yahan "jhooti pehchan" ka matlab hai: price poochne
+ * wale customer ko "apna order number bhejein" ka jawab jana — yani theek
+ * wahi bug jo pehle tha. Us se bachna zyada ahem hai.
+ *
+ * NOTE: shipped list mein SAARE 153 phrasings hain (train+test dono), kyunke
+ * production mein jitne zyada variants hon utna behtar. Upar wale numbers
+ * sirf train wale hisse se naape gaye hain, warna wo memorisation hota.
  *
  * NOTE: neeche ke jumle aap ke ASLI customer messages hain. Personal data
  * (phone number, email, confirmation number, naam) nikal diya gaya hai.
@@ -23,7 +30,7 @@ import { buildIndex, matchAgainstIndex } from '@/lib/qnaMatch'
 import type { QnaIndex } from '@/lib/qnaMatch'
 
 /** Order-intent ki apni hadd — Q&A se alag, kyunke yahan sirf haan/nahi chahiye. */
-export const ORDER_INTENT_THRESHOLD = 0.4
+export const ORDER_INTENT_THRESHOLD = 0.45
 
 export const ORDER_STATUS_QUESTIONS: string[] = [
   "1 September tak",

@@ -27,6 +27,7 @@
  */
 
 import { normalizeForMatch } from '@/lib/textNormalize'
+import { toConcept } from '@/lib/synonyms'
 
 // ── Faltu lafz ────────────────────────────────────────────────────────────
 // NOTE: negation (nahi / na / ni / nh) yahan JAAN BOOJH KAR nahi hai —
@@ -74,26 +75,75 @@ interface Doc {
 export interface QnaIndex {
   docs: Doc[]
   idf: (token: string) => number
+  /**
+   * Customer ke lafz ko bank ke sabse milte-julte lafz par le jata hai
+   * (spelling ki galti ke liye). Kuch na mile to lafz waisa hi wapas.
+   */
+  resolveToken: (token: string) => string
+}
+
+// ── Spelling ki galtiyan ───────────────────────────────────────────────────
+// Dictionary mein har typo likhna namumkin hai ("recieve", "reciev", "recevie"
+// ...). Is liye jo lafz bank mein bilkul na mile, use bank ke sabse milte-julte
+// lafz se mila dete hain — teen-teen harf ke tukdon (trigrams) ki bunyaad par.
+const FUZZY_MIN_SIMILARITY = 0.62
+// Chhote lafzon par fuzzy khatarnak hai (kab/kar/kam sab ek jaise lagte hain)
+const FUZZY_MIN_LENGTH = 5
+
+function trigrams(word: string): string[] {
+  if (word.length < 3) return [word]
+  const out: string[] = []
+  for (let i = 0; i <= word.length - 3; i++) out.push(word.slice(i, i + 3))
+  return out
+}
+
+/** Dice similarity: 0 se 1 ke darmiyan */
+function diceSimilarity(aGrams: string[], bGrams: string[]): number {
+  if (aGrams.length === 0 || bGrams.length === 0) return 0
+  const bSet = new Set(bGrams)
+  let shared = 0
+  for (const g of aGrams) if (bSet.has(g)) shared++
+  return (2 * shared) / (aGrams.length + bGrams.length)
 }
 
 /**
- * Default hadd. Env QNA_MATCH_THRESHOLD se badli ja sakti hai.
+ * Default hadd + ambiguity margin.
  *
- * Ye value andaze se nahi chuni — aap ke 979 asli sawaalon par held-out test
- * chala kar nikali gayi (har teesra sawaal bank se chhupa kar):
+ * Ye values andaze se nahi chuni gayin — aap ke 979 asli sawaalon par
+ * held-out test (har teesra sawaal bank se chhupa kar) ka poora grid:
  *
- *   threshold   jawab diya   sahi jawab   GALAT jawab
- *      0.40        52.5%        48.3%         4.2%
- *      0.45        45.0%        42.5%         2.5%   <-- yahan hain
- *      0.50        35.8%        34.2%         1.7%
- *      0.55        30.8%        30.8%         0.0%
+ *   margin \ thr    0.34         0.38         0.40         0.45
+ *      0        60.0 / 6.7   55.0 / 5.8   54.2 / 5.0   48.3 / 0.8
+ *      0.10     55.0 / 2.5   50.8 / 2.5   50.0 / 2.5   45.0 / 0.0
+ *      0.15     51.7 / 0.0   49.2 / 0.0   48.3 / 0.0   44.2 / 0.0
+ *      0.20     47.5 / 0.0   45.8 / 0.0   45.8 / 0.0   42.5 / 0.0
+ *                                         (sahi% / GALAT%)
  *
- * 0.45 par har 1 galat jawab ke badle 17 sahi jawab milte hain. Isse neeche
- * jane par galtiyan tezi se barhti hain, upar jane par bot bewajah chup ho
- * jata hai. Jab Q&A bank mein zyada variants add honge to poora curve upar
- * uthega — us waqt is number ko dobara test karna chahiye.
+ * Chuna gaya: threshold 0.40 + margin 0.15 -> 48.3% sahi, 0% galat.
+ *
+ * 0.34 thora zyada coverage deta hai (51.7%) lekin jab Q&A bank chhota ho
+ * (jaise deploy ke pehle din, jab sirf purani 3 entries hain) to wahan
+ * ghalat jawab aane lagte hain — test kar ke dekha gaya. 0.40 dono soorton
+ * mein mehfooz rehta hai.
+ *
+ * Env se badla ja sakta hai: QNA_MATCH_THRESHOLD, QNA_AMBIGUITY_MARGIN
  */
-export const DEFAULT_THRESHOLD = 0.45
+export const DEFAULT_THRESHOLD = 0.4
+
+/**
+ * Ambiguity guard: agar sabse behtar topic aur doosre number ke topic ka
+ * score is se kam farq rakhta ho, to bot jawab nahi deta.
+ *
+ * Maqsad: "koi galat jawab na jaye". Env AMBIGUITY_MARGIN se badla ja sakta hai.
+ */
+export const DEFAULT_AMBIGUITY_MARGIN = 0.15
+
+const AMBIGUITY_MARGIN = (() => {
+  const raw = process.env.QNA_AMBIGUITY_MARGIN
+  const n = raw ? Number(raw) : NaN
+  return Number.isFinite(n) && n >= 0 && n < 1 ? n : DEFAULT_AMBIGUITY_MARGIN
+})()
+
 
 export function getThreshold(): number {
   const raw = process.env.QNA_MATCH_THRESHOLD
@@ -101,12 +151,20 @@ export function getThreshold(): number {
   return Number.isFinite(n) && n > 0 && n <= 1 ? n : DEFAULT_THRESHOLD
 }
 
-/** Message ko content-lafzon mein torta hai */
+/**
+ * Message ko content-lafzon mein torta hai.
+ *
+ * Aakhri qadam ham-mani lafzon ko ek canonical lafz par le aata hai
+ * (cover/case -> cover, when/kab -> kab), taake English aur Roman Urdu
+ * likhne wale dono ek hi bank se match ho sakein.
+ */
 export function tokenize(text: string): string[] {
   return normalizeForMatch(text)
     .split(/\s+/)
     .map((w) => w.trim())
     .filter((w) => w.length > 1 && !STOPWORDS.has(w))
+    .map(toConcept)
+    .filter((w) => !STOPWORDS.has(w))
 }
 
 /**
@@ -144,7 +202,59 @@ export function buildIndex(entries: QnaEntry[]): QnaIndex {
     return Math.log((n + 1) / (seen + 1)) + 1
   }
 
-  return { docs, idf }
+  // ── Spelling ki galtiyon ke liye trigram index ──────────────────────────
+  // Har lafz ke teen-harf wale tukde nikal kar ulta naqsha banate hain, taake
+  // "recevie" jaise anjaan lafz ka sabse qareebi lafz foran mil jaye —
+  // poori vocabulary chhanne ki zarurat nahi parti.
+  const vocab = Array.from(df.keys())
+  const vocabGrams = new Map<string, string[]>()
+  const gramToTokens = new Map<string, string[]>()
+
+  for (const token of vocab) {
+    const grams = trigrams(token)
+    vocabGrams.set(token, grams)
+    for (const g of grams) {
+      const list = gramToTokens.get(g)
+      if (list) list.push(token)
+      else gramToTokens.set(g, [token])
+    }
+  }
+
+  const resolveCache = new Map<string, string>()
+
+  const resolveToken = (token: string): string => {
+    if (df.has(token)) return token // bank mein bilkul mojood hai
+    if (token.length < FUZZY_MIN_LENGTH) return token
+
+    const cached = resolveCache.get(token)
+    if (cached !== undefined) return cached
+
+    const grams = trigrams(token)
+    const candidates = new Set<string>()
+    for (const g of grams) {
+      const list = gramToTokens.get(g)
+      if (list) for (const t of list) candidates.add(t)
+    }
+
+    let best = token
+    let bestSim = FUZZY_MIN_SIMILARITY
+
+    for (const cand of Array.from(candidates)) {
+      if (cand.length < FUZZY_MIN_LENGTH) continue
+      if (Math.abs(cand.length - token.length) > 3) continue
+      if (cand[0] !== token[0]) continue // pehla harf aksar sahi hota hai
+      const sim = diceSimilarity(grams, vocabGrams.get(cand) || [])
+      if (sim > bestSim) {
+        bestSim = sim
+        best = cand
+      }
+    }
+
+    resolveCache.set(token, best)
+    return best
+  }
+
+  return { docs, idf, resolveToken }
 }
 
 function massOf(tokens: Set<string>, idf: (t: string) => number): number {
@@ -204,7 +314,7 @@ export function matchAgainstIndex(
   message: string,
   threshold: number = getThreshold()
 ): MatchResult | null {
-  const qTokens = tokenize(message)
+  const qTokens = tokenize(message).map(index.resolveToken)
   if (qTokens.length === 0) return null
 
   const qSet = new Set(qTokens)
@@ -215,6 +325,9 @@ export function matchAgainstIndex(
 
   let bestDoc: Doc | null = null
   let bestScore = 0
+  // Dusre topic ka sabse acha score — ambiguity check ke liye
+  let rivalScore = 0
+  let rivalTopic = ''
 
   for (const doc of index.docs) {
     const score = scoreDoc(doc, qSet, qMass, normalizedMessage, index.idf)
@@ -227,12 +340,28 @@ export function matchAgainstIndex(
       (score === bestScore && doc.entry.priority > bestDoc.entry.priority)
 
     if (better) {
+      // purana best ab rival ban sakta hai (agar topic alag hai)
+      if (bestDoc && bestDoc.entry.topic !== doc.entry.topic && bestScore > rivalScore) {
+        rivalScore = bestScore
+        rivalTopic = bestDoc.entry.topic
+      }
       bestDoc = doc
       bestScore = score
+    } else if (bestDoc && doc.entry.topic !== bestDoc.entry.topic && score > rivalScore) {
+      rivalScore = score
+      rivalTopic = doc.entry.topic
     }
   }
 
   if (!bestDoc || bestScore < threshold) return null
+
+  // ── Ambiguity guard ─────────────────────────────────────────────────────
+  // Agar do ALAG topics ka score qareeb qareeb hai to bot ko pata hi nahi ke
+  // customer kis baare mein poochh raha hai. Aise mein andaza lagane se behtar
+  // hai chup rehna — fallback insaan tak pohancha dega.
+  if (rivalTopic && rivalTopic !== bestDoc.entry.topic) {
+    if (bestScore - rivalScore < AMBIGUITY_MARGIN) return null
+  }
 
   return {
     answer: bestDoc.entry.answer,
@@ -251,7 +380,7 @@ export function explainMatches(
   message: string,
   topN = 5
 ): MatchResult[] {
-  const qTokens = tokenize(message)
+  const qTokens = tokenize(message).map(index.resolveToken)
   if (qTokens.length === 0) return []
 
   const qSet = new Set(qTokens)
