@@ -3,3 +3,7 @@
 .next/
 node_modules/
 .DS_Store
+
+# TypeScript / Next build artifacts
+*.tsbuildinfo
+next-env.d.ts
