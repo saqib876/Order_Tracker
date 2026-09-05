@@ -109,6 +109,14 @@ export interface ShopifyWebhookOrder {
   order_number: number
   name: string
 
+  /**
+   * Shopify ka confirmation number, jaise "N8FNNZAKE".
+   * Customer ko order place karte waqt yehi dikhta hai, is liye WhatsApp par
+   * log aksar order number ke bajaye ye bhejte hain.
+   * Purane API versions mein ye field nahi hoti — is liye optional hai.
+   */
+  confirmation_number?: string | null
+
   email: string
   phone: string | null
 

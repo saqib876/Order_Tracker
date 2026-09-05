@@ -24,6 +24,29 @@ const PHRASE_NORMALIZE: [RegExp, string][] = [
   [/\blgy\s*ga\b/g, 'lagega'],
   [/\bpohanch\s*gy?a\b/g, 'pohoncha'],
   [/\bpohonch\s*gy?a\b/g, 'pohoncha'],
+
+  // ── Ye sab aapke asli unmatched messages se nikale gaye hain ──────────
+  // "Order mile ga ya nauu" — "milega" do tukdon mein likha tha
+  [/\bmil[ea]?\s+ga\b/g, 'milega'],
+  [/\bmil\s*j[ay]y?e?\s*ga\b/g, 'milega'],
+  [/\bmilj[ay]y?e?\s*ga\b/g, 'milega'],
+  [/\bho\s*j[ay]y?e?\s*ga\b/g, 'hoga'],
+  [/\bho\s*g[ay]y?a\b/g, 'hogaya'],
+  [/\bho\s*chuk[ay]\b/g, 'hogaya'],
+
+  // Kai lafzon wale phrases ko ek lafz bana dete hain, taake word-matching
+  // mein ye ek hi mazboot signal banein (warna "buy 1 get 1" ke tukde
+  // alag alag bikhar jate hain).
+  [/\ballow\s*to\s*open\b/g, 'allowtoopen'],
+  [/\bbuy\s*(1|one)\s*get\s*(1|one)\b/g, 'buyonegetone'],
+  [/\bby\s*one\s*get\s*one\b/g, 'buyonegetone'],
+  [/\b1\s*ke\s*sath\s*1\b/g, 'buyonegetone'],
+  [/\bcash\s*on\s*delivery\b/g, 'cashondelivery'],
+  [/\bdelivery\s*charg\w*\b/g, 'deliverycharges'],
+  [/\beasy\s*pais?s?[ayei]\w*\b/g, 'easypaisa'],
+  [/\bjazz\s*cash\b/g, 'jazzcash'],
+  [/\bmaking\s*process\b/g, 'makingprocess'],
+  [/\bout\s*for\s*delivery\b/g, 'outfordelivery'],
 ]
 
 // Phir single-word short-forms + common typos
@@ -64,6 +87,78 @@ const WORD_NORMALIZE: Record<string, string> = {
   shiped: 'shipped',
   shippd: 'shipped',
   recieved: 'received',
+
+  // ── Asli unmatched messages se mile gaps ─────────────────────────────
+  // Negation — matlab ulta kar deti hai, is liye ise hamesha 'nahi' banao
+  ni: 'nahi',
+  nh: 'nahi',
+  nhi: 'nahi',
+  nahin: 'nahi',
+  nai: 'nahi',
+  nhe: 'nahi',
+  nahe: 'nahi',
+
+  // "Mujhy mera parcel abhi tak ni pouncha" — 'pouncha' pehle miss ho raha tha
+  pouncha: 'pohoncha',
+  punchay: 'pohoncha',
+  pahuncha: 'pohoncha',
+  pohncha: 'pohoncha',
+  phuncha: 'pohoncha',
+  puncha: 'pohoncha',
+
+  // "Mai already ordrr kar chuki hun" — typo
+  ordrr: 'order',
+  oder: 'order',
+  odar: 'order',
+  ordr: 'order',
+
+  // aam short-forms
+  abi: 'abhi',
+  ab: 'abhi',
+  jb: 'jab',
+  krna: 'karna',
+  krwana: 'karwana',
+  krdo: 'kardo',
+  krde: 'karde',
+  krdein: 'kardein',
+  msg: 'message',
+  msgs: 'message',
+  rply: 'reply',
+  jwb: 'jawab',
+  dino: 'din',
+  dn: 'din',
+  cancle: 'cancel',
+  cancal: 'cancel',
+  adress: 'address',
+  addres: 'address',
+  chnge: 'change',
+  chng: 'change',
+  desgin: 'design',
+  dizain: 'design',
+  covr: 'cover',
+  cvr: 'cover',
+  parcal: 'parcel',
+  parsal: 'parcel',
+  parcell: 'parcel',
+  prcl: 'parcel',
+  recive: 'receive',
+  recived: 'received',
+  reciev: 'receive',
+  rcv: 'receive',
+  confrm: 'confirm',
+  conform: 'confirm',
+  cnfrm: 'confirm',
+  prize: 'price',
+  pricd: 'price',
+  prizes: 'price',
+  qty: 'quantity',
+  silicon: 'silicone',
+  custmize: 'customize',
+  coustomize: 'customize',
+  customise: 'customize',
+  customised: 'customize',
+  customized: 'customize',
+  cutomize: 'customize',
 }
 
 export function normalizeRomanUrdu(text: string): string {

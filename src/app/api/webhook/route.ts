@@ -84,6 +84,13 @@ export async function POST(req: NextRequest) {
     tracking_id: trackingId,
     line_items: lineItems,
     shopify_created_at: payload.created_at,
+
+    // Confirmation number (jaise N8FNNZAKE) — customer WhatsApp par aksar
+    // yehi bhejta hai. Sirf tab likhte hain jab payload mein mojood ho,
+    // warna upsert purani mehfooz value ko null se mita dega.
+    ...(payload.confirmation_number
+      ? { confirmation_number: String(payload.confirmation_number).toUpperCase() }
+      : {}),
   }
 
   const { data: existingOrder, error: fetchError } = await supabaseAdmin

@@ -1,11 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase'
-import { normalizeForMatch } from '@/lib/textNormalize'
+import { buildIndex, matchAgainstIndex, explainMatches } from '@/lib/qnaMatch'
+import type { QnaEntry, QnaIndex, MatchResult } from '@/lib/qnaMatch'
 
 /**
  * WhatsApp Cloud API se text message bhejta hai.
- * Sirf inbound reply ke liye use hota hai (jaisa tum chahte ho) - kabhi khud se
- * pehle message initiate nahi karta, isliye ye tumhare case mein hamesha free hai
- * (24-hour customer service window ke andar).
+ * Sirf inbound reply ke liye use hota hai - kabhi khud se pehle message
+ * initiate nahi karta, isliye ye hamesha free hai (24-hour customer service
+ * window ke andar).
  */
 export async function sendWhatsAppText(to: string, body: string) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN!
@@ -31,47 +32,125 @@ export async function sendWhatsAppText(to: string, body: string) {
   return res.json()
 }
 
-/**
- * Supabase 'qna' table se keyword-match karta hai. Match milte hi wahi answer
- * return karta hai - bot khud se kabhi kuch generate nahi karta.
- * 'keywords' column ab plain comma-separated text hai (Excel/CSV se bulk-add
- * karne ke liye asaan), isliye yahan split karke check karte hain.
- *
- * Excel mein har row ke 'keywords' column mein ek hi sawaal ke MULTIPLE poore
- * variants likho (jaise "order kab milega, mera order kab tak aayega, order
- * kitne din mein milega"), na ke sirf ek chhota generic word - isse matching
- * bohot zyada precise hoti hai.
- *
- * Roman Urdu short-forms (kb/tk/mlyga), common typos, aur English grammar
- * variations (will/is missing) - ye sab src/lib/textNormalize.ts se automatic
- * handle ho jate hain, order-detection wale system jaisa hi. Naya short-form
- * dikhe to sirf textNormalize.ts mein add karna - yahan kuch nahi karna.
- *
- * Sabse zyada "specific" (lambe) keyword ka match jeetega - taake overlapping
- * keywords wale alag Q&A entries mein customer ko sabse relevant/exact jawab mile,
- * generic keyword wala nahi.
- */
-export async function matchQna(text: string): Promise<string | null> {
-  const { data: rows, error } = await supabaseAdmin
+// ── Q&A bank ───────────────────────────────────────────────────────────────
+//
+// Do jagah se parhta hai:
+//   1. qna_topics  (naya)   — 'questions' column, har line par POORA sawaal
+//   2. qna         (purana) — 'keywords' comma-separated
+//
+// Dono ko ek hi shakal mein badal kar word-score matcher ko dete hain, taake
+// purana data toote nahi aur naya data bina migration ke chal jaye.
+
+const CACHE_MS = 60_000
+
+let cachedIndex: QnaIndex | null = null
+let cachedAt = 0
+let cachedEntryCount = 0
+
+function splitQuestions(raw: string): string[] {
+  // Nayi table: har line par ek sawaal. Purani: comma se alag.
+  // Pehle newline par torte hain; agar ek hi line thi to comma par.
+  const byLine = raw
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  if (byLine.length > 1) return byLine
+
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+async function loadEntries(): Promise<QnaEntry[]> {
+  const entries: QnaEntry[] = []
+
+  // 1. Nayi table. Agar abhi tak banayi nahi gayi to error aayega — use chup
+  //    chaap ignore karte hain, purani table se kaam chalta rahega.
+  const { data: topics, error: topicsError } = await supabaseAdmin
+    .from('qna_topics')
+    .select('topic, questions, answer, priority')
+    .eq('is_active', true)
+
+  if (topicsError) {
+    console.warn('[qna] qna_topics parh nahi saka (shayad abhi banayi nahi):', topicsError.message)
+  } else if (topics) {
+    for (const row of topics) {
+      const questions = splitQuestions(String(row.questions || ''))
+      if (!questions.length || !row.answer) continue
+      entries.push({
+        topic: String(row.topic || 'Untitled'),
+        answer: String(row.answer),
+        questions,
+        priority: Number(row.priority) || 0,
+      })
+    }
+  }
+
+  // 2. Purani table
+  const { data: legacy, error: legacyError } = await supabaseAdmin
     .from('qna')
     .select('keywords, answer')
     .eq('is_active', true)
 
-  if (error || !rows) return null
-
-  const cleaned = normalizeForMatch(text)
-  let bestAnswer: string | null = null
-  let bestMatchLength = 0
-
-  for (const row of rows) {
-    const keywords = (row.keywords as string).split(',').map((k) => normalizeForMatch(k))
-    for (const kw of keywords) {
-      if (kw && cleaned.includes(kw) && kw.length > bestMatchLength) {
-        bestMatchLength = kw.length
-        bestAnswer = row.answer
-      }
+  if (legacyError) {
+    console.warn('[qna] purani qna table parh nahi saka:', legacyError.message)
+  } else if (legacy) {
+    for (const row of legacy) {
+      const questions = splitQuestions(String(row.keywords || ''))
+      if (!questions.length || !row.answer) continue
+      entries.push({
+        topic: 'legacy',
+        answer: String(row.answer),
+        questions,
+        priority: -1, // barabar score par nayi table jeetegi
+      })
     }
   }
 
-  return bestAnswer
+  return entries
+}
+
+async function getIndex(force = false): Promise<QnaIndex> {
+  const now = Date.now()
+  if (!force && cachedIndex && now - cachedAt < CACHE_MS) return cachedIndex
+
+  const entries = await loadEntries()
+  cachedIndex = buildIndex(entries)
+  cachedAt = now
+  cachedEntryCount = entries.length
+  return cachedIndex
+}
+
+/** Cache turant khaali karo — Excel import ke baad kaam aata hai. */
+export function invalidateQnaCache() {
+  cachedIndex = null
+  cachedAt = 0
+}
+
+/**
+ * Customer ka POORA sawaal parh kar behtareen jawab dhoondta hai.
+ * Threshold se kam score par null — bot andaza nahi lagata.
+ */
+export async function matchQna(text: string): Promise<string | null> {
+  const result = await matchQnaDetailed(text)
+  return result ? result.answer : null
+}
+
+/** Wahi matching, lekin score/topic ke sath — logging aur testing ke liye. */
+export async function matchQnaDetailed(text: string): Promise<MatchResult | null> {
+  const index = await getIndex()
+  if (index.docs.length === 0) return null
+  return matchAgainstIndex(index, text)
+}
+
+/** Debugging: top 5 candidates score ke sath. */
+export async function debugQna(text: string) {
+  const index = await getIndex(true)
+  return {
+    entries: cachedEntryCount,
+    documents: index.docs.length,
+    matches: explainMatches(index, text, 5),
+  }
 }

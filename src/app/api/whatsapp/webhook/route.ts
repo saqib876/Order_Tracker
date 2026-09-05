@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna } from '@/lib/whatsapp'
 import { normalizeForMatch } from '@/lib/textNormalize'
+import { detectManualReason, MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,27 @@ const trackingUrl = (id: string) => `https://postex.pk/tracking?cn=${id}`
 const WEBSITE_TRACKING_LINK = 'https://myzan.net/pages/track-your-order'
 const MIN_WORKING_DAYS = 10
 const MAX_WORKING_DAYS = 15
+
+// Jab customer sirf salaam kare — pehle bot bilkul chup reh jata tha
+// (8 din mein 265 aise messages the jinka koi jawab nahi gaya).
+const WELCOME_MESSAGE = [
+  'Assalam-o-Alaikum! Myzan Mobile Cases mein khush aamdeed 🙌',
+  '',
+  'Main aap ki kaise madad kar sakta hun?',
+  '',
+  '• *Order tracking* — apna order number, confirmation number (jaise #N8FNNZAKE) ya jis number se order kiya tha wo bhej dein',
+  '• *Koi aur sawaal* — bas likh dein, main jawab dene ki koshish karunga',
+].join('\n')
+
+// Jab kuch bhi samajh na aaye. Pehle bot khamosh reh jata tha, jis se
+// customer ko lagta tha ke message parha hi nahi gaya.
+const FALLBACK_MESSAGE = [
+  'Aap ka message mil gaya hai — shukriya! 🙏',
+  '',
+  'Ye sawaal main khud se hal nahi kar pa raha, humari team thori dair mein aap ko khud jawab degi.',
+  '',
+  `Agar order ke baare mein poochh rahe hain to apna *order number* ya *confirmation number* bhej dein, main foran status bata dunga. Live tracking: ${WEBSITE_TRACKING_LINK}`,
+].join('\n')
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -322,6 +344,83 @@ function extractOrderNumber(text: string) {
   return m ? m[1] : null
 }
 
+// ── Shopify confirmation number ────────────────────────────────────────────
+// Order place karte waqt customer ko yehi milta hai (order number nahi):
+//   "Confirmation #N8FNNZAKE was generated for this order."
+// Hamesha 9 characters, sirf A-Z aur 0-9. 8 din mein 45 log ye bhej chuke
+// hain aur bot inhe bilkul nahi pehchanta tha.
+//
+// Kam se kam ek digit lazmi rakhi hai, warna "SEPTEMBER" jaise 9 harf wale
+// aam lafz bhi confirmation number samjhe jane lagte.
+function extractConfirmationNumber(text: string): string | null {
+  const candidates = text.match(/#?\b[A-Za-z0-9]{9}\b/g)
+  if (!candidates) return null
+
+  for (const raw of candidates) {
+    const code = raw.replace('#', '').toUpperCase()
+    if (code.length !== 9) continue
+    if (!/[0-9]/.test(code)) continue // digit ke bina nahi
+    if (!/[A-Z]/.test(code)) continue // sirf digits ho to wo order/tracking number hai
+    return code
+  }
+  return null
+}
+
+// Message mein saaf saaf order number ka zikr hai?
+// (isse "1400 ka hai?" jaise price wale sawaal order-lookup mein nahi jate)
+function mentionsOrderNumber(text: string): boolean {
+  return (
+    /\border\s*(no|number|num|#)/i.test(text) ||
+    /\bconfirmation\b/i.test(text) ||
+    /#\s*\d{3,6}\b/.test(text)
+  )
+}
+
+// ── Sirf salaam / hello — koi asal sawaal nahi ─────────────────────────────
+// Log salaam ki dozens spellings likhte hain (Assalamualaikum, Aslam o alikum,
+// Asssalam o alaikum, AsslamuAlaikum, A.o.a ...). Har spelling list karne ke
+// bajaye pehle dohre harf squeeze karte hain ("asssalaam" -> "asalam") aur
+// phir chand prefixes se milate hain.
+function squeezeRepeats(w: string): string {
+  return w.replace(/(.)\1+/g, '$1')
+}
+
+// Ye prefixes khud bhi squeezed shakal mein hain
+const GREETING_PREFIXES = [
+  'salam', 'asalam', 'aslam', 'asalm', 'aslm', 'aoa',
+  'helo', 'halo', 'hi', 'hy', 'hey', 'hlo', 'hlw',
+  'walikum', 'walaikum', 'alikum', 'alaikum',
+]
+
+// Ye lafz akele salaam nahi bante, lekin salaam ke sath aa sakte hain
+const GREETING_FILLER = new Set([
+  'bhai', 'bhaii', 'sir', 'ji', 'g', 'o', 'u', 'wa', 'myzan', 'team', 'a',
+])
+
+function isGreetingWord(word: string): boolean {
+  const w = squeezeRepeats(word)
+  return GREETING_PREFIXES.some((p) => w.startsWith(p))
+}
+
+function isGreetingOnly(text: string): boolean {
+  const t = normalizeForMatch(text)
+  if (!t || t.length > 40) return false
+
+  const words = t.split(/\s+/).filter(Boolean)
+  if (words.length === 0 || words.length > 5) return false
+
+  // Kam se kam ek asal greeting lazmi hai, baqi sab filler ho sakte hain.
+  let greetings = 0
+  for (const w of words) {
+    if (isGreetingWord(w)) {
+      greetings++
+    } else if (!GREETING_FILLER.has(w)) {
+      return false
+    }
+  }
+  return greetings > 0
+}
+
 // Customer number kisi bhi format mein bhej sakta hai:
 // +92 307 4942009, 0307-494-2009, (0092) 307.4942009, 92/307/4942009 waghera.
 // Ye function har format se digits nikaal ke standard "92XXXXXXXXXX" banata hai.
@@ -398,26 +497,97 @@ export async function POST(req: NextRequest) {
     .eq('phone', from)
     .maybeSingle()
 
+  const clearState = () =>
+    supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+
+  const confirmationNumber = extractConfirmationNumber(text)
   const orderNumber = extractOrderNumber(text)
   const phoneInText = extractPhone(text)
+  const trackingCandidate = extractTrackingCandidate(text)
 
-  // 1) Order number ya phone number mila - seedha unambiguous lookup, sabse pehli priority
-  if (orderNumber) {
+  // Kya ye message waqai order ke baare mein hai?
+  //
+  // YE GUARD AHEM HAI. Pehle har message mein se koi bhi 3-6 digit ka number
+  // uthhaya jata tha, chahe wo price ho ("1400 ka hai?") ya mobile model.
+  // Us se do masle the:
+  //   1. Price poochne wale ko "order number galat hai" ka jawab milta tha
+  //   2. Agar wo number sach mein kisi ka order number nikla, to KISI AUR
+  //      customer ka status/tracking is ajnabi ko chala jata tha
+  const orderish =
+    looksLikeOrderQuery(text) ||
+    isNumericOnlyMessage(text) ||
+    mentionsOrderNumber(text) ||
+    state?.state === 'awaiting_order_info'
+
+  // ── 1) Cancel / address / design / phone change ───────────────────────────
+  // Ye chaar cheezein bot ko khud nahi karni chahiye. Holding reply bhejte
+  // hain aur message ko manual review queue mein daal dete hain.
+  const manualReason = detectManualReason(text)
+  if (manualReason) {
+    const contextOrder = await findOrderForContext({
+      confirmationNumber,
+      orderNumber: orderish ? orderNumber : null,
+      phoneInText,
+      senderPhone: from,
+    })
+
+    await supabaseAdmin.from('manual_review_queue').insert({
+      phone: from,
+      message_text: text,
+      reason: manualReason,
+      order_number: contextOrder?.order_number || null,
+    })
+
+    // Q&A mein is topic ka apna jawab ho to wo behtar hai
+    const qnaAnswer = await matchQna(text)
+    await clearState()
+    await sendWhatsAppText(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+
+    console.log(
+      `[wa] manual review: ${MANUAL_REASON_LABEL[manualReason]} — ${from}` +
+        (contextOrder ? ` (order ${contextOrder.order_number})` : '')
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── 2) Shopify confirmation number ────────────────────────────────────────
+  // Ye alphanumeric hai (N8FNNZAKE) is liye bilkul be-shuba hai — koi guard
+  // ki zarurat nahi, price ya model number kabhi is shakal ka nahi hota.
+  if (confirmationNumber) {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .ilike('confirmation_number', confirmationNumber)
+      .maybeSingle()
+
+    if (order) {
+      await clearState()
+      await sendWhatsAppText(from, await buildStatusReply(order))
+      return NextResponse.json({ ok: true })
+    }
+    // Na mila to aage badhte hain — shayad order number bhi sath likha ho
+  }
+
+  // ── 3) Order number (sirf jab message order ke baare mein lage) ───────────
+  if (orderNumber && orderish) {
     const { data: order } = await supabaseAdmin
       .from('orders')
       .select('*')
       .eq('order_number', orderNumber)
       .maybeSingle()
 
-    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    await clearState()
     await sendWhatsAppText(
       from,
-      order ? await buildStatusReply(order) : 'Ye order number system mein nahi mil raha, please dobara check karke bhejein.'
+      order
+        ? await buildStatusReply(order)
+        : 'Ye order number system mein nahi mil raha, please dobara check karke bhejein. Aap confirmation number (jaise #N8FNNZAKE) bhi bhej sakte hain.'
     )
     return NextResponse.json({ ok: true })
   }
 
-  if (phoneInText) {
+  // ── 4) Phone number ───────────────────────────────────────────────────────
+  if (phoneInText && orderish) {
     const { data: order } = await supabaseAdmin
       .from('orders')
       .select('*')
@@ -426,7 +596,7 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle()
 
-    await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    await clearState()
     await sendWhatsAppText(
       from,
       order ? await buildStatusReply(order) : 'Is number se koi order nahi mila, please order number bhejein.'
@@ -434,10 +604,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // 2) Order/phone na mile - shayad customer ne tracking number bhej diya ho
-  //    (jo unhe courier SMS se mila ho, order number/phone maangne ke baad)
-  const trackingCandidate = extractTrackingCandidate(text)
-  if (trackingCandidate) {
+  // ── 5) Courier tracking number ────────────────────────────────────────────
+  if (trackingCandidate && orderish) {
     const { data: order } = await supabaseAdmin
       .from('orders')
       .select('*')
@@ -445,40 +613,91 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (order) {
-      await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+      await clearState()
       await sendWhatsAppText(from, await buildStatusReply(order))
       return NextResponse.json({ ok: true })
     }
-    // Match nahi mila to chup chaap aage badh jate hain (Q&A/unmatched try karega)
+    // Match nahi mila to chup chaap aage badh jate hain
   }
 
-  // 3) Koi number nahi mila - Q&A pehle check karo. Isse "order kaise karun" jaisi
-  //    cheezein apna specific Q&A jawab paati hain, generic "order" keyword se
-  //    order-lookup flow hijack nahi hota.
+  // ── 6) Q&A — poora sawaal padh kar word-score matching ────────────────────
   const qnaAnswer = await matchQna(text)
   if (qnaAnswer) {
-    if (state) await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+    if (state) await clearState()
     await sendWhatsAppText(from, qnaAnswer)
     return NextResponse.json({ ok: true })
   }
 
-  // 4) Q&A mein match nahi mila - agar order/tracking se related lag raha hai to number maango
-  if (looksLikeOrderQuery(text) || isNumericOnlyMessage(text)) {
+  // ── 7) Sirf salaam ────────────────────────────────────────────────────────
+  if (isGreetingOnly(text)) {
+    if (state) await clearState()
+    await sendWhatsAppText(from, WELCOME_MESSAGE)
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── 8) Order se related lag raha hai lekin number nahi diya ───────────────
+  if (orderish) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
     await sendWhatsAppText(
       from,
-      'Please Apna Order Number Ya Jis Mobile/ Phone Number Se Order Kiya Tha Wo Bhej Dein,Main Abhi Check Karta Hun.'
+      'Please apna *order number*, *confirmation number* (jaise #N8FNNZAKE) ya jis mobile number se order kiya tha wo bhej dein — main abhi check karta hun.'
     )
     return NextResponse.json({ ok: true })
   }
 
-  // 5) Kuch bhi match nahi hua - khud se reply NAHI karta, sirf log kar deta hai
-  // taake tum manually reply kar sako (WhatsApp Manager mein ye already unread dikhega
-  // kyunke koi reply nahi gaya).
-  if (state) await supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
+  // ── 9) Kuch bhi match nahi hua ────────────────────────────────────────────
+  // Pehle bot yahan BILKUL chup reh jata tha. Ab polite fallback bhejta hai,
+  // aur message ko log karta hai taake wo Excel export mein aa jaye.
+  if (state) await clearState()
   await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
+  await sendWhatsAppText(from, FALLBACK_MESSAGE)
 
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * Manual review ke liye order dhoondta hai — sirf context ke liye, taake
+ * queue mein order number bhi dikh jaye. Kuch na mile to null.
+ */
+async function findOrderForContext(opts: {
+  confirmationNumber: string | null
+  orderNumber: string | null
+  phoneInText: string | null
+  senderPhone: string
+}): Promise<{ order_number: string } | null> {
+  const { confirmationNumber, orderNumber, phoneInText, senderPhone } = opts
+
+  if (confirmationNumber) {
+    const { data } = await supabaseAdmin
+      .from('orders')
+      .select('order_number')
+      .ilike('confirmation_number', confirmationNumber)
+      .maybeSingle()
+    if (data) return data
+  }
+
+  if (orderNumber) {
+    const { data } = await supabaseAdmin
+      .from('orders')
+      .select('order_number')
+      .eq('order_number', orderNumber)
+      .maybeSingle()
+    if (data) return data
+  }
+
+  for (const phone of [phoneInText, senderPhone]) {
+    if (!phone) continue
+    const { data } = await supabaseAdmin
+      .from('orders')
+      .select('order_number')
+      .eq('customer_phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (data) return data
+  }
+
+  return null
 }
