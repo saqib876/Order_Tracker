@@ -327,22 +327,38 @@ html,body{background:var(--canvas)}
 
 /* ===== SEARCH ===== */
 .stage{min-height:480px;display:flex;align-items:center;justify-content:center;padding:46px 16px}
-.search{width:100%;max-width:456px;text-align:center}
+/* 456px par teen tabs tang lagte the aur "Track With Confirmation No"
+   do lines mein toot jata tha. Thora chaura karne se teeno button khul
+   kar saans lete hain aur teeno sar-khiyan ek ek line mein aa jati hain. */
+.search{width:100%;max-width:530px;text-align:center}
 .eyebrow{font-size:11px;font-weight:600;letter-spacing:3.5px;text-transform:uppercase;color:var(--blue);margin-bottom:18px}
 .search h1{font-family:var(--disp);font-size:42px;font-weight:600;line-height:1.06;letter-spacing:-.6px;margin-bottom:13px;color:var(--ink)}
 .search p{font-size:14px;color:var(--txt2);line-height:1.65;margin-bottom:28px;max-width:406px;margin-left:auto;margin-right:auto}
 .card-search{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 24px 60px -28px rgba(17,25,40,.28)}
-.seg{display:flex;background:var(--canvas);border:1px solid var(--line);border-radius:13px;padding:4px;margin-bottom:12px}
-.seg button{flex:1;border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--txt2);padding:9px 6px;border-radius:9px;cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.25}
-.seg button small{font-size:9.5px;font-weight:500;color:inherit;opacity:.65}
+/* Teen tabs. Do baatein ahem hain:
+   1. buttons ke darmiyan gap — warna tang tang lagte hain
+   2. justify-content:flex-start — "Track With Confirmation No" doosron se
+      lamba hai; agar kisi tab mein wo do lines le le to bhi teeno ke ASAL
+      naam ek hi seedh mein rehte hain (center hone se wo upar khisak jata tha) */
+.seg{display:flex;gap:5px;background:var(--canvas);border:1px solid var(--line);border-radius:14px;padding:5px;margin-bottom:12px}
+.seg button{flex:1;min-width:0;border:none;background:transparent;font-family:var(--body);font-size:13px;font-weight:600;color:var(--txt2);padding:11px 7px 12px;border-radius:10px;cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;line-height:1.3;text-align:center}
+.seg button small{font-size:9px;font-weight:500;color:inherit;opacity:.65;line-height:1.3;display:block}
 .seg button.on{background:var(--ink);color:#fff;box-shadow:0 4px 14px -6px rgba(17,17,17,.5)}
 .seg button.on small{opacity:.85}
-/* Teen tabs ke sath chhoti screen par chhoti sar-khiyan (small) tang par
-   jati hain aur "Confirmation No" do lines mein tooot jata hai. Is liye
-   phone par sirf asal naam rakhte hain — teeno tab barabar aur saaf. */
-@media(max-width:430px){
-  .seg button{font-size:11.5px;padding:11px 3px;white-space:nowrap}
-  .seg button small{display:none}
+/* Phone par teen tabs ek qatar mein rakhne se har ek sirf ~100px ka
+   bachta hai — "Confirmation No" us mein nahi samata aur sab kuch toot
+   jata hai. Is liye phone par tabs ek ke neeche ek, poori chaurai ke:
+   naam baayen, aur "Track With ..." dayen — dono ek ek line mein.
+
+   Hadd 600px rakhi hai (520 nahi): 520-600 ke beech bhi "Track With
+   Confirmation No" do lines mein tootta tha — test kar ke dekha. */
+@media(max-width:600px){
+  .stage{padding:34px 12px}
+  .card-search{padding:16px}
+  .seg{flex-direction:column;gap:4px;padding:4px}
+  .seg button{flex-direction:row;justify-content:space-between;align-items:center;
+              gap:10px;padding:12px 13px;font-size:12.5px;white-space:nowrap}
+  .seg button small{font-size:9px;white-space:nowrap}
 }
 .field{display:flex;gap:9px}
 .field input{flex:1;background:var(--canvas);border:1.5px solid var(--line);border-radius:13px;padding:14px 17px;font-family:var(--body);font-size:15px;font-weight:500;color:var(--txt);outline:none;transition:.2s;min-width:0}
