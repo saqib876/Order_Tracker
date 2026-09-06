@@ -34,12 +34,11 @@ export async function sendWhatsAppText(to: string, body: string) {
 
 // ── Q&A bank ───────────────────────────────────────────────────────────────
 //
-// Do jagah se parhta hai:
-//   1. qna_topics  (naya)   — 'questions' column, har line par POORA sawaal
-//   2. qna         (purana) — 'keywords' comma-separated
+// Sirf qna_topics se — 'questions' column mein har line par ek POORA sawaal.
 //
-// Dono ko ek hi shakal mein badal kar word-score matcher ko dete hain, taake
-// purana data toote nahi aur naya data bina migration ke chal jaye.
+// Purani 'qna' table (comma-separated keywords wali) delete kar di gayi hai,
+// owner ke kehne par. Us ka content /admin/qna se Excel mein wapas add kiya
+// ja sakta hai.
 
 const CACHE_MS = 60_000
 
@@ -48,8 +47,8 @@ let cachedAt = 0
 let cachedEntryCount = 0
 
 function splitQuestions(raw: string): string[] {
-  // Nayi table: har line par ek sawaal. Purani: comma se alag.
-  // Pehle newline par torte hain; agar ek hi line thi to comma par.
+  // Har line par ek sawaal. Agar poori cheez ek hi line mein ho to comma
+  // par tor dete hain — taake koi purane andaz mein likh de to bhi chale.
   const byLine = raw
     .split(/\r?\n/)
     .map((s) => s.trim())
@@ -66,15 +65,15 @@ function splitQuestions(raw: string): string[] {
 async function loadEntries(): Promise<QnaEntry[]> {
   const entries: QnaEntry[] = []
 
-  // 1. Nayi table. Agar abhi tak banayi nahi gayi to error aayega — use chup
-  //    chaap ignore karte hain, purani table se kaam chalta rahega.
+  // Table na mile to error aayega — us soorat mein khali bank ke saath aage
+  // badh jate hain (bot Q&A ka jawab nahi dega, baqi sab chalta rahega).
   const { data: topics, error: topicsError } = await supabaseAdmin
     .from('qna_topics')
     .select('topic, questions, answer, priority')
     .eq('is_active', true)
 
   if (topicsError) {
-    console.warn('[qna] qna_topics parh nahi saka (shayad abhi banayi nahi):', topicsError.message)
+    console.warn('[qna] qna_topics parh nahi saka:', topicsError.message)
   } else if (topics) {
     for (const row of topics) {
       const questions = splitQuestions(String(row.questions || ''))
@@ -84,27 +83,6 @@ async function loadEntries(): Promise<QnaEntry[]> {
         answer: String(row.answer),
         questions,
         priority: Number(row.priority) || 0,
-      })
-    }
-  }
-
-  // 2. Purani table
-  const { data: legacy, error: legacyError } = await supabaseAdmin
-    .from('qna')
-    .select('keywords, answer')
-    .eq('is_active', true)
-
-  if (legacyError) {
-    console.warn('[qna] purani qna table parh nahi saka:', legacyError.message)
-  } else if (legacy) {
-    for (const row of legacy) {
-      const questions = splitQuestions(String(row.keywords || ''))
-      if (!questions.length || !row.answer) continue
-      entries.push({
-        topic: 'legacy',
-        answer: String(row.answer),
-        questions,
-        priority: -1, // barabar score par nayi table jeetegi
       })
     }
   }
