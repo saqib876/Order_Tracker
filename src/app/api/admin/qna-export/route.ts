@@ -186,12 +186,14 @@ export async function GET(req: NextRequest) {
   ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
   // ── Sheet 3: Mojooda Topics (reference) ─────────────────────────────────
+  // Poore sawaal bhi isi sheet mein aate hain, taake file "round-trip" kare:
+  // download -> edit -> upload. Jo yahan badlenge wo upload par update ho jayega.
   const ws3 = wb.addWorksheet('Mojooda Topics')
   ws3.columns = [
-    { header: 'Topic', key: 'topic', width: 32 },
+    { header: 'Topic', key: 'topic', width: 30 },
+    { header: 'Sawaal (har line par ek)', key: 'questions', width: 54 },
+    { header: 'Jawab', key: 'answer', width: 60 },
     { header: 'Kitne Sawaal', key: 'nq', width: 13 },
-    { header: 'Jawab', key: 'answer', width: 78 },
-    { header: 'Active', key: 'active', width: 9 },
   ]
   styleHeader(ws3)
 
@@ -202,15 +204,18 @@ export async function GET(req: NextRequest) {
       .filter(Boolean)
     const row = ws3.addRow({
       topic: t.topic,
-      nq: qs.length,
+      questions: qs.join('\n'),
       answer: t.answer,
-      active: t.is_active ? 'TRUE' : 'FALSE',
+      nq: qs.length,
     })
     row.font = { name: 'Arial', size: 10 }
     row.alignment = { vertical: 'top', wrapText: true }
-    for (const c of ['topic', 'nq', 'answer', 'active']) {
-      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    // Topic/sawaal/jawab edit kiye ja sakte hain — is liye peele
+    for (const c of ['topic', 'questions', 'answer']) {
+      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
     }
+    row.getCell('nq').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    row.height = 40
   }
   ws3.views = [{ state: 'frozen', ySplit: 1 }]
 
