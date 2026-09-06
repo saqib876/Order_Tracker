@@ -48,7 +48,9 @@ create table if not exists manual_review_queue (
   id            uuid primary key default gen_random_uuid(),
   phone         text not null,
   message_text  text not null,
-  reason        text not null,          -- order_cancel | address_change | design_change | phone_change
+  reason        text not null,
+  -- tabdeeli: order_cancel | address_change | model_change | design_change | phone_change
+  -- shikayat: wrong_model_received | wrong_design_received | missing_items | quality_issue
   order_number  text,
   status        text not null default 'pending',   -- pending | done
   created_at    timestamptz not null default now(),

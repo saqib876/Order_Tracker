@@ -1,15 +1,16 @@
 /**
  * Manual Check list — /admin/review?key=ADMIN_KEY
  *
- * Order cancel, address change, design change aur phone number change wale
- * messages yahan aate hain. Har row par "WhatsApp mein kholein" ka link hai
- * jo seedha usi customer ki chat khol deta hai.
+ * Do qism ke messages yahan aate hain — baayen taraf tabdeeli ki darkhwastein
+ * (order abhi raaste mein hai), daayen taraf mil chuke order ki shikayatein.
+ * Har row par "WhatsApp mein kholein" ka link hai jo seedha usi customer ki
+ * chat khol deta hai.
  */
 
 import type { CSSProperties } from 'react'
 import { unstable_noStore as noStore } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
-import { MANUAL_REASON_LABEL } from '@/lib/intents'
+import { MANUAL_REASON_LABEL, CHANGE_REASONS, ISSUE_REASONS } from '@/lib/intents'
 import type { ManualReason } from '@/lib/intents'
 
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,10 @@ const REASON_COLOR: Record<string, string> = {
   model_change: '#0f766e',
   design_change: '#7c3aed',
   phone_change: '#0891b2',
+  wrong_model_received: '#b91c1c',
+  wrong_design_received: '#c2410c',
+  missing_items: '#a16207',
+  quality_issue: '#9333ea',
 }
 
 function formatWhen(iso: string): string {
@@ -96,9 +101,33 @@ export default async function ReviewPage({
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Manually Check</h1>
-      <p style={styles.sub}>
-        Order cancel · Address change · Mobile model change · Design change · Phone number change
-      </p>
+      <div style={styles.legend}>
+        <section style={styles.legendCol}>
+          <h2 style={styles.legendHead}>Tabdeeli ki darkhwast</h2>
+          <p style={styles.legendNote}>Order abhi raaste mein hai</p>
+          <ul style={styles.legendList}>
+            {CHANGE_REASONS.map((r) => (
+              <li key={r} style={styles.legendItem}>
+                <span style={{ ...styles.dot, background: REASON_COLOR[r] }} />
+                {MANUAL_REASON_LABEL[r]}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section style={styles.legendCol}>
+          <h2 style={styles.legendHead}>Order ki shikayat</h2>
+          <p style={styles.legendNote}>Order mil chuka hai</p>
+          <ul style={styles.legendList}>
+            {ISSUE_REASONS.map((r) => (
+              <li key={r} style={styles.legendItem}>
+                <span style={{ ...styles.dot, background: REASON_COLOR[r] }} />
+                {MANUAL_REASON_LABEL[r]}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
 
       <div style={styles.tabs}>
         <a href={qs({})} style={showDone ? styles.tab : styles.tabActive}>
@@ -181,6 +210,37 @@ const styles: Record<string, CSSProperties> = {
   },
   h1: { fontSize: 26, fontWeight: 700, margin: '0 0 4px' },
   sub: { color: '#64748b', fontSize: 14, margin: '0 0 20px' },
+  // auto-fit se chhoti screen par do column khud ek ke neeche ek ho jate hain
+  // (inline styles mein media query nahi likhi ja sakti)
+  legend: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+    gap: 12,
+    margin: '14px 0 22px',
+  },
+  legendCol: {
+    border: '1px solid #e2e8f0',
+    borderRadius: 12,
+    padding: '12px 14px 14px',
+    background: '#f8fafc',
+  },
+  legendHead: {
+    fontSize: 13,
+    fontWeight: 700,
+    margin: 0,
+    color: '#0f172a',
+    letterSpacing: '.01em',
+  },
+  legendNote: { fontSize: 12, color: '#94a3b8', margin: '2px 0 10px' },
+  legendList: { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 13,
+    color: '#334155',
+  },
+  dot: { width: 9, height: 9, borderRadius: 999, flexShrink: 0 },
   tabs: { display: 'flex', gap: 8, marginBottom: 20 },
   tab: {
     padding: '7px 16px',

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
 import { normalizeForMatch } from '@/lib/textNormalize'
 import { detectManualReason, MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
+import { undeliveredNote, RETURNING_NOTE } from '@/lib/courierNotes'
 import {
   looksLikeOrderQuery,
   extractOrderNumber,
@@ -215,8 +216,10 @@ async function buildStatusReply(order: any): Promise<string> {
       lines.push('')
       lines.push('✅ Aapka order deliver ho chuka hai. Shopping ke liye shukriya!')
     } else if (stage === 'returning') {
+      // MOVED TO ORIGIN / REACHED AT ORIGIN / OUT FOR RETURN SUBMISSION /
+      // RETURNED SUBMITTED — sab par ek hi tafseeli note jata hai.
       lines.push('')
-      lines.push('⚠️ Aapka order courier ki taraf se return ho raha hai. Hum jald aap se raabta karenge.')
+      lines.push(RETURNING_NOTE)
     } else {
       let expectedDate: Date
 
@@ -242,6 +245,18 @@ async function buildStatusReply(order: any): Promise<string> {
       if (remaining > 0) {
         lines.push('')
         lines.push(`⏳ Remaining: ${remaining} working day(s)`)
+      }
+
+      // In do stages mein customer ko khud rider/courier se raabta karna hai,
+      // is liye Remaining ke baad poora Note bhi jata hai.
+      if (stage === 'undelivered' || stage === 'contacting') {
+        lines.push('')
+        lines.push(
+          undeliveredNote(
+            stage === 'undelivered' ? 'UNDELIVERED' : 'CONTACTING CONSIGNEE',
+            order.tracking_id
+          )
+        )
       }
     }
   }
