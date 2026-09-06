@@ -147,7 +147,9 @@ export function squeezeRepeats(w: string): string {
 export const GREETING_PREFIXES = [
   'salam', 'asalam', 'aslam', 'asalm', 'aslm', 'aoa',
   'helo', 'halo', 'hi', 'hy', 'hey', 'hlo', 'hlw',
-  'walikum', 'walaikum', 'alikum', 'alaikum',
+  // 'alaikum' ki dozens spellings hain (alaikum/alikum/alaikun/aalaikm...),
+  // is liye chhota prefix rakha hai
+  'walik', 'walaik', 'alik', 'alaik',
 ]
 
 // Ye lafz akele salaam nahi bante, lekin salaam ke sath aa sakte hain
@@ -166,6 +168,9 @@ export function isGreetingOnly(text: string): boolean {
 
   const words = t.split(/\s+/).filter(Boolean)
   if (words.length === 0 || words.length > 5) return false
+
+  // "A o A" jaise bikhre hue salaam — sab lafz mila kar dekhte hain
+  if (isGreetingWord(words.join(''))) return true
 
   // Kam se kam ek asal greeting lazmi hai, baqi sab filler ho sakte hain.
   let greetings = 0

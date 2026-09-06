@@ -322,6 +322,10 @@ export async function POST(req: NextRequest) {
     looksLikeOrderQuery(text) ||
     isNumericOnlyMessage(text) ||
     mentionsOrderNumber(text) ||
+    // Apna mobile number bhejne ki aam tor par ek hi wajah hoti hai — order
+    // dhoondwana. Warna "03001234567 / yhi no ha" jaisa message Q&A mein
+    // chala jata tha aur customer ko bilkul be-rabt jawab milta tha.
+    phoneInText !== null ||
     state?.state === 'awaiting_order_info'
 
   // ── 1) Cancel / address / design / phone change ───────────────────────────
