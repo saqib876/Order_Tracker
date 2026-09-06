@@ -337,6 +337,13 @@ html,body{background:var(--canvas)}
 .seg button small{font-size:9.5px;font-weight:500;color:inherit;opacity:.65}
 .seg button.on{background:var(--ink);color:#fff;box-shadow:0 4px 14px -6px rgba(17,17,17,.5)}
 .seg button.on small{opacity:.85}
+/* Teen tabs ke sath chhoti screen par chhoti sar-khiyan (small) tang par
+   jati hain aur "Confirmation No" do lines mein tooot jata hai. Is liye
+   phone par sirf asal naam rakhte hain — teeno tab barabar aur saaf. */
+@media(max-width:430px){
+  .seg button{font-size:11.5px;padding:11px 3px;white-space:nowrap}
+  .seg button small{display:none}
+}
 .field{display:flex;gap:9px}
 .field input{flex:1;background:var(--canvas);border:1.5px solid var(--line);border-radius:13px;padding:14px 17px;font-family:var(--body);font-size:15px;font-weight:500;color:var(--txt);outline:none;transition:.2s;min-width:0}
 .field input::placeholder{color:var(--txt3);font-weight:400}
@@ -559,7 +566,7 @@ const IconX = () => (
 )
 
 export default function TrackPage() {
-  const [tab, setTab] = useState<'order' | 'phone'>('order')
+  const [tab, setTab] = useState<'order' | 'confirmation' | 'phone'>('order')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -589,7 +596,14 @@ export default function TrackPage() {
 
   async function handleTrack() {
     if (!query.trim()) {
-      setError('Enter your ' + (tab === 'order' ? 'order number to continue.' : 'phone number to continue.'))
+      setError(
+        'Enter your ' +
+          (tab === 'order'
+            ? 'order number to continue.'
+            : tab === 'confirmation'
+            ? 'confirmation number to continue.'
+            : 'phone number to continue.')
+      )
       return
     }
     setLoading(true); setError(''); setResult(null); setCourierEvents(undefined)
@@ -597,7 +611,13 @@ export default function TrackPage() {
       const res = await fetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tab === 'order' ? { orderNumber: query.trim() } : { phone: query.trim() }),
+        body: JSON.stringify(
+          tab === 'order'
+            ? { orderNumber: query.trim() }
+            : tab === 'confirmation'
+            ? { confirmationNumber: query.trim() }
+            : { phone: query.trim() }
+        ),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'We couldn’t find that order. Check the number and try again.'); return }
@@ -614,7 +634,7 @@ export default function TrackPage() {
     }
   }
 
-  function switchTab(t: 'order' | 'phone') { setTab(t); setQuery(''); setError('') }
+  function switchTab(t: 'order' | 'confirmation' | 'phone') { setTab(t); setQuery(''); setError('') }
   function reset() { setResult(null); setCourierEvents(undefined); setQuery(''); setError('') }
 
   const o = result?.order
@@ -666,22 +686,32 @@ export default function TrackPage() {
           <div className="search">
             <div className="eyebrow">Live order status</div>
             <h1>Track Your Order</h1>
-            <p>Enter Your Order Number or Phone Number To See The Real-Time Status, Delivery Window, & Courier Updates — All On One Screen.</p>
+            <p>Enter Your Order Number, Confirmation Number or Phone Number To See The Real-Time Status, Delivery Window, &amp; Courier Updates — All On One Screen.</p>
             <div className="card-search">
               <div className="seg">
                 <button className={tab === 'order' ? 'on' : ''} onClick={() => switchTab('order')}>
-                  Order Number
+                  Order No
                   <small>Track With Order No</small>
                 </button>
+                <button className={tab === 'confirmation' ? 'on' : ''} onClick={() => switchTab('confirmation')}>
+                  Confirmation No
+                  <small>Track With Confirmation No</small>
+                </button>
                 <button className={tab === 'phone' ? 'on' : ''} onClick={() => switchTab('phone')}>
-                  Phone Number
+                  Phone No
                   <small>Track With Phone No</small>
                 </button>
               </div>
               <div className="field">
                 <input
                   type={tab === 'phone' ? 'tel' : 'text'}
-                  placeholder={tab === 'order' ? 'e.g. 2087' : 'e.g. 03001234567'}
+                  placeholder={
+                    tab === 'order'
+                      ? 'e.g. 40981'
+                      : tab === 'confirmation'
+                      ? 'e.g. #N8FNNZAKE'
+                      : 'e.g. 03001234567'
+                  }
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleTrack()}

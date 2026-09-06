@@ -7,19 +7,30 @@ export const dynamic = 'force-dynamic'
  
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { orderNumber, phone } = body
- 
-  if (!orderNumber && !phone) {
+  const { orderNumber, phone, confirmationNumber } = body
+
+  if (!orderNumber && !phone && !confirmationNumber) {
     return NextResponse.json(
-      { error: 'Please provide order number or phone number.' },
+      { error: 'Please provide order number, confirmation number or phone number.' },
       { status: 400 }
     )
   }
- 
+
   let order: any = null
   let error: any = null
- 
-  if (orderNumber) {
+
+  if (confirmationNumber) {
+    // Shopify ka confirmation number (jaise N8FNNZAKE) — customer ko order
+    // place karte waqt yehi milta hai. '#' laga ho to hata dete hain, aur
+    // chhote/bare harf ka farq nazarandaz karte hain (ilike).
+    const result = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .ilike('confirmation_number', String(confirmationNumber).replace('#', '').trim())
+      .single()
+    order = result.data
+    error = result.error
+  } else if (orderNumber) {
     const result = await supabaseAdmin
       .from('orders')
       .select('*')

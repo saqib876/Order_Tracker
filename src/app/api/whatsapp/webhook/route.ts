@@ -367,7 +367,13 @@ export async function POST(req: NextRequest) {
     await clearState()
     await sendWhatsAppText(
       from,
-      'Is number se koi order nahi mil raha. Please apna *order number* ya *confirmation number* (jaise #N8FNNZAKE) dobara check kar ke bhej dein.'
+      [
+        'Is Number Se Koi Order Nahi Mil Raha. Please Apna Correct ',
+        '',
+        'Order Number (Jaise 40981), ',
+        'Confirmation Number (Jaise #N8FNNZAKE) ',
+        'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Again Check Karti Hun.',
+      ].join('\n')
     )
     return NextResponse.json({ ok: true })
   }
@@ -387,7 +393,13 @@ export async function POST(req: NextRequest) {
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
     await sendWhatsAppText(
       from,
-      'Please apna *order number*, *confirmation number* (jaise #N8FNNZAKE) ya jis mobile number se order kiya tha wo bhej dein — main abhi check karta hun.'
+      [
+        'Please Apna ',
+        '',
+        'Order Number (Jaise 40981), ',
+        'Confirmation Number (Jaise #N8FNNZAKE) ',
+        'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Abhi Check Karti Hun.',
+      ].join('\n')
     )
     return NextResponse.json({ ok: true })
   }
