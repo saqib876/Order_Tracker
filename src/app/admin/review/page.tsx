@@ -29,6 +29,7 @@ interface ReviewRow {
 const REASON_COLOR: Record<string, string> = {
   order_cancel: '#dc2626',
   address_change: '#d97706',
+  model_change: '#0f766e',
   design_change: '#7c3aed',
   phone_change: '#0891b2',
 }
@@ -96,7 +97,7 @@ export default async function ReviewPage({
     <main style={styles.page}>
       <h1 style={styles.h1}>Manually Check</h1>
       <p style={styles.sub}>
-        Order cancel · Address change · Design change · Phone number change
+        Order cancel · Address change · Mobile model change · Design change · Phone number change
       </p>
 
       <div style={styles.tabs}>

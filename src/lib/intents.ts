@@ -1,8 +1,9 @@
 /**
  * Woh messages pehchanta hai jo bot ko KHUD nahi handle karne chahiye —
- * order cancel, address change, design change, phone number change.
+ * order cancel, address change, mobile model change, design change,
+ * phone number change.
  *
- * Ye chaar cheezein paise aur customer ke data se juri hain, is liye bot
+ * Ye paanch cheezein paise aur customer ke data se juri hain, is liye bot
  * sirf ek holding reply bhejta hai aur message ko `manual_review_queue`
  * mein daal deta hai. Aap /admin/review par khud dekh kar faisla karte hain.
  */
@@ -12,12 +13,14 @@ import { normalizeForMatch } from '@/lib/textNormalize'
 export type ManualReason =
   | 'order_cancel'
   | 'address_change'
+  | 'model_change'
   | 'design_change'
   | 'phone_change'
 
 export const MANUAL_REASON_LABEL: Record<ManualReason, string> = {
   order_cancel: 'Order Cancel',
   address_change: 'Address Change',
+  model_change: 'Mobile Model Change',
   design_change: 'Design / Order Change',
   phone_change: 'Phone Number Change',
 }
@@ -28,6 +31,8 @@ export const MANUAL_REASON_REPLY: Record<ManualReason, string> = {
     'Aap ki request mil gayi hai. Order cancel karne ke liye humari team ise check kar rahi hai — thori dair mein aap ko confirm kar diya jayega.',
   address_change:
     'Aap ki address change ki request mil gayi hai. Humari team ise check kar ke thori dair mein aap ko confirm kar degi.',
+  model_change:
+    'Aap ki request mil gayi hai. Mobile model badalne ke liye humari team ise check kar rahi hai — thori dair mein aap ko confirm kar diya jayega.',
   design_change:
     'Aap ki request mil gayi hai. Order ya design mein tabdeeli humari team check kar rahi hai — thori dair mein jawab mil jayega.',
   phone_change:
@@ -81,6 +86,30 @@ export function detectManualReason(rawText: string): ManualReason | null {
       return 'address_change'
     }
   }
+
+  // ── 3b. Mobile model badalna ─────────────────────────────────────────────
+  // Design se PEHLE, warna "model change karna hai" design wale khane mein
+  // chala jata hai.
+  //
+  // Ahem farq: "galat model MIL gaya" shikayat hai (cheez pohanch chuki hai),
+  // "galat model SELECT ho gaya, change kar dein" tabdeeli ki darkhwast hai.
+  // Is liye jab tak koi badalne wala lafz na ho, ye khana nahi khulta — aur
+  // agar cheez pohanch chuki ho to bhi nahi.
+  const modelKaZikr = hasAny(t, ['model', 'mobile', 'phone', 'handset', 'device'])
+  const badalnaChahta =
+    t.includes('change') ||
+    t.includes('badal') ||
+    t.includes('tabdeel') ||
+    t.includes('galat select') ||
+    t.includes('ghalat select') ||
+    t.includes('galat likh') ||
+    t.includes('ghalat likh') ||
+    t.includes('wrong select') ||
+    t.includes('sahi kar') ||
+    t.includes('shi kar')
+  const pohanchChuka = hasAny(t, ['mila', 'receive', 'received', 'aaya', 'bheja', 'bhej diya', 'deliver'])
+
+  if (modelKaZikr && badalnaChahta && !pohanchChuka) return 'model_change'
 
   // ── 4. Design / order badalna ────────────────────────────────────────────
   const mentionsOrderThing =
