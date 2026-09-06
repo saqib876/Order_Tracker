@@ -60,3 +60,13 @@ create index if not exists manual_review_status_idx
 
 create index if not exists manual_review_phone_idx
   on manual_review_queue (phone);
+
+
+-- ── 5. Greeting kis ko bhej chuke hain ─────────────────────────────────────
+-- Naya customer (ya 24 ghante baad wapas aane wala) — usse pehle greeting
+-- jati hai, phir uske sawaal ka jawab. Yeh table sirf itna yaad rakhta hai
+-- ke kis number ko aakhri baar kab greeting bheji thi.
+create table if not exists wa_greeted (
+  phone       text primary key,
+  greeted_at  timestamptz not null default now()
+);

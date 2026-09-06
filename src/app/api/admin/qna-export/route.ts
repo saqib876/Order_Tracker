@@ -1,17 +1,19 @@
 /**
- * Q&A Excel export.
+ * Rozana ka Q&A Excel.
  *
  *   /api/admin/qna-export?key=ADMIN_KEY
  *
- * Excel file download hoti hai jis mein:
- *   Sheet "Topic Answers"        — abhi jo Q&A live hai (aap edit kar sakte hain)
- *   Sheet "New Questions <date>" — sirf WOH naye sawaal jo pichhle export ke
- *                                  baad aaye aur bot samajh nahi paya
+ * Excel mein chaar sheets hoti hain:
  *
- * Har export ke baad un messages par `exported_at` lag jata hai, is liye agli
- * dafa sirf naye sawaal aayenge — purane dobara nahi.
+ *   1. "Naye Sawaal"      — jo naye sawaal bot samajh nahi paya. Har row par
+ *                           dropdown: add karna hai ya nahi, aur kis topic mein.
+ *   2. "Naya Topic"       — khali rows, jahan aap khud naya topic + sawaal +
+ *                           jawab likh sakte hain.
+ *   3. "Mojooda Topics"   — abhi jo Q&A live hai (padhne ke liye).
+ *   4. "Lists"            — dropdown ke liye (chhupi hui).
  *
- * Sirf dekhna hai, mark nahi karna? `&peek=1` laga dein.
+ * Har export ke baad un messages par nishaan lag jata hai, is liye agli dafa
+ * SIRF naye sawaal aayenge. Sirf dekhna ho, nishaan na lage — `&peek=1`.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,6 +25,8 @@ export const runtime = 'nodejs'
 
 const HEADER_FILL = 'FF1F3864'
 const FILL_ME = 'FFFFFF00'
+const FILL_READ = 'FFF2F2F2'
+const NEW_TOPIC_OPTION = '++ NAYA TOPIC ++'
 
 function todayInPakistan(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -33,14 +37,12 @@ function todayInPakistan(): string {
   }).format(new Date())
 }
 
-// NOTE: header styling inline rakhi hai (helper ke bajaye) taake exceljs ke
-// type namespace par depend na karna pade.
 function styleHeader(ws: { getRow: (n: number) => any }) {
   const row = ws.getRow(1)
   row.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
   row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
   row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
-  row.height = 26
+  row.height = 30
 }
 
 export async function GET(req: NextRequest) {
@@ -48,10 +50,7 @@ export async function GET(req: NextRequest) {
 
   const adminKey = process.env.ADMIN_KEY
   if (!adminKey) {
-    return NextResponse.json(
-      { error: 'ADMIN_KEY environment variable set nahi hai' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'ADMIN_KEY environment variable set nahi hai' }, { status: 500 })
   }
   if (searchParams.get('key') !== adminKey) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -59,11 +58,13 @@ export async function GET(req: NextRequest) {
 
   const peek = searchParams.get('peek') === '1'
 
-  // ── 1. Abhi ki live Q&A ─────────────────────────────────────────────────
+  // ── 1. Mojooda topics ───────────────────────────────────────────────────
   const { data: topics } = await supabaseAdmin
     .from('qna_topics')
     .select('id, topic, questions, answer, priority, is_active')
-    .order('priority', { ascending: false })
+    .order('topic', { ascending: true })
+
+  const topicNames = (topics || []).map((t) => String(t.topic)).filter(Boolean)
 
   // ── 2. Naye unanswered sawaal ───────────────────────────────────────────
   const { data: unmatched, error: unmatchedError } = await supabaseAdmin
@@ -77,92 +78,147 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: unmatchedError.message }, { status: 500 })
   }
 
-  // Ek jaisa sawaal kai dafa aaya ho to ek hi row, count ke sath
-  const grouped = new Map<string, { text: string; count: number; last: string }>()
+  const grouped = new Map<string, { text: string; count: number }>()
   for (const row of unmatched || []) {
     const text = String(row.message_text || '').replace(/\s+/g, ' ').trim()
     if (!text) continue
     const key = text.toLowerCase()
     const existing = grouped.get(key)
-    if (existing) {
-      existing.count++
-    } else {
-      grouped.set(key, { text, count: 1, last: String(row.created_at) })
-    }
+    if (existing) existing.count++
+    else grouped.set(key, { text, count: 1 })
   }
 
   const newQuestions = Array.from(grouped.values()).sort(
     (a, b) => b.count - a.count || a.text.localeCompare(b.text)
   )
 
-  // ── 3. Workbook ─────────────────────────────────────────────────────────
+  const date = todayInPakistan()
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Myzan Order Tracker'
   wb.created = new Date()
 
-  // Sheet 1 — live Q&A
-  const ws1 = wb.addWorksheet('Topic Answers')
+  // ── Sheet 4 (pehle banate hain, dropdown isi par depend karta hai) ──────
+  const wsList = wb.addWorksheet('Lists')
+  wsList.getCell('A1').value = 'Topics'
+  wsList.getCell('B1').value = 'Haan/Nahi'
+  topicNames.forEach((t, i) => {
+    wsList.getCell('A' + (i + 2)).value = t
+  })
+  wsList.getCell('A' + (topicNames.length + 2)).value = NEW_TOPIC_OPTION
+  wsList.getCell('B2').value = 'Haan'
+  wsList.getCell('B3').value = 'Nahi'
+  wsList.state = 'hidden'
+
+  const topicRange = `=Lists!$A$2:$A$${topicNames.length + 2}`
+  const yesNoRange = '=Lists!$B$2:$B$3'
+
+  // ── Sheet 1: Naye Sawaal ────────────────────────────────────────────────
+  const ws1 = wb.addWorksheet('Naye Sawaal')
   ws1.columns = [
-    { header: 'id (mat badlein)', key: 'id', width: 38 },
-    { header: 'Topic', key: 'topic', width: 30 },
-    { header: 'Questions (har line par ek poora sawaal)', key: 'questions', width: 62 },
-    { header: 'Answer', key: 'answer', width: 55 },
-    { header: 'Priority', key: 'priority', width: 10 },
-    { header: 'Active', key: 'is_active', width: 9 },
+    { header: '#', key: 'n', width: 6 },
+    { header: 'Naya Sawaal (customer ke asli alfaz)', key: 'q', width: 66 },
+    { header: 'Kitni Baar', key: 'c', width: 11 },
+    { header: 'Add karein?', key: 'add', width: 14 },
+    { header: 'Kis Topic mein?', key: 'topic', width: 34 },
+    { header: 'Note (optional)', key: 'note', width: 28 },
   ]
   styleHeader(ws1)
 
-  for (const t of topics || []) {
-    ws1.addRow({
-      id: t.id,
-      topic: t.topic,
-      questions: t.questions,
-      answer: t.answer,
-      priority: t.priority,
-      is_active: t.is_active ? 'TRUE' : 'FALSE',
-    })
-  }
-  ws1.eachRow((row, i) => {
-    if (i === 1) return
+  newQuestions.forEach((q, i) => {
+    const row = ws1.addRow({ n: i + 1, q: q.text, c: q.count })
     row.font = { name: 'Arial', size: 10 }
     row.alignment = { vertical: 'top', wrapText: true }
-  })
-  ws1.views = [{ state: 'frozen', ySplit: 1 }]
 
-  // Sheet 2 — naye sawaal
-  const date = todayInPakistan()
-  const ws2 = wb.addWorksheet(`New Questions ${date}`.slice(0, 31))
+    for (const col of ['add', 'topic', 'note']) {
+      row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
+    }
+
+    row.getCell('add').dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: [yesNoRange],
+      showErrorMessage: true,
+      errorTitle: 'Sirf Haan ya Nahi',
+      error: 'Is khane mein sirf "Haan" ya "Nahi" chun sakte hain.',
+    }
+    row.getCell('topic').dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: [topicRange],
+      showErrorMessage: true,
+      errorTitle: 'List mein se chunein',
+      error: 'Topic list mein se chunein. Naya topic banana ho to "Naya Topic" sheet use karein.',
+    }
+  })
+
+  ws1.views = [{ state: 'frozen', ySplit: 1 }]
+  ws1.autoFilter = { from: 'A1', to: 'F1' }
+
+  // ── Sheet 2: Naya Topic ─────────────────────────────────────────────────
+  const ws2 = wb.addWorksheet('Naya Topic')
   ws2.columns = [
-    { header: '#', key: 'n', width: 6 },
-    { header: 'Naya Sawaal (customer ke alfaz)', key: 'q', width: 72 },
-    { header: 'Kitni Baar', key: 'c', width: 11 },
-    { header: 'Q&A mein daalein? (haan/nahi)', key: 'add', width: 24 },
-    { header: 'Topic', key: 'topic', width: 28 },
-    { header: 'ANSWER', key: 'answer', width: 52 },
+    { header: 'Naya Topic ka Naam', key: 'topic', width: 32 },
+    { header: 'Sawaal (har line par ek — Alt+Enter se nayi line)', key: 'questions', width: 58 },
+    { header: 'Jawab', key: 'answer', width: 58 },
   ]
   styleHeader(ws2)
 
-  newQuestions.forEach((q, i) => {
-    const row = ws2.addRow({ n: i + 1, q: q.text, c: q.count })
+  const example = ws2.addRow({
+    topic: 'MISAAL — is row ko mita dein',
+    questions: 'gift wrap ho sakti hai\ngift packing karte ho\ncan you gift wrap it',
+    answer: 'Ji haan, gift packing available hai. Order karte waqt note mein likh dein.',
+  })
+  example.font = { name: 'Arial', size: 10, italic: true }
+  example.alignment = { vertical: 'top', wrapText: true }
+  for (const c of ['topic', 'questions', 'answer']) {
+    example.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } }
+  }
+  example.height = 46
+
+  for (let i = 0; i < 30; i++) {
+    const row = ws2.addRow({})
     row.font = { name: 'Arial', size: 10 }
     row.alignment = { vertical: 'top', wrapText: true }
-    for (const col of ['add', 'topic', 'answer']) {
-      row.getCell(col).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: FILL_ME },
-      }
+    for (const c of ['topic', 'questions', 'answer']) {
+      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
     }
-  })
+  }
   ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
-  // ── 4. Export ho gaye — mark kar do ─────────────────────────────────────
+  // ── Sheet 3: Mojooda Topics (reference) ─────────────────────────────────
+  const ws3 = wb.addWorksheet('Mojooda Topics')
+  ws3.columns = [
+    { header: 'Topic', key: 'topic', width: 32 },
+    { header: 'Kitne Sawaal', key: 'nq', width: 13 },
+    { header: 'Jawab', key: 'answer', width: 78 },
+    { header: 'Active', key: 'active', width: 9 },
+  ]
+  styleHeader(ws3)
+
+  for (const t of topics || []) {
+    const qs = String(t.questions || '')
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+    const row = ws3.addRow({
+      topic: t.topic,
+      nq: qs.length,
+      answer: t.answer,
+      active: t.is_active ? 'TRUE' : 'FALSE',
+    })
+    row.font = { name: 'Arial', size: 10 }
+    row.alignment = { vertical: 'top', wrapText: true }
+    for (const c of ['topic', 'nq', 'answer', 'active']) {
+      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    }
+  }
+  ws3.views = [{ state: 'frozen', ySplit: 1 }]
+
+  // ── Export ho gaye — nishaan laga do ────────────────────────────────────
   let markedCount = 0
   if (!peek && unmatched && unmatched.length > 0) {
     const ids = unmatched.map((r) => r.id)
     const now = new Date().toISOString()
-
-    // Supabase URL ki length ki hadd hai, is liye chunks mein
     for (let i = 0; i < ids.length; i += 200) {
       const chunk = ids.slice(i, i + 200)
       const { error } = await supabaseAdmin
@@ -178,7 +234,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(
-    `[qna-export] ${newQuestions.length} naye sawaal (${unmatched?.length || 0} messages), marked=${markedCount}, peek=${peek}`
+    `[qna-export] ${newQuestions.length} naye sawaal, ${topicNames.length} topics, marked=${markedCount}, peek=${peek}`
   )
 
   const buffer = await wb.xlsx.writeBuffer()

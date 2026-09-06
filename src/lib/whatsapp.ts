@@ -130,6 +130,13 @@ export function invalidateQnaCache() {
 }
 
 /**
+ * Greeting ka topic. Is ka jawab bot har naye customer ko sab se pehle
+ * bhejta hai, is liye ise Q&A matching se BAHAR rakhte hain — warna "Hi"
+ * likhne wale ko wahi message do dafa chala jata.
+ */
+export const GREETING_TOPIC = 'Salaam / Greeting'
+
+/**
  * Customer ka POORA sawaal parh kar behtareen jawab dhoondta hai.
  * Threshold se kam score par null — bot andaza nahi lagata.
  */
@@ -142,7 +149,34 @@ export async function matchQna(text: string): Promise<string | null> {
 export async function matchQnaDetailed(text: string): Promise<MatchResult | null> {
   const index = await getIndex()
   if (index.docs.length === 0) return null
-  return matchAgainstIndex(index, text)
+
+  const result = matchAgainstIndex(index, text)
+  if (!result) return null
+
+  // Greeting alag se bheja jata hai — yahan se nahi
+  if (result.topic === GREETING_TOPIC) return null
+
+  return result
+}
+
+/**
+ * Aap ka apna greeting message (Excel ki "Salaam / Greeting" row ka jawab).
+ * Agar aap ne wo row nahi bhari to null — us soorat mein bot greeting nahi
+ * bhejega, seedha sawaal ka jawab dega.
+ */
+export async function getGreetingMessage(): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('qna_topics')
+    .select('answer')
+    .eq('topic', GREETING_TOPIC)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[qna] greeting parh nahi saka:', error.message)
+    return null
+  }
+  return data && data.answer ? String(data.answer) : null
 }
 
 /** Debugging: top 5 candidates score ke sath. */

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendWhatsAppText, matchQna } from '@/lib/whatsapp'
+import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
 import { normalizeForMatch } from '@/lib/textNormalize'
 import { detectManualReason, MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import {
@@ -8,10 +8,10 @@ import {
   extractOrderNumber,
   extractConfirmationNumber,
   mentionsOrderNumber,
-  isGreetingOnly,
   extractPhone,
   isNumericOnlyMessage,
   extractTrackingCandidate,
+  phoneVariants,
 } from '@/lib/messageParse'
 
 export const dynamic = 'force-dynamic'
@@ -20,27 +20,6 @@ const trackingUrl = (id: string) => `https://postex.pk/tracking?cn=${id}`
 const WEBSITE_TRACKING_LINK = 'https://myzan.net/pages/track-your-order'
 const MIN_WORKING_DAYS = 10
 const MAX_WORKING_DAYS = 15
-
-// Jab customer sirf salaam kare — pehle bot bilkul chup reh jata tha
-// (8 din mein 265 aise messages the jinka koi jawab nahi gaya).
-const WELCOME_MESSAGE = [
-  'Assalam-o-Alaikum! Myzan Mobile Cases mein khush aamdeed 🙌',
-  '',
-  'Main aap ki kaise madad kar sakta hun?',
-  '',
-  '• *Order tracking* — apna order number, confirmation number (jaise #N8FNNZAKE) ya jis number se order kiya tha wo bhej dein',
-  '• *Koi aur sawaal* — bas likh dein, main jawab dene ki koshish karunga',
-].join('\n')
-
-// Jab kuch bhi samajh na aaye. Pehle bot khamosh reh jata tha, jis se
-// customer ko lagta tha ke message parha hi nahi gaya.
-const FALLBACK_MESSAGE = [
-  'Aap ka message mil gaya hai — shukriya! 🙏',
-  '',
-  'Ye sawaal main khud se hal nahi kar pa raha, humari team thori dair mein aap ko khud jawab degi.',
-  '',
-  `Agar order ke baare mein poochh rahe hain to apna *order number* ya *confirmation number* bhej dein, main foran status bata dunga. Live tracking: ${WEBSITE_TRACKING_LINK}`,
-].join('\n')
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -305,6 +284,12 @@ export async function POST(req: NextRequest) {
   const clearState = () =>
     supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
 
+  // ── 0) Greeting sab se pehle ──────────────────────────────────────────────
+  // Naya customer ho ya 24 ghante baad wapas aaya ho — us ko sab se pehle
+  // aap ka greeting message jata hai, chahe us ne kuch bhi poocha ho. Us ke
+  // baad neeche wali logic us ke asal sawaal ka jawab dhoondti hai.
+  await maybeSendGreeting(from)
+
   const confirmationNumber = extractConfirmationNumber(text)
   const orderNumber = extractOrderNumber(text)
   const phoneInText = extractPhone(text)
@@ -333,10 +318,11 @@ export async function POST(req: NextRequest) {
   // hain aur message ko manual review queue mein daal dete hain.
   const manualReason = detectManualReason(text)
   if (manualReason) {
-    const contextOrder = await findOrderForContext({
+    const contextOrder = await findOrder({
       confirmationNumber,
       orderNumber: orderish ? orderNumber : null,
       phoneInText,
+      trackingCandidate: null,
       senderPhone: from,
     })
 
@@ -344,7 +330,7 @@ export async function POST(req: NextRequest) {
       phone: from,
       message_text: text,
       reason: manualReason,
-      order_number: contextOrder?.order_number || null,
+      order_number: contextOrder ? contextOrder.order_number : null,
     })
 
     // Q&A mein is topic ka apna jawab ho to wo behtar hai
@@ -359,77 +345,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── 2) Shopify confirmation number ────────────────────────────────────────
-  // Ye alphanumeric hai (N8FNNZAKE) is liye bilkul be-shuba hai — koi guard
-  // ki zarurat nahi, price ya model number kabhi is shakal ka nahi hota.
-  if (confirmationNumber) {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('*')
-      .ilike('confirmation_number', confirmationNumber)
-      .maybeSingle()
+  // ── 2) Live tracking — teeno tareeqon se ──────────────────────────────────
+  // Confirmation number, order number, ya mobile number — jo bhi mile, us se
+  // order dhoond kar live status bhej dete hain.
+  const order = await findOrder({
+    confirmationNumber,
+    orderNumber: orderish ? orderNumber : null,
+    phoneInText: orderish ? phoneInText : null,
+    trackingCandidate: orderish ? trackingCandidate : null,
+  })
 
-    if (order) {
-      await clearState()
-      await sendWhatsAppText(from, await buildStatusReply(order))
-      return NextResponse.json({ ok: true })
-    }
-    // Na mila to aage badhte hain — shayad order number bhi sath likha ho
+  if (order) {
+    await clearState()
+    await sendWhatsAppText(from, await buildStatusReply(order))
+    return NextResponse.json({ ok: true })
   }
 
-  // ── 3) Order number (sirf jab message order ke baare mein lage) ───────────
-  if (orderNumber && orderish) {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('*')
-      .eq('order_number', orderNumber)
-      .maybeSingle()
-
+  // Number diya tha lekin koi order nahi mila — batana zaroori hai, warna
+  // customer intezaar karta reh jayega.
+  if (confirmationNumber || (orderish && (orderNumber || phoneInText))) {
     await clearState()
     await sendWhatsAppText(
       from,
-      order
-        ? await buildStatusReply(order)
-        : 'Ye order number system mein nahi mil raha, please dobara check karke bhejein. Aap confirmation number (jaise #N8FNNZAKE) bhi bhej sakte hain.'
+      'Is number se koi order nahi mil raha. Please apna *order number* ya *confirmation number* (jaise #N8FNNZAKE) dobara check kar ke bhej dein.'
     )
     return NextResponse.json({ ok: true })
   }
 
-  // ── 4) Phone number ───────────────────────────────────────────────────────
-  if (phoneInText && orderish) {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('*')
-      .eq('customer_phone', phoneInText)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    await clearState()
-    await sendWhatsAppText(
-      from,
-      order ? await buildStatusReply(order) : 'Is number se koi order nahi mila, please order number bhejein.'
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // ── 5) Courier tracking number ────────────────────────────────────────────
-  if (trackingCandidate && orderish) {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('*')
-      .eq('tracking_id', trackingCandidate)
-      .maybeSingle()
-
-    if (order) {
-      await clearState()
-      await sendWhatsAppText(from, await buildStatusReply(order))
-      return NextResponse.json({ ok: true })
-    }
-    // Match nahi mila to chup chaap aage badh jate hain
-  }
-
-  // ── 6) Q&A — poora sawaal padh kar word-score matching ────────────────────
+  // ── 3) Q&A — poora sawaal padh kar word-score matching ────────────────────
   const qnaAnswer = await matchQna(text)
   if (qnaAnswer) {
     if (state) await clearState()
@@ -437,14 +380,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── 7) Sirf salaam ────────────────────────────────────────────────────────
-  if (isGreetingOnly(text)) {
-    if (state) await clearState()
-    await sendWhatsAppText(from, WELCOME_MESSAGE)
-    return NextResponse.json({ ok: true })
-  }
-
-  // ── 8) Order se related lag raha hai lekin number nahi diya ───────────────
+  // ── 4) Order ka sawaal lagta hai lekin number nahi diya ───────────────────
   if (orderish) {
     await supabaseAdmin
       .from('wa_conversation_state')
@@ -456,32 +392,70 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── 9) Kuch bhi match nahi hua ────────────────────────────────────────────
-  // Pehle bot yahan BILKUL chup reh jata tha. Ab polite fallback bhejta hai,
-  // aur message ko log karta hai taake wo Excel export mein aa jaye.
+  // ── 5) Kuch match nahi hua — BOT KHAMOSH RAHEGA ───────────────────────────
+  // Jaan boojh kar koi reply nahi jata. Customer ko greeting mil chuki hai;
+  // agar us ka sawaal humare data se match nahi hua to bot andaza lagane ke
+  // bajaye chup rehta hai aur us ke agle message ka intezaar karta hai.
+  // Message yahan log ho jata hai taake rozana ki Excel mein aa sake.
   if (state) await clearState()
   await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
-  await sendWhatsAppText(from, FALLBACK_MESSAGE)
 
   return NextResponse.json({ ok: true })
 }
 
 /**
- * Manual review ke liye order dhoondta hai — sirf context ke liye, taake
- * queue mein order number bhi dikh jaye. Kuch na mile to null.
+ * Naye customer ko (ya 24 ghante baad wapas aane wale ko) aap ka greeting
+ * message bhejta hai. Jo greeting Excel ki "Salaam / Greeting" row mein hai,
+ * wahi jati hai — wo row khali ho to kuch nahi jata.
  */
-async function findOrderForContext(opts: {
+async function maybeSendGreeting(phone: string): Promise<void> {
+  const cooldownHours = Number(process.env.GREETING_COOLDOWN_HOURS) || 24
+  const cutoff = new Date(Date.now() - cooldownHours * 3600 * 1000).toISOString()
+
+  const { data: seen, error } = await supabaseAdmin
+    .from('wa_greeted')
+    .select('greeted_at')
+    .eq('phone', phone)
+    .maybeSingle()
+
+  if (error) {
+    // Table abhi banayi nahi gayi — greeting chhod kar aage badh jao
+    console.warn('[wa] wa_greeted parh nahi saka:', error.message)
+    return
+  }
+
+  // Pehle hi bhej chuke hain (cooldown ke andar)
+  if (seen && seen.greeted_at && String(seen.greeted_at) > cutoff) return
+
+  const greeting = await getGreetingMessage()
+  if (!greeting) return // aap ne greeting likhi hi nahi
+
+  await sendWhatsAppText(phone, greeting)
+  await supabaseAdmin
+    .from('wa_greeted')
+    .upsert({ phone, greeted_at: new Date().toISOString() })
+}
+
+/**
+ * Order dhoondta hai — confirmation number, order number, mobile number aur
+ * courier tracking number, in mein se jo bhi mile us se.
+ *
+ * Mobile number database mein purane orders par kisi bhi shakal mein mehfooz
+ * ho sakta hai (92xxx / 0xxx / xxx), is liye teeno shaklon se dhoondte hain.
+ */
+async function findOrder(opts: {
   confirmationNumber: string | null
   orderNumber: string | null
   phoneInText: string | null
-  senderPhone: string
-}): Promise<{ order_number: string } | null> {
-  const { confirmationNumber, orderNumber, phoneInText, senderPhone } = opts
+  trackingCandidate: string | null
+  senderPhone?: string
+}): Promise<any | null> {
+  const { confirmationNumber, orderNumber, phoneInText, trackingCandidate, senderPhone } = opts
 
   if (confirmationNumber) {
     const { data } = await supabaseAdmin
       .from('orders')
-      .select('order_number')
+      .select('*')
       .ilike('confirmation_number', confirmationNumber)
       .maybeSingle()
     if (data) return data
@@ -490,7 +464,7 @@ async function findOrderForContext(opts: {
   if (orderNumber) {
     const { data } = await supabaseAdmin
       .from('orders')
-      .select('order_number')
+      .select('*')
       .eq('order_number', orderNumber)
       .maybeSingle()
     if (data) return data
@@ -500,13 +474,23 @@ async function findOrderForContext(opts: {
     if (!phone) continue
     const { data } = await supabaseAdmin
       .from('orders')
-      .select('order_number')
-      .eq('customer_phone', phone)
+      .select('*')
+      .in('customer_phone', phoneVariants(phone))
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     if (data) return data
   }
 
+  if (trackingCandidate) {
+    const { data } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .eq('tracking_id', trackingCandidate)
+      .maybeSingle()
+    if (data) return data
+  }
+
   return null
 }
+

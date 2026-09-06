@@ -184,26 +184,80 @@ export function isGreetingOnly(text: string): boolean {
   return greetings > 0
 }
 
-// Customer number kisi bhi format mein bhej sakta hai:
-// +92 307 4942009, 0307-494-2009, (0092) 307.4942009, 92/307/4942009 waghera.
-// Ye function har format se digits nikaal ke standard "92XXXXXXXXXX" banata hai.
+// ── Pakistani mobile number — har mumkin shakal ────────────────────────────
+//
+// Customer number jaise chahe likh sakta hai. Sab yahan handle hote hain:
+//
+//   03067078508          0307-707-8508        0307 707 8508
+//   +92 307 7078508      +923067078508        92 307 7078508
+//   0092 307 7078508     092 307 7078508      (0307) 707-8508
+//   0307.707.8508        0307_707_8508        0307–707–8508 (en dash)
+//   3067078508           92-307-7078508       ٠٣٠٦ (Urdu ke adad)
+//
+// Sab ka natija ek hi shakal: "92XXXXXXXXXX"
+//
+// Pakistan ke mobile numbers hamesha 3 se shuru hote hain aur network+number
+// mila kar 10 adad ke hote hain (jaise 3067078508). Bas yehi asal hissa hai —
+// aage jo bhi lage (0, 92, 092, 0092, +92) wo sirf country/trunk prefix hai.
+
+/** Urdu/Arabic adad ko angrezi adad mein badalta hai (٠١٢٣ -> 0123) */
+function toAsciiDigits(text: string): string {
+  return text.replace(/[٠-٩۰-۹]/g, (ch) => {
+    const code = ch.charCodeAt(0)
+    const base = code >= 0x06f0 ? 0x06f0 : 0x0660
+    return String(code - base)
+  })
+}
+
 export function normalizeExtractedPhone(digits: string): string | null {
-  if (digits.length === 14 && digits.startsWith('0092')) return '92' + digits.slice(4)
-  if (digits.length === 11 && digits.startsWith('0')) return '92' + digits.slice(1)
-  if (digits.length === 12 && digits.startsWith('92')) return digits
+  let d = digits
+
+  // Country / trunk prefix utar do — jo bhi shakal mein laga ho
+  if (d.length === 15 && d.startsWith('00920')) d = d.slice(5)      // 0092 0307...
+  else if (d.length === 14 && d.startsWith('0092')) d = d.slice(4)  // 0092 307...
+  else if (d.length === 14 && d.startsWith('9200')) d = d.slice(4)
+  else if (d.length === 13 && d.startsWith('0920')) d = d.slice(4)  // 092 0307...
+  else if (d.length === 13 && d.startsWith('092')) d = d.slice(3)   // 092 307...
+  else if (d.length === 13 && d.startsWith('920')) d = d.slice(3)   // 92 0307...
+  else if (d.length === 12 && d.startsWith('92')) d = d.slice(2)    // 92 307...
+  else if (d.length === 11 && d.startsWith('0')) d = d.slice(1)     // 0307...
+
+  // Ab asal 10 adad bachne chahiyein, aur pehla adad 3 hona chahiye
+  if (d.length === 10 && d.charAt(0) === '3') return '92' + d
+
   return null
 }
 
+/**
+ * Ek hi number ki tamam shaklein — database mein purane orders kisi bhi
+ * shakal mein mehfooz ho sakte hain, is liye lookup teeno se karte hain.
+ */
+export function phoneVariants(normalized: string): string[] {
+  const local = normalized.slice(2) // 3067078508
+  return [normalized, '0' + local, local, '+' + normalized, '0092' + local]
+}
+
 export function extractPhone(text: string): string | null {
-  // Phone-jaisa dikhne wala koi bhi block dhoondo: digits + spaces/dashes/dots/
-  // slashes/commas/parentheses/plus - phir usme se digits nikaal ke length/prefix check karo
-  const candidates = text.match(/[+()0-9][+()0-9.,\-/\s]{7,}[0-9)]/g)
-  if (!candidates) return null
+  const t = toAsciiDigits(text)
+
+  // Phone-jaisa koi bhi block: adad + koi bhi aam separator
+  // (space, dash, en/em dash, dot, comma, slash, underscore, brackets, plus)
+  const candidates = t.match(/[+(\d][+()\d.,\-‐-―/_\s]{6,}[\d)]/g) || []
+
+  // Alag alag block ke ilawa, poore message ke adad bhi try karte hain —
+  // kabhi customer "0 3 0 6 7 0 7 8 5 0 8" jaise bhi likh deta hai
   for (const c of candidates) {
-    const digits = c.replace(/\D/g, '')
-    const normalized = normalizeExtractedPhone(digits)
+    const normalized = normalizeExtractedPhone(c.replace(/\D/g, ''))
     if (normalized) return normalized
   }
+
+  // Aakhri koshish: bina kisi separator ke likha hua lamba number
+  const bare = t.match(/\d{10,15}/g) || []
+  for (const b of bare) {
+    const normalized = normalizeExtractedPhone(b)
+    if (normalized) return normalized
+  }
+
   return null
 }
 
