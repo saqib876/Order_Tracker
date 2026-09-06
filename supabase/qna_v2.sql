@@ -70,3 +70,13 @@ create table if not exists wa_greeted (
   phone       text primary key,
   greeted_at  timestamptz not null default now()
 );
+
+
+-- ── 6. Ek customer ki ek hi review row ─────────────────────────────────────
+-- Pehle har cancel message par nayi row banti thi, is liye ek hi customer ke
+-- 3-4 card list mein aa jate the. Ab isi number ki isi wajah ki pending row
+-- mein naya message jur jata hai — ye do khane us ke liye hain.
+alter table manual_review_queue add column if not exists message_count int not null default 1;
+alter table manual_review_queue add column if not exists last_message_at timestamptz;
+
+update manual_review_queue set last_message_at = created_at where last_message_at is null;

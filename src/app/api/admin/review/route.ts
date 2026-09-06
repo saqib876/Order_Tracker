@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest) {
     console.error('[review] update failed:', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // List ka koi bhi purana version mita do — warna redirect ke baad
+  // wahi item dobara "Pending" mein nazar aa sakta hai.
+  revalidatePath('/admin/review')
 
   const back = new URL(`/admin/review?key=${encodeURIComponent(adminKey)}`, req.url)
   return NextResponse.redirect(back, { status: 303 })

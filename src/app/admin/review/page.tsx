@@ -7,6 +7,7 @@
  */
 
 import type { CSSProperties } from 'react'
+import { unstable_noStore as noStore } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 import { MANUAL_REASON_LABEL } from '@/lib/intents'
 import type { ManualReason } from '@/lib/intents'
@@ -21,6 +22,8 @@ interface ReviewRow {
   order_number: string | null
   status: string
   created_at: string
+  last_message_at: string | null
+  message_count: number | null
 }
 
 const REASON_COLOR: Record<string, string> = {
@@ -71,6 +74,10 @@ export default async function ReviewPage({
 
   const showDone = searchParams.show === 'done'
 
+  // Har dafa database se taza data — "Ho gaya" ke foran baad list
+  // purani na dikhe.
+  noStore()
+
   const { data, error } = await supabaseAdmin
     .from('manual_review_queue')
     .select('*')
@@ -117,7 +124,10 @@ export default async function ReviewPage({
           <article key={row.id} style={styles.card}>
             <div style={styles.cardTop}>
               <span style={{ ...styles.badge, background: color }}>{label}</span>
-              <span style={styles.when}>{formatWhen(row.created_at)}</span>
+              {(row.message_count || 1) > 1 && (
+                <span style={styles.count}>{row.message_count} messages</span>
+              )}
+              <span style={styles.when}>{formatWhen(row.last_message_at || row.created_at)}</span>
             </div>
 
             <p style={styles.message}>{row.message_text}</p>
@@ -198,10 +208,9 @@ const styles: Record<string, CSSProperties> = {
   },
   cardTop: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
-    gap: 12,
+    gap: 8,
   },
   badge: {
     color: '#fff',
@@ -210,7 +219,16 @@ const styles: Record<string, CSSProperties> = {
     padding: '4px 10px',
     borderRadius: 999,
   },
-  when: { color: '#94a3b8', fontSize: 13 },
+  count: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#475569',
+    background: '#f1f5f9',
+    border: '1px solid #e2e8f0',
+    padding: '3px 9px',
+    borderRadius: 999,
+  },
+  when: { color: '#94a3b8', fontSize: 13, marginLeft: 'auto' },
   message: {
     margin: '0 0 12px',
     fontSize: 15,

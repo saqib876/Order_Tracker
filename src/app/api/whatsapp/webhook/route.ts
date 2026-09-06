@@ -326,12 +326,46 @@ export async function POST(req: NextRequest) {
       senderPhone: from,
     })
 
-    await supabaseAdmin.from('manual_review_queue').insert({
-      phone: from,
-      message_text: text,
-      reason: manualReason,
-      order_number: contextOrder ? contextOrder.order_number : null,
-    })
+    // Ek customer aksar ek hi baat kai dafa likhta hai ("I want to cancel",
+    // phir "Please cancel my order", phir "For cancelling"). Pehle har
+    // message ki alag row banti thi, jis se ek hi customer ke 3-4 card
+    // list mein aa jate the aur ek ko "Ho gaya" karne par baqi wahin
+    // reh jate the — lagta tha ke hata hi nahi.
+    //
+    // Ab: isi number ki isi wajah ki pending row mojood ho to nayi nahi
+    // banti — usi mein naya message jur jata hai aur ginti barh jati hai.
+    const { data: pehleSeMojood } = await supabaseAdmin
+      .from('manual_review_queue')
+      .select('id, message_text, message_count')
+      .eq('phone', from)
+      .eq('reason', manualReason)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const abhi = new Date().toISOString()
+
+    if (pehleSeMojood) {
+      const badlav: Record<string, any> = {
+        message_text: `${pehleSeMojood.message_text}\n— ${text}`,
+        message_count: (Number(pehleSeMojood.message_count) || 1) + 1,
+        last_message_at: abhi,
+      }
+      // Order ab mila ho to bhar dete hain; na mile to purana jyun ka tyun
+      if (contextOrder) badlav.order_number = contextOrder.order_number
+
+      await supabaseAdmin.from('manual_review_queue').update(badlav).eq('id', pehleSeMojood.id)
+    } else {
+      await supabaseAdmin.from('manual_review_queue').insert({
+        phone: from,
+        message_text: text,
+        reason: manualReason,
+        order_number: contextOrder ? contextOrder.order_number : null,
+        message_count: 1,
+        last_message_at: abhi,
+      })
+    }
 
     // Q&A mein is topic ka apna jawab ho to wo behtar hai
     const qnaAnswer = await matchQna(text)
