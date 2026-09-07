@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
 import { normalizeForMatch } from '@/lib/textNormalize'
 import { detectManualReason, MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
-import { undeliveredNote, RETURNING_NOTE } from '@/lib/courierNotes'
+import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import {
   looksLikeOrderQuery,
   extractOrderNumber,
@@ -33,6 +33,7 @@ const WA_STEP: Record<string, number> = {
   printing_done: 2,
   shipped: 3,
   delivered: 4,
+  cancelled: 0,
 }
 
 const WA_STATUS_LABEL: Record<string, string> = {
@@ -42,6 +43,7 @@ const WA_STATUS_LABEL: Record<string, string> = {
   printing_done: 'Order ki printing mukammal ho chuki hai',
   shipped: 'Aap ka order dispatch ho chuka hai aur raaste mein hai',
   delivered: 'Aap ka order deliver ho chuka hai',
+  cancelled: 'Aap ka order cancel ho chuka hai',
 }
 
 // Server UTC mein chalta hai (Vercel default), lekin customer/website Pakistan
@@ -167,7 +169,7 @@ async function fetchLatestCourierRaw(trackingId: string): Promise<{ label: strin
 
 async function buildStatusReply(order: any): Promise<string> {
   const status = (order.status || '').toLowerCase()
-  const step = WA_STEP[status] || 1
+  const step = WA_STEP[status] ?? 1
   const label = WA_STATUS_LABEL[status] || `Status: ${order.status}`
   const orderDate = new Date(order.shopify_created_at || order.created_at)
 
@@ -180,7 +182,24 @@ async function buildStatusReply(order: any): Promise<string> {
     progressBar(step),
   ]
 
+  // Cancel ho chuke order par delivery ka koi hisaab kitaab nahi banta.
+  if (status === 'cancelled') {
+    lines.push('')
+    lines.push('❌ Ye order cancel ho chuka hai. Agar aap ko koi ghalat fehmi lagti hai to hamein message kar dein.')
+    return lines.join('\n')
+  }
+
   const hasTracking = Boolean(order.tracking_id)
+
+  // Courier ki live update ab SAB SE PEHLE nikalte hain, taake wo progress bar
+  // ke foran neeche aa sake — customer ki nazar sab se pehle wahin parti hai.
+  const latest = hasTracking ? await fetchLatestCourierRaw(order.tracking_id) : null
+  const stage = latest ? classifyCourierStage(latest.label) : null
+
+  if (latest) {
+    lines.push('')
+    lines.push(`📍 Latest Courier Update: ${latest.label} (${latest.time})`)
+  }
 
   if (!hasTracking) {
     // Tracking add hone se PEHLE - website jaisa hi: order date + 10/15 calendar din
@@ -204,14 +223,6 @@ async function buildStatusReply(order: any): Promise<string> {
     lines.push(`🚚 Tracking Number: ${order.tracking_id}`)
     lines.push(`🔗 Track here: ${trackingUrl(order.tracking_id)}`)
 
-    const latest = await fetchLatestCourierRaw(order.tracking_id)
-    const stage = latest ? classifyCourierStage(latest.label) : null
-
-    if (latest) {
-      lines.push('')
-      lines.push(`📍 Latest Update: ${latest.label} (${latest.time})`)
-    }
-
     if (status === 'delivered' || stage === 'delivered') {
       lines.push('')
       lines.push('✅ Aapka order deliver ho chuka hai. Shopping ke liye shukriya!')
@@ -219,7 +230,7 @@ async function buildStatusReply(order: any): Promise<string> {
       // MOVED TO ORIGIN / REACHED AT ORIGIN / OUT FOR RETURN SUBMISSION /
       // RETURNED SUBMITTED — sab par ek hi tafseeli note jata hai.
       lines.push('')
-      lines.push(RETURNING_NOTE)
+      lines.push(noteToWhatsAppText(noteForCourierStage('returning', order.tracking_id)))
     } else {
       let expectedDate: Date
 
@@ -251,12 +262,7 @@ async function buildStatusReply(order: any): Promise<string> {
       // is liye Remaining ke baad poora Note bhi jata hai.
       if (stage === 'undelivered' || stage === 'contacting') {
         lines.push('')
-        lines.push(
-          undeliveredNote(
-            stage === 'undelivered' ? 'UNDELIVERED' : 'CONTACTING CONSIGNEE',
-            order.tracking_id
-          )
-        )
+        lines.push(noteToWhatsAppText(noteForCourierStage(stage, order.tracking_id)))
       }
     }
   }

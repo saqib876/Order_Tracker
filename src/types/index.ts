@@ -6,6 +6,7 @@ export type OrderStatus =
   | 'ready_to_ship'
   | 'shipped'
   | 'delivered'
+  | 'cancelled'
 
 // ── Human-readable labels + colours + UI step ────────────────
 export const STATUS_CONFIG: Record<
@@ -41,6 +42,12 @@ export const STATUS_CONFIG: Record<
     label: 'Delivered',
     color: '#22c55e',
     step: 6,
+  },
+  // Cancel kisi step par nahi hota — ye poore safar se bahar hai.
+  cancelled: {
+    label: 'Order Cancelled',
+    color: '#dc2626',
+    step: 0,
   },
 }
 
@@ -122,6 +129,13 @@ export interface ShopifyWebhookOrder {
 
   tags: string
   note: string | null
+
+  /**
+   * Shopify order cancel hote hi ye bhar deta hai. Jis bhi topic par webhook
+   * aaye (orders/cancelled ho ya orders/updated), asli sachai yehi field hai.
+   */
+  cancelled_at?: string | null
+  cancel_reason?: string | null
 
   note_attributes: { name: string; value: string }[]
 

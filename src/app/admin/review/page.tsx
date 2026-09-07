@@ -1,10 +1,12 @@
 /**
  * Manual Check list — /admin/review?key=ADMIN_KEY
  *
- * Do qism ke messages yahan aate hain — baayen taraf tabdeeli ki darkhwastein
- * (order abhi raaste mein hai), daayen taraf mil chuke order ki shikayatein.
- * Har row par "WhatsApp mein kholein" ka link hai jo seedha usi customer ki
- * chat khol deta hai.
+ * Do qism ke messages yahan aate hain, aur dono ka apna alag section hai:
+ *   1. Tabdeeli ki darkhwast — order abhi raaste mein hai
+ *   2. Order ki shikayat — order mil chuka hai
+ * Har section apne tags khud dikhata hai aur usi ke messages us ke neeche
+ * aate hain. Har row par "WhatsApp mein kholein" ka link hai jo seedha usi
+ * customer ki chat khol deta hai.
  */
 
 import type { CSSProperties } from 'react'
@@ -38,6 +40,19 @@ const REASON_COLOR: Record<string, string> = {
   missing_items: '#a16207',
   quality_issue: '#9333ea',
 }
+
+const SECTIONS: { title: string; note: string; reasons: ManualReason[] }[] = [
+  {
+    title: 'Tabdeeli ki darkhwast',
+    note: 'Order abhi raaste mein hai',
+    reasons: CHANGE_REASONS,
+  },
+  {
+    title: 'Order ki shikayat',
+    note: 'Order mil chuka hai',
+    reasons: ISSUE_REASONS,
+  },
+]
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString('en-PK', {
@@ -98,36 +113,60 @@ export default async function ReviewPage({
     return `/admin/review?${p.toString()}`
   }
 
+  const renderCard = (row: ReviewRow) => {
+    const label = MANUAL_REASON_LABEL[row.reason as ManualReason] || row.reason
+    const color = REASON_COLOR[row.reason] || '#475569'
+
+    return (
+      <article key={row.id} style={styles.card}>
+        <div style={styles.cardTop}>
+          <span style={{ ...styles.badge, background: color }}>{label}</span>
+          {(row.message_count || 1) > 1 && (
+            <span style={styles.count}>{row.message_count} messages</span>
+          )}
+          <span style={styles.when}>{formatWhen(row.last_message_at || row.created_at)}</span>
+        </div>
+
+        <p style={styles.message}>{row.message_text}</p>
+
+        <div style={styles.meta}>
+          <span>
+            <strong>Number:</strong> +{row.phone}
+          </span>
+          {row.order_number && (
+            <span>
+              <strong>Order:</strong> #{row.order_number}
+            </span>
+          )}
+        </div>
+
+        <div style={styles.actions}>
+          <a
+            href={`https://wa.me/${row.phone}`}
+            target="_blank"
+            rel="noreferrer"
+            style={styles.waButton}
+          >
+            WhatsApp mein kholein
+          </a>
+
+          {!showDone && (
+            <form action="/api/admin/review" method="POST" style={{ margin: 0 }}>
+              <input type="hidden" name="id" value={row.id} />
+              <input type="hidden" name="key" value={adminKey} />
+              <button type="submit" style={styles.doneButton}>
+                Ho gaya
+              </button>
+            </form>
+          )}
+        </div>
+      </article>
+    )
+  }
+
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Manually Check</h1>
-      <div style={styles.legend}>
-        <section style={styles.legendCol}>
-          <h2 style={styles.legendHead}>Tabdeeli ki darkhwast</h2>
-          <p style={styles.legendNote}>Order abhi raaste mein hai</p>
-          <ul style={styles.legendList}>
-            {CHANGE_REASONS.map((r) => (
-              <li key={r} style={styles.legendItem}>
-                <span style={{ ...styles.dot, background: REASON_COLOR[r] }} />
-                {MANUAL_REASON_LABEL[r]}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section style={styles.legendCol}>
-          <h2 style={styles.legendHead}>Order ki shikayat</h2>
-          <p style={styles.legendNote}>Order mil chuka hai</p>
-          <ul style={styles.legendList}>
-            {ISSUE_REASONS.map((r) => (
-              <li key={r} style={styles.legendItem}>
-                <span style={{ ...styles.dot, background: REASON_COLOR[r] }} />
-                {MANUAL_REASON_LABEL[r]}
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
 
       <div style={styles.tabs}>
         <a href={qs({})} style={showDone ? styles.tab : styles.tabActive}>
@@ -140,62 +179,43 @@ export default async function ReviewPage({
 
       {error && <p style={styles.error}>Database error: {error.message}</p>}
 
-      {!error && rows.length === 0 && (
-        <p style={styles.empty}>
-          {showDone ? 'Abhi tak kuch mark nahi hua.' : 'Sab clear hai — koi pending item nahi. ✅'}
-        </p>
-      )}
+      {!error &&
+        SECTIONS.map((section) => {
+          const sectionRows = rows.filter((r) =>
+            section.reasons.includes(r.reason as ManualReason)
+          )
 
-      {rows.map((row) => {
-        const label = MANUAL_REASON_LABEL[row.reason as ManualReason] || row.reason
-        const color = REASON_COLOR[row.reason] || '#475569'
+          return (
+            <section key={section.title} style={styles.section}>
+              <header style={styles.sectionHead}>
+                <div>
+                  <h2 style={styles.sectionTitle}>{section.title}</h2>
+                  <p style={styles.sectionNote}>{section.note}</p>
+                </div>
+                <span style={styles.sectionCount}>{sectionRows.length}</span>
+              </header>
 
-        return (
-          <article key={row.id} style={styles.card}>
-            <div style={styles.cardTop}>
-              <span style={{ ...styles.badge, background: color }}>{label}</span>
-              {(row.message_count || 1) > 1 && (
-                <span style={styles.count}>{row.message_count} messages</span>
+              <ul style={styles.tagRow}>
+                {section.reasons.map((r) => (
+                  <li key={r} style={styles.tag}>
+                    <span style={{ ...styles.dot, background: REASON_COLOR[r] }} />
+                    {MANUAL_REASON_LABEL[r]}
+                  </li>
+                ))}
+              </ul>
+
+              {sectionRows.length === 0 ? (
+                <p style={styles.sectionEmpty}>
+                  {showDone
+                    ? 'Is section mein abhi tak kuch mark nahi hua.'
+                    : 'Is section mein koi pending item nahi. ✅'}
+                </p>
+              ) : (
+                sectionRows.map((row) => renderCard(row))
               )}
-              <span style={styles.when}>{formatWhen(row.last_message_at || row.created_at)}</span>
-            </div>
-
-            <p style={styles.message}>{row.message_text}</p>
-
-            <div style={styles.meta}>
-              <span>
-                <strong>Number:</strong> +{row.phone}
-              </span>
-              {row.order_number && (
-                <span>
-                  <strong>Order:</strong> #{row.order_number}
-                </span>
-              )}
-            </div>
-
-            <div style={styles.actions}>
-              <a
-                href={`https://wa.me/${row.phone}`}
-                target="_blank"
-                rel="noreferrer"
-                style={styles.waButton}
-              >
-                WhatsApp mein kholein
-              </a>
-
-              {!showDone && (
-                <form action="/api/admin/review" method="POST" style={{ margin: 0 }}>
-                  <input type="hidden" name="id" value={row.id} />
-                  <input type="hidden" name="key" value={adminKey} />
-                  <button type="submit" style={styles.doneButton}>
-                    Ho gaya
-                  </button>
-                </form>
-              )}
-            </div>
-          </article>
-        )
-      })}
+            </section>
+          )
+        })}
     </main>
   )
 }
@@ -208,40 +228,8 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: 'system-ui, -apple-system, Segoe UI, Arial, sans-serif',
     color: '#0f172a',
   },
-  h1: { fontSize: 26, fontWeight: 700, margin: '0 0 4px' },
-  sub: { color: '#64748b', fontSize: 14, margin: '0 0 20px' },
-  // auto-fit se chhoti screen par do column khud ek ke neeche ek ho jate hain
-  // (inline styles mein media query nahi likhi ja sakti)
-  legend: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-    gap: 12,
-    margin: '14px 0 22px',
-  },
-  legendCol: {
-    border: '1px solid #e2e8f0',
-    borderRadius: 12,
-    padding: '12px 14px 14px',
-    background: '#f8fafc',
-  },
-  legendHead: {
-    fontSize: 13,
-    fontWeight: 700,
-    margin: 0,
-    color: '#0f172a',
-    letterSpacing: '.01em',
-  },
-  legendNote: { fontSize: 12, color: '#94a3b8', margin: '2px 0 10px' },
-  legendList: { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 13,
-    color: '#334155',
-  },
-  dot: { width: 9, height: 9, borderRadius: 999, flexShrink: 0 },
-  tabs: { display: 'flex', gap: 8, marginBottom: 20 },
+  h1: { fontSize: 26, fontWeight: 700, margin: '0 0 16px' },
+  tabs: { display: 'flex', gap: 8, marginBottom: 22 },
   tab: {
     padding: '7px 16px',
     borderRadius: 999,
@@ -260,6 +248,55 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
   },
+  section: {
+    border: '1px solid #e2e8f0',
+    borderRadius: 16,
+    padding: '16px 16px 4px',
+    marginBottom: 22,
+    background: '#f8fafc',
+  },
+  sectionHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: 700, margin: 0, color: '#0f172a' },
+  sectionNote: { fontSize: 12.5, color: '#94a3b8', margin: '2px 0 0' },
+  sectionCount: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: '#0f172a',
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    minWidth: 30,
+    textAlign: 'center',
+    padding: '4px 9px',
+    borderRadius: 999,
+  },
+  // flexWrap se ye chips chhoti screen par khud agli line par chali jati hain
+  tagRow: {
+    listStyle: 'none',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    margin: '12px 0 14px',
+    padding: 0,
+  },
+  tag: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#334155',
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    padding: '4px 10px',
+    borderRadius: 999,
+  },
+  dot: { width: 8, height: 8, borderRadius: 999, flexShrink: 0 },
+  sectionEmpty: { fontSize: 13, color: '#94a3b8', margin: '0 0 14px' },
   card: {
     border: '1px solid #e2e8f0',
     borderRadius: 12,
@@ -267,9 +304,12 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: 12,
     background: '#fff',
   },
+  // flexWrap zaroori hai: phone par badge + ginti + waqt ek line mein nahi
+  // samate, aur bina wrap ke badge ka text do tukdon mein toot jata hai.
   cardTop: {
     display: 'flex',
     alignItems: 'center',
+    flexWrap: 'wrap',
     marginBottom: 10,
     gap: 8,
   },
@@ -279,6 +319,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 600,
     padding: '4px 10px',
     borderRadius: 999,
+    whiteSpace: 'nowrap',
   },
   count: {
     fontSize: 12,
@@ -288,6 +329,7 @@ const styles: Record<string, CSSProperties> = {
     border: '1px solid #e2e8f0',
     padding: '3px 9px',
     borderRadius: 999,
+    whiteSpace: 'nowrap',
   },
   when: { color: '#94a3b8', fontSize: 13, marginLeft: 'auto' },
   message: {
@@ -304,7 +346,7 @@ const styles: Record<string, CSSProperties> = {
     color: '#475569',
     marginBottom: 14,
   },
-  actions: { display: 'flex', gap: 10, alignItems: 'center' },
+  actions: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
   waButton: {
     background: '#25D366',
     color: '#fff',
@@ -313,6 +355,7 @@ const styles: Record<string, CSSProperties> = {
     textDecoration: 'none',
     fontSize: 14,
     fontWeight: 600,
+    whiteSpace: 'nowrap',
   },
   doneButton: {
     background: '#f1f5f9',
@@ -323,7 +366,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
-  empty: { color: '#64748b', fontSize: 15, padding: '24px 0' },
   error: { color: '#dc2626', fontSize: 15, lineHeight: 1.6 },
 }

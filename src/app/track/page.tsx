@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { noteForCourierStage } from '@/lib/courierNotes'
+import type { CourierNote } from '@/lib/courierNotes'
 
 type OrderStatus = 'in_process' | 'shipped' | 'delivered' | 'cancelled'
 
@@ -24,6 +26,47 @@ interface TrackingResult {
     shippedAt: string | null
   }
   history: { status: OrderStatus; note: string | null; changed_at: string }[]
+}
+
+/* Wohi Note jo WhatsApp par jata hai — matan @/lib/courierNotes se aata hai,
+   is liye dono jagah hamesha ek jaisa rehta hai. Ye panel dashboard ke daayen
+   column mein sab se upar baithta hai: bare screen par status ke bilkul
+   bagal mein, phone par status card ke foran neeche — dono soorat mein
+   customer ko scroll kiye baghair nazar aa jata hai. */
+function CourierNotePanel({ note, tone }: { note: CourierNote; tone: 'red' | 'amber' }) {
+  const linkFor = (value: string) =>
+    value.includes('@') ? `mailto:${value}`
+      : /\d{3}/.test(value) && value.includes('(') ? `tel:${value.replace(/[^\d+]/g, '')}`
+      : null
+
+  return (
+    <div className={`cnote ${tone}`}>
+      <div className="cnote-head">
+        <span className="cnote-ic"><IconAlert /></span>
+        <span className="cnote-title">{note.title}</span>
+      </div>
+
+      {note.paras.map((p, i) => <p key={i} className="cnote-p">{p}</p>)}
+
+      {note.contact.length > 0 && (
+        <div className="cnote-contact">
+          {note.contact.map(c => {
+            const href = linkFor(c.value)
+            return (
+              <div key={c.label} className="cnote-row">
+                <span className="cnote-k">{c.label}</span>
+                {href
+                  ? <a className="cnote-v" href={href}>{c.value}</a>
+                  : <span className="cnote-v">{c.value}</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {note.footer && <p className="cnote-foot">{note.footer}</p>}
+    </div>
+  )
 }
 
 /* ---------- date / working-day helpers ---------- */
@@ -471,6 +514,29 @@ html,body{background:var(--canvas)}
 .track-link svg{width:14px;height:14px}
 
 /* making note */
+/* Courier ka tafseeli Note. Matan lamba hai, is liye naap tol se: chhota
+   font, khula line-height, aur paragraph ke darmiyan saaf faasla — warna
+   deewar jaisa block ban jata hai jise koi nahi parhta. */
+.cnote{border:1px solid;border-radius:20px;padding:20px 22px;font-size:12.7px;line-height:1.65}
+.cnote.red{background:var(--red-bg);border-color:var(--red-br);color:#7C2020}
+.cnote.amber{background:var(--amb-bg);border-color:var(--amb-br);color:#6B4708}
+.cnote-head{display:flex;align-items:center;gap:11px;margin-bottom:13px}
+.cnote-ic{width:38px;height:38px;flex-shrink:0;border-radius:12px;background:#fff;border:1px solid currentColor;display:flex;align-items:center;justify-content:center}
+.cnote-ic svg{width:19px;height:19px}
+.cnote.red .cnote-ic{border-color:var(--red-br);color:var(--red)}
+.cnote.amber .cnote-ic{border-color:var(--amb-br);color:var(--amb-ic)}
+.cnote-title{font-family:var(--disp);font-size:16px;font-weight:700;letter-spacing:.2px}
+.cnote-p{margin:0 0 11px}
+.cnote-p:last-of-type{margin-bottom:0}
+.cnote-contact{margin-top:14px;background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.06);border-radius:13px;padding:11px 14px;display:grid;gap:7px}
+.cnote-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.cnote-k{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;opacity:.72;flex:1 1 auto;min-width:0}
+.cnote-v{font-family:var(--disp);font-size:13.5px;font-weight:700;word-break:break-word;color:inherit;text-decoration:none;border-bottom:1px solid currentColor}
+.cnote-foot{margin:13px 0 0;font-weight:600}
+@media(max-width:480px){
+  .cnote{padding:17px 16px;font-size:12.4px;border-radius:17px}
+  .cnote-row{flex-direction:column;gap:1px}
+}
 .mnote{display:flex;gap:15px;align-items:center;padding:18px 22px;background:linear-gradient(100deg,var(--blue-bg),#F3FAFF);border:1px solid var(--blue-br);border-radius:20px}
 .mnote .mi{width:44px;height:44px;flex-shrink:0;border-radius:13px;background:#fff;border:1px solid var(--blue-br);display:flex;align-items:center;justify-content:center;color:var(--blue)}
 .mnote .mi svg{width:22px;height:22px}
@@ -817,6 +883,13 @@ export default function TrackPage() {
 
           {/* right */}
           <div className="col">
+            {courierProblem && o.trackingId && (
+              <CourierNotePanel
+                note={noteForCourierStage(courierCategory as 'undelivered' | 'contacting' | 'returning', o.trackingId)}
+                tone={courierCategory === 'undelivered' ? 'red' : 'amber'}
+              />
+            )}
+
             {inProcess && (
               <div className="mnote">
                 <div className="mi"><IconSpark /></div>

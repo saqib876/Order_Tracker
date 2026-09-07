@@ -55,6 +55,14 @@ export async function POST(req: NextRequest) {
 
   if (trackingId) detectedStatus = 'shipped'
 
+  // ── 5b. Cancel sab par bhaari hai ─────────────────────────
+  // Order cancel ho jaye to na tag maayne rakhta hai na tracking number —
+  // customer ko website aur WhatsApp dono par 'Order Cancelled' hi dikhna
+  // chahiye. Topic aur payload dono dekhte hain: chahe orders/cancelled aaye
+  // ya orders/updated, cancelled_at bhar chuka hota hai.
+  const isCancelled = topic === 'orders/cancelled' || Boolean(payload.cancelled_at)
+  if (isCancelled) detectedStatus = 'cancelled'
+
 
   // ── 6. Build line items snapshot ──────────────────────────
   const lineItems = payload.line_items.map((li) => ({
@@ -121,7 +129,9 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from('order_status_history').insert({
       order_id: upserted.id,
       status: detectedStatus,
-      note: `Webhook: ${topic}`,
+      note: isCancelled
+        ? `Webhook: ${topic}${payload.cancel_reason ? ` (${payload.cancel_reason})` : ''}`
+        : `Webhook: ${topic}`,
     })
   }
 
