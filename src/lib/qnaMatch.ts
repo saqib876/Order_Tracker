@@ -26,7 +26,7 @@
  *    Galat jawab, koi jawab na hone se zyada nuqsan karta hai.
  */
 
-import { normalizeForMatch } from '@/lib/textNormalize'
+import { normalizeForMatch, expandNumberAbbreviation } from '@/lib/textNormalize'
 import { toConcept } from '@/lib/synonyms'
 
 // ── Faltu lafz ────────────────────────────────────────────────────────────
@@ -46,6 +46,12 @@ const STOPWORDS = new Set([
   'i', 'my', 'me', 'you', 'your', 'the', 'a', 'an', 'of', 'for', 'on', 'in',
   'it', 'this', 'that', 'and', 'so', 'but', 'at', 'be', 'im', 'its', 'we',
   'us', 'our', 'please', 'want', 'get', 'got',
+  // Salaam — kisi sawaal ka hissa nahi. "hi" ko asal lafz ginne se akela
+  // "Hi" order-status ke jumlon ("Hi i have not received my order") se
+  // match ho jata tha aur customer se order number maang liya jata tha.
+  // (Urdu ka "hi" — "order hi nahi aya" — bhi sirf zor dene ke liye hai.)
+  'hi', 'hello', 'helo', 'hey', 'hlo', 'hlw', 'aoa', 'salam', 'salaam',
+  'assalam', 'asalam', 'aslam', 'walaikum', 'alaikum', 'assalamualaikum',
 ])
 
 export interface QnaEntry {
@@ -159,7 +165,7 @@ export function getThreshold(): number {
  * likhne wale dono ek hi bank se match ho sakein.
  */
 export function tokenize(text: string): string[] {
-  return normalizeForMatch(text)
+  return expandNumberAbbreviation(normalizeForMatch(text))
     .split(/\s+/)
     .map((w) => w.trim())
     .filter((w) => w.length > 1 && !STOPWORDS.has(w))

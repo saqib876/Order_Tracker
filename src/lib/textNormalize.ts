@@ -133,6 +133,11 @@ const WORD_NORMALIZE: Record<string, string> = {
   addres: 'address',
   chnge: 'change',
   chng: 'change',
+  // "Camera proction k Sath cover bna dyn gy"
+  proction: 'protection',
+  protction: 'protection',
+  protecton: 'protection',
+  protaction: 'protection',
   desgin: 'design',
   dizain: 'design',
   covr: 'cover',
@@ -195,4 +200,16 @@ export function stripEnglishAux(text: string): string {
  */
 export function normalizeForMatch(text: string): string {
   return stripEnglishAux(normalizeRomanUrdu(cleanText(text)))
+}
+
+/**
+ * "order no", "mobile no", "cell no" mein "no" ka matlab "number" hai — lekin
+ * akela "No" ka matlab "nahi" hai. Pehle "no" ko har jagah "number" bana
+ * diya jata tha, to customer ka "No" number-change wale jawab se jur jata
+ * tha. Ab sirf in lafzon ke baad wala "no" number banta hai.
+ */
+const NUMBER_NO = /\b(order|mobile|cell|phone|ph|contact|tracking|cn|whatsapp|wa|confirmation|account|acc)\s+no\b/g
+
+export function expandNumberAbbreviation(normalized: string): string {
+  return normalized.replace(NUMBER_NO, '$1 number')
 }

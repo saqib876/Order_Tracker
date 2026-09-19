@@ -69,7 +69,9 @@ const CONCEPT_GROUPS: Record<string, string[]> = {
   cancel: ['cancel', 'cancelled', 'cancellation'],
   address: ['address', 'pata', 'location'],
   refund: ['refund', 'return', 'wapis', 'wapas', 'exchange', 'replace', 'replacement'],
-  number: ['number', 'num', 'no', 'nmbr', 'nombr'],
+  // 'no' jaan boojh kar yahan NAHI hai — akela "No" ka matlab "nahi" hai.
+  // "order no / mobile no" textNormalize.ts ka expandNumberAbbreviation sambhalta hai.
+  number: ['number', 'num', 'nmbr', 'nombr'],
 
   // ── halat ───────────────────────────────────────────────────────────────
   late: ['late', 'deri', 'delay', 'delayed', 'der'],

@@ -281,3 +281,148 @@ export function extractTrackingCandidate(text: string): string | null {
   }
   return null
 }
+
+// ── Sirf haan / nahi / ok — koi sawaal nahi ────────────────────────────────
+// "No", "No abhi nhi", "Ok", "Ji theek hai", "Thanks" — ye jawab hote hain,
+// sawaal nahi. Pehle "no" ko "number" samjha jata tha, aur bot in par
+// "apna order number bhejein" ya number-change wala lamba jawab bhej deta
+// tha. Aise message par bot ko chup rehna chahiye.
+//
+// Ye lafz normalizeForMatch ke BAAD wali shakal mein hain (nhi -> nahi,
+// ab -> abhi waghera), aur dohre harf squeeze kiye hote hain (okkk -> ok).
+const ACK_WORDS = new Set([
+  // inkaar
+  'no', 'nahi', 'na', 'nope', 'nah', 'abhi', 'filhal', 'baad', 'bad', 'later',
+  // iqraar
+  'ok', 'oky', 'okay', 'okey', 'ohk', 'k', 'kk', 'yes', 'yep', 'yeah', 'ya',
+  'yup', 'han', 'haan', 'hn', 'ha', 'hanji', 'ji', 'jee', 'g', 'sure', 'done',
+  'thik', 'theek', 'thek', 'thk', 'tik', 'acha', 'achaa', 'achha',
+  'hm', 'hmm', 'fine', 'good', 'great', 'nice', 'perfect', 'alright',
+  // shukriya
+  'thanks', 'thank', 'thanku', 'thankyou', 'thx', 'tnx', 'ty', 'shukriya',
+  'shukria', 'jazakallah', 'jzk', 'welcome',
+  // bharti ke lafz
+  'hai', 'hy', 'he', 'h', 'bhai', 'sir', 'madam', 'mam', 'you', 'u', 'so',
+  'much', 'very', 'bohat', 'bht', 'bhut', 'boht', 'mein', 'main', 'kr', 'kar',
+  'lunga', 'lungi', 'lu', 'loon', 'krunga', 'karunga', 'karungi', 'krungi',
+  'dunga', 'dungi', 'bataunga', 'bataungi', 'btata', 'btaunga',
+])
+
+// In mein se kam se kam ek lafz lazmi hai — warna "order karunga" jaisa
+// jumla (sirf bharti ke lafz) bhi ack gina jata.
+const ACK_CORE = new Set([
+  'no', 'nahi', 'na', 'nope', 'nah', 'ok', 'oky', 'okay', 'okey', 'ohk', 'k',
+  'kk', 'yes', 'yep', 'yeah', 'yup', 'han', 'haan', 'hanji', 'ji', 'jee',
+  'sure', 'done', 'thik', 'theek', 'thek', 'thk', 'tik', 'acha', 'achaa',
+  'achha', 'hm', 'hmm', 'fine', 'good', 'great', 'nice', 'perfect', 'alright',
+  'thanks', 'thank', 'thanku', 'thankyou', 'thx', 'tnx', 'ty', 'shukriya',
+  'shukria', 'jazakallah', 'jzk', 'later', 'filhal',
+])
+
+export function isAcknowledgementOnly(text: string): boolean {
+  const t = normalizeForMatch(text)
+  if (!t || t.length > 40) return false
+
+  const words = t.split(/\s+/).filter(Boolean).map(squeezeRepeats)
+  if (words.length === 0 || words.length > 6) return false
+
+  let core = 0
+  for (const w of words) {
+    if (!ACK_WORDS.has(w)) return false
+    if (ACK_CORE.has(w)) core++
+  }
+  return core > 0
+}
+
+// ── "Order kiya hi nahi" — abhi tak order kiya hi nahi ─────────────────────
+// Lafz "order" dekh kar bot ise order ka sawaal samajhta tha aur order
+// number maang leta tha — jo is customer ke paas hai hi nahi.
+//
+// Dhyan: "order NAHI MILA" / "order hi nahi aya" ulta matlab hai (order kiya
+// hai, pohancha nahi) — wo asal order ka sawaal hai. Is liye inkaar ke foran
+// baad agar milne/pohanchne wala lafz ho to ye function false deta hai.
+const RECEIVE_AFTER_NEGATION =
+  /^(mila|mile|mili|milega|milegi|aya|aaya|ayi|aayi|aye|aaye|pohoncha|pohanch|receive|received|deliver|delivered|hua|huwa|hwa|hui|hoi|update|confirm|ship|shipped|dispatch)\b/
+
+export function saysNotOrderedYet(text: string): boolean {
+  const t = normalizeForMatch(text)
+  if (!t) return false
+
+  // English: "not ordered yet", "haven't ordered", "didn't order"
+  if (/\b(not|never|didnt|havent|hasnt)\s+(yet\s+)?(order|ordered|placed)\b/.test(t)) return true
+
+  // Roman Urdu: "order kiya hi nahi", "order nahi kiya", "abhi order nahi karna"
+  const m = t.match(
+    /\border\s+(?:(?:kiya|kia|kya|kiye|ki|kari|kra|place)\s+)?(?:(?:hi|he|bhi|b|to|tou)\s+)?nahi\b\s*(\S*)/
+  )
+  if (m) {
+    const next = m[1] || ''
+    if (!RECEIVE_AFTER_NEGATION.test(next)) return true
+  }
+
+  // "nahi kiya order" / "abhi nahi karna order"
+  if (/\bnahi\s+(kiya|kia|karna|karni|kia\s+tha)\s+order\b/.test(t)) return true
+
+  return false
+}
+
+// ── "Maine order kar diya hai" — order ho chuka hai ────────────────────────
+// Ye customer purana/maujooda order pooch raha hai. Isse "how to place your
+// order" wala greeting nahi jana chahiye (wo naye kharidar ke liye hai).
+export function saysAlreadyOrdered(text: string): boolean {
+  const t = normalizeForMatch(text)
+  if (!t || saysNotOrderedYet(text)) return false
+
+  return (
+    /\b(i|maine|mene|meine|mein|main|hum|humne|hamne)\s+(already\s+)?(ordered|order\s+(kiya|kia|kar|kr|place|laga|lgaya|lagaya))\b/.test(t) ||
+    /\balready\s+ordered\b/.test(t) ||
+    /\border\s+(kar|kr)\s+(diya|dia|dya|chuka|chuki|chuke)\b/.test(t) ||
+    /\border\s+place\s+(kar|kr|ho)\b/.test(t) ||
+    /\border\s+(kiya|kia)\s+(hai|tha|hua)\b/.test(t)
+  )
+}
+
+// ── WhatsApp ke message mein se parhne layak matan ────────────────────────
+// Pehle sirf `type === 'text'` liya jata tha. Tasveer ke sath likha sawaal
+// ("Is this for iPhone 13?") aur order ka screenshot — dono bilkul phenk
+// diye jate the, customer ko koi jawab nahi milta tha.
+//
+//   text                 -> us ka matan
+//   image/video/document -> caption (na ho to khali string: media aaya hai,
+//                           lekin parhne ko kuch nahi)
+//   button / interactive -> dabaye gaye button ka naam
+//   baqi (reaction, delivery receipt waghera) -> null: is par kuch nahi karna
+export interface IncomingText {
+  text: string
+  isMedia: boolean
+}
+
+export function extractIncomingText(message: any): IncomingText | null {
+  if (!message || typeof message !== 'object') return null
+
+  switch (message.type) {
+    case 'text':
+      return { text: String(message.text?.body || ''), isMedia: false }
+
+    case 'image':
+    case 'video':
+    case 'document':
+    case 'sticker':
+    case 'audio': {
+      const media = message[message.type] || {}
+      return { text: String(media.caption || ''), isMedia: true }
+    }
+
+    case 'button':
+      return { text: String(message.button?.text || ''), isMedia: false }
+
+    case 'interactive': {
+      const i = message.interactive || {}
+      const title = i.button_reply?.title || i.list_reply?.title || ''
+      return { text: String(title), isMedia: false }
+    }
+
+    default:
+      return null
+  }
+}

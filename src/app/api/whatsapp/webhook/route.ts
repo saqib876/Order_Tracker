@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
-import { normalizeForMatch } from '@/lib/textNormalize'
-import { detectManualReason, MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
+import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
-import {
-  looksLikeOrderQuery,
-  extractOrderNumber,
-  extractConfirmationNumber,
-  mentionsOrderNumber,
-  extractPhone,
-  isNumericOnlyMessage,
-  extractTrackingCandidate,
-  phoneVariants,
-} from '@/lib/messageParse'
+import { phoneVariants, extractIncomingText } from '@/lib/messageParse'
+import { planReply } from '@/lib/replyPlan'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +12,11 @@ const trackingUrl = (id: string) => `https://postex.pk/tracking?cn=${id}`
 const WEBSITE_TRACKING_LINK = 'https://myzan.net/pages/track-your-order'
 const MIN_WORKING_DAYS = 10
 const MAX_WORKING_DAYS = 15
+
+// Ek hi order ki tracking isi customer ko is waqt ke andar dobara nahi jati
+const TRACKING_REPEAT_HOURS = Number(process.env.TRACKING_REPEAT_HOURS) || 24
+// Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
+const ASK_STATE_HOURS = 24
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -288,13 +284,23 @@ export async function POST(req: NextRequest) {
   const payload = await req.json()
 
   const message = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
-  if (!message || message.type !== 'text') {
-    // status updates (delivered/read receipts) ya non-text messages - ignore
+  const incoming = extractIncomingText(message)
+  if (!incoming) {
+    // delivery/read receipts, reactions waghera — in par kuch nahi karna
     return NextResponse.json({ ok: true })
   }
 
   const from: string = message.from // already "923001234567" format
-  const text: string = message.text.body
+  const text = incoming.text.trim()
+
+  // ── Tasveer / video bina caption ke ─────────────────────────────────────
+  // Parhne ko kuch nahi — order ka screenshot bhi ho sakta hai, design bhi.
+  // Pehle aise message bilkul nazarandaz ho jate the; ab kam se kam greeting
+  // chali jati hai (agar 24 ghante mein nahi gayi) taake customer ko jawab mile.
+  if (!text) {
+    await maybeSendGreeting(from)
+    return NextResponse.json({ ok: true })
+  }
 
   const { data: state } = await supabaseAdmin
     .from('wa_conversation_state')
@@ -305,56 +311,33 @@ export async function POST(req: NextRequest) {
   const clearState = () =>
     supabaseAdmin.from('wa_conversation_state').delete().eq('phone', from)
 
-  // ── 0) Greeting sab se pehle ──────────────────────────────────────────────
-  // Naya customer ho ya 24 ghante baad wapas aaya ho — us ko sab se pehle
-  // aap ka greeting message jata hai, chahe us ne kuch bhi poocha ho. Us ke
-  // baad neeche wali logic us ke asal sawaal ka jawab dhoondti hai.
-  await maybeSendGreeting(from)
+  const askedBefore = isFreshAskState(state)
+  const plan = planReply(text, { alreadyAskedForNumber: askedBefore })
+  const { confirmationNumber, orderNumber, phoneInText, trackingCandidate, manualReason } = plan
 
-  const confirmationNumber = extractConfirmationNumber(text)
-  const orderNumber = extractOrderNumber(text)
-  const phoneInText = extractPhone(text)
-  const trackingCandidate = extractTrackingCandidate(text)
+  // ── 0) Greeting — sirf naye kharidar ko ──────────────────────────────────
+  // Greeting "how to place your order" hai. Jo customer apne maujooda order
+  // ki baat kar raha hai (order number, "I have ordered", cancel, address)
+  // use ye bhejna bemaani hai — pehle "ORDER #48134" par bhi pehle greeting
+  // jati thi, phir tracking.
+  if (!plan.skipGreeting) await maybeSendGreeting(from)
 
-  // Kya ye message waqai order ke baare mein hai?
-  //
-  // YE GUARD AHEM HAI. Pehle har message mein se koi bhi 3-6 digit ka number
-  // uthhaya jata tha, chahe wo price ho ("1400 ka hai?") ya mobile model.
-  // Us se do masle the:
-  //   1. Price poochne wale ko "order number galat hai" ka jawab milta tha
-  //   2. Agar wo number sach mein kisi ka order number nikla, to KISI AUR
-  //      customer ka status/tracking is ajnabi ko chala jata tha
-  const orderish =
-    looksLikeOrderQuery(text) ||
-    isNumericOnlyMessage(text) ||
-    mentionsOrderNumber(text) ||
-    // Apna mobile number bhejne ki aam tor par ek hi wajah hoti hai — order
-    // dhoondwana. Warna "03001234567 / yhi no ha" jaisa message Q&A mein
-    // chala jata tha aur customer ko bilkul be-rabt jawab milta tha.
-    phoneInText !== null ||
-    state?.state === 'awaiting_order_info'
-
-  // ── 1) Cancel / address / design / phone change ───────────────────────────
-  // Ye chaar cheezein bot ko khud nahi karni chahiye. Holding reply bhejte
-  // hain aur message ko manual review queue mein daal dete hain.
-  const manualReason = detectManualReason(text)
+  // ── 1) Cancel / address / design / phone change / shikayat ───────────────
+  // Ye cheezein bot ko khud nahi karni chahiye. Holding reply bhejte hain aur
+  // message ko manual review queue mein daal dete hain.
   if (manualReason) {
     const contextOrder = await findOrder({
       confirmationNumber,
-      orderNumber: orderish ? orderNumber : null,
+      orderNumber: plan.readNumbers ? orderNumber : null,
       phoneInText,
       trackingCandidate: null,
       senderPhone: from,
     })
 
     // Ek customer aksar ek hi baat kai dafa likhta hai ("I want to cancel",
-    // phir "Please cancel my order", phir "For cancelling"). Pehle har
-    // message ki alag row banti thi, jis se ek hi customer ke 3-4 card
-    // list mein aa jate the aur ek ko "Ho gaya" karne par baqi wahin
-    // reh jate the — lagta tha ke hata hi nahi.
-    //
-    // Ab: isi number ki isi wajah ki pending row mojood ho to nayi nahi
-    // banti — usi mein naya message jur jata hai aur ginti barh jati hai.
+    // phir "Please cancel my order", phir "For cancelling"). Isi number ki
+    // isi wajah ki pending row mojood ho to nayi nahi banti — usi mein naya
+    // message jur jata hai aur ginti barh jati hai.
     const { data: pehleSeMojood } = await supabaseAdmin
       .from('manual_review_queue')
       .select('id, message_text, message_count')
@@ -405,20 +388,29 @@ export async function POST(req: NextRequest) {
   // order dhoond kar live status bhej dete hain.
   const order = await findOrder({
     confirmationNumber,
-    orderNumber: orderish ? orderNumber : null,
-    phoneInText: orderish ? phoneInText : null,
-    trackingCandidate: orderish ? trackingCandidate : null,
+    orderNumber: plan.readNumbers ? orderNumber : null,
+    phoneInText: plan.readNumbers ? phoneInText : null,
+    trackingCandidate: plan.readNumbers ? trackingCandidate : null,
   })
 
   if (order) {
     await clearState()
+
+    // Yahi order isi customer ko abhi abhi bheja ja chuka hai — wahi lamba
+    // message dobara nahi. Doosra order number bheje to jawab jata hai.
+    if (await trackingRecentlySent(from, order.order_number)) {
+      console.log(`[wa] tracking #${order.order_number} pehle ja chuki — ${from} ko dobara nahi`)
+      return NextResponse.json({ ok: true })
+    }
+
     await sendWhatsAppText(from, await buildStatusReply(order))
+    await markTrackingSent(from, order.order_number)
     return NextResponse.json({ ok: true })
   }
 
   // Number diya tha lekin koi order nahi mila — batana zaroori hai, warna
   // customer intezaar karta reh jayega.
-  if (confirmationNumber || (orderish && (orderNumber || phoneInText))) {
+  if (confirmationNumber || (plan.readNumbers && (orderNumber || phoneInText))) {
     await clearState()
     await sendWhatsAppText(
       from,
@@ -434,7 +426,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3) Q&A — poora sawaal padh kar word-score matching ────────────────────
-  const qnaAnswer = await matchQna(text)
+  // "No", "Ok", "Thanks" jaise jawab Q&A mein nahi jate — pehle akela "No"
+  // number-change wala lamba jawab le aata tha.
+  const qnaAnswer = plan.noQuestion ? null : await matchQna(text)
   if (qnaAnswer) {
     if (state) await clearState()
     await sendWhatsAppText(from, qnaAnswer)
@@ -442,7 +436,10 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 4) Order ka sawaal lagta hai lekin number nahi diya ───────────────────
-  if (orderish) {
+  // Sirf EK dafa maangte hain. Pehle bot "intezaar" mein chala jata tha aur
+  // us ke baad HAR message ("Hi", "camera protection...") par wahi maangta
+  // rehta tha.
+  if (plan.mayAskForNumber) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
@@ -460,14 +457,58 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 5) Kuch match nahi hua — BOT KHAMOSH RAHEGA ───────────────────────────
-  // Jaan boojh kar koi reply nahi jata. Customer ko greeting mil chuki hai;
-  // agar us ka sawaal humare data se match nahi hua to bot andaza lagane ke
-  // bajaye chup rehta hai aur us ke agle message ka intezaar karta hai.
-  // Message yahan log ho jata hai taake rozana ki Excel mein aa sake.
-  if (state) await clearState()
-  await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
+  // Jaan boojh kar koi reply nahi jata. Agar bot number maang chuka hai to
+  // wo intezaar barqarar rehta hai (baad mein number aaye to pehchana jaye),
+  // warna saaf kar dete hain.
+  if (state && !askedBefore) await clearState()
+
+  // "Ok / No / Thanks" rozana ki Excel mein faltu bheer banate — sirf asal
+  // sawaal log hote hain.
+  if (!plan.noQuestion) {
+    await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
+  }
 
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * Bot ne order number maanga tha, aur wo abhi taza hai (24 ghante ke andar)?
+ * Purana intezaar hamesha ke liye nahi chalna chahiye.
+ */
+function isFreshAskState(state: any): boolean {
+  if (!state || state.state !== 'awaiting_order_info') return false
+  const at = state.updated_at ? new Date(state.updated_at).getTime() : 0
+  return Date.now() - at < ASK_STATE_HOURS * 3600 * 1000
+}
+
+/**
+ * Isi customer ko yahi order haal hi mein (TRACKING_REPEAT_HOURS ke andar)
+ * bheja ja chuka hai?
+ *
+ * Table na bani ho to false — yani purana rawaiya (har dafa bhejo) chalta
+ * rehta hai, bot tootta nahi.
+ */
+async function trackingRecentlySent(phone: string, orderNumber: string | number): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('wa_tracking_sent')
+    .select('sent_at')
+    .eq('phone', phone)
+    .eq('order_number', String(orderNumber))
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[wa] wa_tracking_sent parh nahi saka:', error.message)
+    return false
+  }
+  if (!data || !data.sent_at) return false
+  return Date.now() - new Date(data.sent_at).getTime() < TRACKING_REPEAT_HOURS * 3600 * 1000
+}
+
+async function markTrackingSent(phone: string, orderNumber: string | number): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('wa_tracking_sent')
+    .upsert({ phone, order_number: String(orderNumber), sent_at: new Date().toISOString() })
+  if (error) console.warn('[wa] wa_tracking_sent likh nahi saka:', error.message)
 }
 
 /**

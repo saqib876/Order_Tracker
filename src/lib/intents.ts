@@ -12,7 +12,7 @@
  * mein daal deta hai. Aap /admin/review par khud dekh kar faisla karte hain.
  */
 
-import { normalizeForMatch } from '@/lib/textNormalize'
+import { normalizeForMatch, expandNumberAbbreviation } from '@/lib/textNormalize'
 
 export type ManualReason =
   // 1. Tabdeeli ki darkhwast
@@ -93,22 +93,30 @@ function hasAny(text: string, words: string[]): boolean {
  * Kuch na mile to null.
  */
 export function detectManualReason(rawText: string): ManualReason | null {
-  const t = normalizeForMatch(rawText)
+  // "mobile no / cell no" -> "mobile number" (warna "mobile no change" model
+  // badalna samjha jata tha)
+  const full = expandNumberAbbreviation(normalizeForMatch(rawText))
+
+  // "order number / tracking number" customer ka APNA number nahi hai. "order
+  // number galat bheja tha" ka matlab phone badalna nahi, na hi design — wo
+  // bas order dhoondwa raha hai. Is liye cancel ke baad wale saare rules is
+  // zikr ke bina wali shakal par chalte hain.
+  const t = full.replace(/\b(order|tracking|confirmation|cn|parcel)\s+number\b/g, ' ')
 
   // ── 1. Cancel ────────────────────────────────────────────────────────────
   // 'cancel' itna decisive hai ke aur kisi shart ki zarurat nahi.
   // (normalizer 'cancle'/'cancal' ko pehle hi 'cancel' bana chuka hota hai)
-  if (t.includes('cancel')) return 'order_cancel'
-  if (t.includes('mansookh') || t.includes('wapas le lo')) return 'order_cancel'
+  if (full.includes('cancel')) return 'order_cancel'
+  if (full.includes('mansookh') || full.includes('wapas le lo')) return 'order_cancel'
 
   // Ghalti se do (ya us se zyada) order lag gaye aur ek hatwana hai — lafz
   // 'cancel' na bhi likha ho to ye bhi cancel hi ke khane mein jayega.
   const dobaraOrder =
-    t.includes('double order') || t.includes('do order') || t.includes('2 order') ||
-    t.includes('two order') || t.includes('do dafa order') || t.includes('2 dafa order') ||
-    t.includes('do bar order') || t.includes('2 bar order') || t.includes('twice order') ||
-    t.includes('order twice') || t.includes('do martaba order') || t.includes('duplicate order')
-  if (dobaraOrder && hasAny(t, ['galti', 'ghalti', 'mistake', 'by mistake', 'ek hata', '1 hata', 'remove', 'extra'])) {
+    full.includes('double order') || full.includes('do order') || full.includes('2 order') ||
+    full.includes('two order') || full.includes('do dafa order') || full.includes('2 dafa order') ||
+    full.includes('do bar order') || full.includes('2 bar order') || full.includes('twice order') ||
+    full.includes('order twice') || full.includes('do martaba order') || full.includes('duplicate order')
+  if (dobaraOrder && hasAny(full, ['galti', 'ghalti', 'mistake', 'by mistake', 'ek hata', '1 hata', 'remove', 'extra'])) {
     return 'order_cancel'
   }
 

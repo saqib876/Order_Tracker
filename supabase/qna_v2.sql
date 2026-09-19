@@ -82,3 +82,20 @@ alter table manual_review_queue add column if not exists message_count int not n
 alter table manual_review_queue add column if not exists last_message_at timestamptz;
 
 update manual_review_queue set last_message_at = created_at where last_message_at is null;
+
+-- ── Ek hi tracking dobara na jaye ────────────────────────────────────────
+-- Customer ek hi order number do-teen dafa bhej deta hai; har dafa wahi
+-- lamba tracking message jata tha. Ab bot yaad rakhta hai ke kis number ko
+-- kaun sa order kab bheja — 24 ghante (TRACKING_REPEAT_HOURS) ke andar
+-- wahi order dobara aaye to chup rehta hai. Doosra order number ho to jawab.
+--
+-- Table na ho to bot tootta nahi — bas purane tareeqe se har dafa bhejta hai.
+create table if not exists wa_tracking_sent (
+  phone        text        not null,
+  order_number text        not null,
+  sent_at      timestamptz not null default now(),
+  primary key (phone, order_number)
+);
+
+-- Sirf service role (bot) parhta/likhta hai — anon key ke liye band
+alter table wa_tracking_sent enable row level security;
