@@ -23,8 +23,14 @@
  * Agar file adhoori ho (Mojooda Topics sheet hi na ho) to kuch mitaya nahi
  * jata — sirf naya jorta hai.
  *
- * Mehfooz rakhne ke liye: agar ek hi upload aadhe se zyada topics band kar
- * raha ho to kuch nahi hota aur saaf error aata hai.
+ * TEEN PEHRE (ghalat file se kuch zaya na ho):
+ *   1. File mein koi topic hi na mile  -> error, database bilkul nahi chhua jata
+ *   2. Aadhe se zyada topics band ho rahe hon -> error, kuch nahi badalta
+ *   3. Sawaal ka khana khali ho lekin database mein sawaal hon -> purane
+ *      sawaal jyun ke tyun rakhe jate hain (ye qareeb hamesha ghalti hoti hai)
+ *
+ * Aur koi cheez database se MITAI nahi jati — zyada se zyada band (is_active
+ * false) hoti hai, jo wapas chalu ki ja sakti hai.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -129,7 +135,14 @@ export async function POST(req: NextRequest) {
 
     // Poori file: sawaal bilkul file jaise. Adhoori file: sirf jorte hain.
     let finalQuestions: string[]
-    if (fullSheet) {
+    if (fullSheet && item.questions.length === 0 && purane.length > 0) {
+      // Sawaal ka khana khali tha lekin database mein sawaal mojood hain —
+      // ye qareeb qareeb hamesha ghalti hoti hai (khana saaf ho gaya, ya
+      // file mein wo column hi nahi tha). Purane sawaal rakhte hain.
+      // Waqai sab hatane hon to "Hata dein? = Haan" hai.
+      finalQuestions = purane.slice()
+      notes.push(`"${item.topic}" — sawaal ka khana khali tha, purane sawaal jyun ke tyun rakhe`)
+    } else if (fullSheet) {
       finalQuestions = []
       for (const q of item.questions) if (!finalQuestions.includes(q)) finalQuestions.push(q)
     } else {

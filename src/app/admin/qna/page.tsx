@@ -256,6 +256,11 @@ export default async function QnaPage({
               ehtiyatan rok diya jayega aur database mein kuch nahi badlega — taake ghalat file
               se sab kuch zaya na ho.
             </li>
+            <li style={s.li}>
+              <b>Sawaal ka khana khali chhod dein to purane sawaal jyun ke tyun rehte hain.</b>
+              Ye ghalti se saaf ho jaye to kuch zaya nahi hota. Waqai sab hatane hon to
+              <b> “Hata dein? = Haan” </b> hai.
+            </li>
           </ol>
 
           <p style={s.hint}>
