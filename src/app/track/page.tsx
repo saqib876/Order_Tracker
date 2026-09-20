@@ -3,6 +3,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { noteForCourierStage } from '@/lib/courierNotes'
 import type { CourierNote } from '@/lib/courierNotes'
+import {
+  classifyCourierStage,
+  courierSeverity,
+  isDeliveredLabel,
+  isUndeliveredLabel,
+  isContactingLabel,
+  isReturningLabel,
+} from '@/lib/courierStatus'
+import type { CourierStage } from '@/lib/courierStatus'
 
 type OrderStatus = 'in_process' | 'shipped' | 'delivered' | 'cancelled'
 
@@ -123,12 +132,9 @@ function fmtCCDate(iso: string) {
   })
 }
 
-/* Delivered must NOT match "Undelivered" (which contains the substring
-   "delivered"), so undelivered is excluded explicitly. */
 function isCourierDelivered(events: any[] | null | undefined): boolean {
   if (!events || events.length === 0) return false
-  const label: string = (events[0]?.label || '').toLowerCase()
-  return label.includes('delivered') && !label.includes('undelivered')
+  return isDeliveredLabel(events[0]?.label || '')
 }
 
 /* Classify the courier's own live status into a small set of buckets we can
@@ -137,34 +143,12 @@ function isCourierDelivered(events: any[] | null | undefined): boolean {
 type CourierCategory = 'delivered' | 'undelivered' | 'contacting' | 'returning' | 'forward' | null
 function classifyCourier(rawLabel: string | null | undefined): CourierCategory {
   if (!rawLabel) return null
-  const l = rawLabel.toLowerCase()
-  if (l.includes('undelivered')) return 'undelivered'
-  if (l.includes('delivered')) return 'delivered'
-  if (l.includes('contacting consignee')) return 'contacting'
-  if (
-    l.includes('moved to origin') ||
-    l.includes('reached at origin') ||
-    l.includes('out for return') ||
-    l.includes('returned submitted') ||
-    l.includes('return submission')
-  ) return 'returning'
+  if (isUndeliveredLabel(rawLabel)) return 'undelivered'
+  if (isDeliveredLabel(rawLabel)) return 'delivered'
+  if (isContactingLabel(rawLabel)) return 'contacting'
+  if (isReturningLabel(rawLabel)) return 'returning'
   return 'forward'
 }
-/* Same buckets, used to tint individual events in the live timeline. */
-function courierSeverity(rawLabel: string): 'red' | 'amber' | null {
-  const l = (rawLabel || '').toLowerCase()
-  if (l.includes('undelivered')) return 'red'
-  if (
-    l.includes('contacting consignee') ||
-    l.includes('moved to origin') ||
-    l.includes('reached at origin') ||
-    l.includes('out for return') ||
-    l.includes('returned submitted') ||
-    l.includes('return submission')
-  ) return 'amber'
-  return null
-}
-
 /* Keep the courier's own status wording. Only tidy ALL-CAPS to readable case;
    never substitute or invent words. */
 function prettyCourier(raw?: string): string {
@@ -177,25 +161,6 @@ function prettyCourier(raw?: string): string {
 }
 
 /* Live courier status ko days-remaining estimate mein convert karta hai */
-type CourierStage =
-  | 'delivered' | 'out_for_delivery' | 'near' | 'in_transit'
-  | 'booked' | 'undelivered' | 'contacting' | 'returning'
-
-function classifyCourierStage(label: string): CourierStage {
-  const l = (label || '').toLowerCase()
-  if (l.includes('undelivered')) return 'undelivered'
-  if (l.includes('delivered')) return 'delivered'
-  if (l.includes('contacting consignee')) return 'contacting'
-  if (
-    l.includes('moved to origin') || l.includes('reached at origin') ||
-    l.includes('out for return') || l.includes('returned submitted') || l.includes('return submission')
-  ) return 'returning'
-  if (l.includes('out for delivery')) return 'out_for_delivery'
-  if (l.includes('reached at dest')) return 'near'
-  if (l.includes('moved to dest') || l.includes('en-route') || l.includes('en route')) return 'in_transit'
-  return 'booked'
-}
-
 function daysForCourierStage(stage: CourierStage): number {
   switch (stage) {
     case 'out_for_delivery': return 0
@@ -275,9 +240,9 @@ function calcCountdown(order: TrackingResult['order'], courierDone: boolean, lat
 
 async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data?: any }> {
   try {
-    const res = await fetch(
-      `http://cod.callcourier.com.pk/api/CallCourier/GetTackingHistory?cn=${trackingId}`
-    )
+    // Apne server ke zariye — courier ka pata http par hai aur website https
+    // par, browser aisi seedhi call block kar deta hai (Mixed Content).
+    const res = await fetch(`/api/courier?cn=${encodeURIComponent(trackingId)}`)
     if (!res.ok) return { ok: false }
     const json = await res.json()
     if (!Array.isArray(json) || json.length === 0) return { ok: false }

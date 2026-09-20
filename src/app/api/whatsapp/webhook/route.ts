@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
+import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
+import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText } from '@/lib/messageParse'
 import { planReply } from '@/lib/replyPlan'
 
@@ -115,25 +117,6 @@ function fmtCourierTime(iso: string): string {
   return new Date(iso).toLocaleString('en-PK', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-type CourierStage =
-  | 'delivered' | 'out_for_delivery' | 'near' | 'in_transit'
-  | 'booked' | 'undelivered' | 'contacting' | 'returning'
-
-function classifyCourierStage(label: string): CourierStage {
-  const l = (label || '').toLowerCase()
-  if (l.includes('undelivered')) return 'undelivered'
-  if (l.includes('delivered')) return 'delivered'
-  if (l.includes('contacting consignee')) return 'contacting'
-  if (
-    l.includes('moved to origin') || l.includes('reached at origin') ||
-    l.includes('out for return') || l.includes('returned submitted') || l.includes('return submission')
-  ) return 'returning'
-  if (l.includes('out for delivery')) return 'out_for_delivery'
-  if (l.includes('reached at dest')) return 'near'
-  if (l.includes('moved to dest') || l.includes('en-route') || l.includes('en route')) return 'in_transit'
-  return 'booked'
-}
-
 function daysForCourierStage(stage: CourierStage): number {
   switch (stage) {
     case 'out_for_delivery': return 0
@@ -148,7 +131,7 @@ function daysForCourierStage(stage: CourierStage): number {
 // Call Courier ki live tracking API - koi auth token nahi chahiye
 async function fetchLatestCourierRaw(trackingId: string): Promise<{ label: string; time: string } | null> {
   try {
-    const res = await fetch(`http://cod.callcourier.com.pk/api/CallCourier/GetTackingHistory?cn=${trackingId}`)
+    const res = await fetch(courierApiUrl(trackingId), { cache: 'no-store' })
     if (!res.ok) return null
     const json = await res.json()
     if (!Array.isArray(json) || json.length === 0) return null

@@ -52,6 +52,12 @@ const STOPWORDS = new Set([
   // (Urdu ka "hi" — "order hi nahi aya" — bhi sirf zor dene ke liye hai.)
   'hi', 'hello', 'helo', 'hey', 'hlo', 'hlw', 'aoa', 'salam', 'salaam',
   'assalam', 'asalam', 'aslam', 'walaikum', 'alaikum', 'assalamualaikum',
+  // Haan/nahi aur takalluf ke lafz — sawaal ka hissa nahi, lekin score
+  // gira dete the: "price btao" = 0.56 chalta tha, "ok price btao" = 0.39
+  // par ruk jata tha aur customer ko kuch nahi milta tha.
+  'ok', 'okay', 'oky', 'ohk', 'acha', 'achha', 'achaa', 'thik', 'theek',
+  'thek', 'thk', 'han', 'haan', 'hanji', 'yar', 'yaar', 'bro', 'dear',
+  'thanks', 'thank', 'thankyou', 'shukriya', 'shukria', 'welcome',
 ])
 
 export interface QnaEntry {

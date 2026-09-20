@@ -78,6 +78,10 @@ export const ORDER_KEYWORDS = [
   'abhi tak nahi mila',
   // Urdu script - noun-agnostic
   'ڈلیوری میں کتنا وقت', 'ڈلیوری میں کوئی تاخیر', 'تاخیر', 'مزید لگیں گے',
+  // Urdu mein order ka status poochna (audit mein ye chhoot rahe the)
+  'آرڈر نمبر', 'ارڈر نمبر', 'آرڈر کہاں', 'ارڈر کہاں', 'آرڈر کب', 'ارڈر کب',
+  'کب ملے گا', 'کب تک ملے گا', 'پارسل کہاں', 'پارسل کب', 'ٹریکنگ',
+  'ابھی تک نہیں ملا', 'ابھی تک نہیں آیا', 'آرڈر کا اسٹیٹس', 'چیک کر کے بتائیں',
 ]
 
 // Har template ko ek dafa normalize kar lete hain (module load par) - taake

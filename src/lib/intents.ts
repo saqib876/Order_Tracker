@@ -89,6 +89,36 @@ function hasAny(text: string, words: string[]): boolean {
 }
 
 /**
+ * Chhota lafz POORE lafz ki tarah milna chahiye.
+ *
+ * "through post office" mein "rough" chhupa hua hai — is wajah se ek aam
+ * sawaal quality ki shikayat ban gaya tha. Isi tarah "inside" mein "side"
+ * aur "considering" mein "side" hota hai.
+ */
+function wordRe(words: string[]): RegExp {
+  const esc = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return new RegExp('(^|[^a-z0-9])(' + esc.join('|') + ')([^a-z0-9]|$)', 'i')
+}
+
+// Ye lafz itne saaf hain ke aur koi shart nahi chahiye — "Boht local or
+// rough ha" mein na cover ka zikr hai na milne ka.
+const SAAF_KHARAB_WORDS = wordRe([
+  'rough', 'ripped', 'blur', 'blurr', 'blurry', 'ganda', 'gandi',
+  'bhadda', 'bhaddi',
+])
+
+// 'local' akela do matlab rakhta hai ("local delivery hoti hai?"), is liye
+// wo yahan nahi — us ke saaf jumle ('local lag', 'local ha') upar wali
+// mazboot list mein hain.
+const NARM_KHARAB_WORDS = wordRe(['fade', 'faded'])
+
+const PRODUCT_WORDS = wordRe([
+  'side', 'sides', 'edge', 'edges', 'corner', 'corners', 'finish', 'finishing',
+  'writing', 'color', 'colour', 'colors', 'colours', 'rang', 'material',
+  'photo', 'picture', 'pic', 'print', 'printing', 'item', 'piece',
+])
+
+/**
  * Normalized message dekh kar batata hai ke ye insaan ke paas jana chahiye ya nahi.
  * Kuch na mile to null.
  */
@@ -108,6 +138,8 @@ export function detectManualReason(rawText: string): ManualReason | null {
   // (normalizer 'cancle'/'cancal' ko pehle hi 'cancel' bana chuka hota hai)
   if (full.includes('cancel')) return 'order_cancel'
   if (full.includes('mansookh') || full.includes('wapas le lo')) return 'order_cancel'
+  // Urdu mein likhne wale
+  if (full.includes('منسوخ') || full.includes('کینسل')) return 'order_cancel'
 
   // Ghalti se do (ya us se zyada) order lag gaye aur ek hatwana hai — lafz
   // 'cancel' na bhi likha ho to ye bhi cancel hi ke khane mein jayega.
@@ -139,11 +171,37 @@ export function detectManualReason(rawText: string): ManualReason | null {
   }
 
   // ── 3. Address ───────────────────────────────────────────────────────────
+  if (t.includes('پتہ') || t.includes('ایڈریس')) {
+    if (t.includes('تبدیل') || t.includes('بدل') || t.includes('غلط') || t.includes('change')) {
+      return 'address_change'
+    }
+  }
+  if (t.includes('نمبر') && (t.includes('تبدیل') || t.includes('بدل') || t.includes('غلط'))) {
+    return 'phone_change'
+  }
+
   if (t.includes('address') || t.includes('location') || t.includes('pata')) {
     if (hasAny(t, CHANGE_WORDS) || t.includes('shift') || t.includes('move')) {
       return 'address_change'
     }
   }
+
+  // ── 2b. Customer ne sirf apna PATA bhej diya ────────────────────────────
+  // "Post office kotanai Tehsil khawaza khela district swat." — is mein lafz
+  // "address" kahin nahi, is liye bot bilkul chup reh jata tha. Aam tor par
+  // aisa message address theek karwane ke liye hi aata hai.
+  //
+  // Kam se kam DO dhanche wale lafz laazmi hain (sirf sheher ka naam kaafi
+  // nahi), warna "delivery Lahore mein hoti hai?" bhi pata ban jata.
+  const pataKeHisse = [
+    'street', 'gali', 'mohalla', 'muhalla', 'mohala', 'colony', 'block',
+    'sector', 'house no', 'house #', 'makan', 'post office', 'dak khana',
+    'tehsil', 'tehseel', 'district', 'zila', 'road', 'bazar', 'bazaar',
+    'chowk', 'phase', 'plot', 'flat', 'apartment', 'village', 'goth',
+    'near ', 'ke paas', 'k pas', 'town', 'stop', 'adda', 'ada ',
+  ]
+  const pataGinti = pataKeHisse.filter((w) => t.includes(w)).length
+  if (pataGinti >= 2) return 'address_change'
 
   // ── 3a. Order MIL chuka hai aur us mein kharabi hai ──────────────────────
   // Ye tabdeeli ki darkhwast nahi, shikayat hai — is liye model_change /
@@ -154,6 +212,8 @@ export function detectManualReason(rawText: string): ManualReason | null {
     'aaya', 'aya hai', 'aya ha', 'a gaya', 'agaya', 'aagaya', 'pohoncha',
     'deliver', 'parcel khol', 'box khol', 'khol kar dekha', 'bheja hai',
     'bheja ha', 'bhej dia', 'send kia', 'sent me', 'you sent',
+    'bhej diye', 'bhj diye', 'bhej dye', 'bheje hain', 'bheje hai', 'bhje',
+    'bhej dia hai', 'bhej diya',
   ])
   const galatCheez = hasAny(t, [
     'galat', 'ghalat', 'wrong', 'different', 'dusra', 'doosra', 'dosra',
@@ -162,8 +222,8 @@ export function detectManualReason(rawText: string): ManualReason | null {
   ])
   const productKaZikr = hasAny(t, [
     'cover', 'case', 'parcel', 'product', 'item', 'order', 'packing', 'piece',
-    'print', 'design', 'quality',
-  ])
+    'design', 'quality',
+  ]) || PRODUCT_WORDS.test(t) // cheez ke hisse bhi cheez hi hain
 
   // (a) Galat MOBILE MODEL ka cover mil gaya.
   // Yahan sirf lafz 'model' (ya handset/device) chalta hai — 'mobile'/'phone'
@@ -236,7 +296,24 @@ export function detectManualReason(rawText: string): ManualReason | null {
     'not satisfied', 'not happy', 'poorly made', 'poorly finish',
     'messy edge', 'messy finish', 'edges are messy',
     'not neatly', 'disappointed', 'expecting better', 'very bad', 'so bad',
-  ])
+    // ── asli messages se (audit mein 18 shikayatein chhoot rahi thin) ──
+    'white spot', 'whitespot', 'paint utar', 'utar raha', 'utar rha',
+    'not up to mark', 'achi nahi', 'acha nahi', 'achi nai', 'acha nai',
+    'finishing nahi', 'finish nahi', 'sahi nahi bana', 'jaisa dikhaya',
+    'jesa dikhaya', 'nothing like',
+  ]) || NARM_KHARAB_WORDS.test(t)
+
+  // Kuch lafz itne saaf hain ke koi aur shart nahi chahiye — "Fraud ha ye
+  // seedha seedha" jaise message mein na cover ka zikr hota hai na milne ka,
+  // aur wo bilkul nazarandaz ho jate the.
+  const saafShikayat = hasAny(t, [
+    'fraud', 'dhoka', 'dhoka dia', 'scam', 'bekar', 'be kar', 'worthless',
+    'waste of money', 'paise waste', 'local lag', 'local ha', 'local hai',
+    'ghatiya', 'bakwas', 'third class', 'faltu', 'intihai fazul', 'fazool',
+    'fazul', 'bohat bura', 'bohat hi bura', 'shikayat', 'complaint',
+    'white spot', 'whitespot', 'paint utar', 'utar raha', 'utar rha',
+  ]) || SAAF_KHARAB_WORDS.test(t)
+  if (saafShikayat) return 'quality_issue'
   if (kharabWords && (milChuka || productKaZikr)) return 'quality_issue'
 
   // ── 3b. Mobile model badalna ─────────────────────────────────────────────
@@ -280,7 +357,15 @@ export function detectManualReason(rawText: string): ManualReason | null {
       t.includes('galat select') ||
       t.includes('ghalat select') ||
       t.includes('galat likh') ||
-      t.includes('ghalat likh')
+      t.includes('ghalat likh') ||
+      // "Purple phone case ki jaga par ye karden" — lafz 'change' nahi hai
+      // lekin baat tabdeeli ki hi ho rahi hai
+      t.includes('ki jaga') ||
+      t.includes('ki jagah') ||
+      t.includes('ke bajaye') ||
+      t.includes('ki bajaye') ||
+      t.includes('instead of') ||
+      t.includes('replace kar')
     ) {
       return 'design_change'
     }
