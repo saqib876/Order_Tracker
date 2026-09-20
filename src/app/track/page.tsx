@@ -265,6 +265,22 @@ async function fetchCallCourier(trackingId: string): Promise<{ ok: boolean; data
 }
 
 /* ---------- stepper stages ---------- */
+/* Kisi status ka ASAL waqt history se nikalta hai.
+   orders.updated_at par database ka trigger laga hua hai jo har chhoti si
+   tabdeeli par aaj ka waqt bhar deta hai — is liye wo "kab cancel hua" ya
+   "kab deliver hua" ka jawab nahi de sakti. History mein har status apne
+   apne waqt ke sath mehfooz hai. */
+function statusTime(
+  history: TrackingResult['history'],
+  status: OrderStatus,
+  fallback: string
+): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].status === status) return history[i].changed_at
+  }
+  return fallback
+}
+
 function buildStages(
   order: TrackingResult['order'],
   history: TrackingResult['history'],
@@ -274,7 +290,11 @@ function buildStages(
   if (order.status === 'cancelled') {
     return [
       { label: 'Confirmed', sub: fmtDate(order.createdAt), state: 'done' as string },
-      { label: 'Order Cancelled', sub: fmtDate(order.updatedAt), state: 'problem' as string },
+      {
+        label: 'Order Cancelled',
+        sub: fmtDate(statusTime(history, 'cancelled', order.updatedAt)),
+        state: 'problem' as string,
+      },
     ]
   }
 
@@ -795,7 +815,7 @@ export default function TrackPage() {
                   <div className="done-badge"><IconCheck /></div>
                   <div className="ring-info">
                     <div className="rl">Delivered on</div>
-                    <div className="rv">{fmtDate(o.updatedAt)}</div>
+                    <div className="rv">{fmtDate(statusTime(result!.history, 'delivered', o.updatedAt))}</div>
                     <div className="rs">Thank You For Shopping With Myzan.</div>
                   </div>
                 </>
