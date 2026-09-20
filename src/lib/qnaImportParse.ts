@@ -15,6 +15,8 @@ export interface IncomingTopic {
   questions: string[]
   /** Khali ho to matlab: file mein jawab nahi tha (database wala rakha jayega) */
   answer: string
+  /** "Hata dein?" khane mein Haan — poora topic band kar dena hai */
+  remove: boolean
 }
 
 export interface ParseResult {
@@ -24,6 +26,16 @@ export interface ParseResult {
   picked: number
   /** Jo rows chhod di gayin, un ki wajah */
   notes: string[]
+  /**
+   * File mein "Mojooda Topics" sheet mojood thi aur us mein kam se kam ek
+   * topic tha?
+   *
+   * Sirf us soorat mein file ko POORI sachai mana jata hai — yani jo file
+   * mein hai wahi database mein rahega (sawaal hat sakte hain, topic ka naam
+   * badal sakta hai, topic band ho sakta hai). Agar ye sheet na ho to file
+   * adhoori hai, aur hum sirf jorte hain — kuch mitate nahi.
+   */
+  fullSheet: boolean
 }
 
 /** exceljs ka cell kabhi object hota hai (rich text / formula) — saaf text nikalo */
@@ -75,14 +87,17 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
   const notes: string[] = []
   let picked = 0
 
-  const put = (topic: string, questions: string[], answer: string) => {
+  let fullSheet = false
+
+  const put = (topic: string, questions: string[], answer: string, remove = false) => {
     const key = topic.toLowerCase()
     const existing = topics.get(key)
     if (existing) {
       for (const q of questions) if (!existing.questions.includes(q)) existing.questions.push(q)
       if (answer) existing.answer = answer
+      if (remove) existing.remove = true
     } else {
-      topics.set(key, { topic, questions: questions.slice(), answer })
+      topics.set(key, { topic, questions: questions.slice(), answer, remove })
     }
   }
 
@@ -94,6 +109,7 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
     const cTopic = findCol(map, 'topic')
     const cQs = findCol(map, 'sawaal', 'questions')
     const cAns = findCol(map, 'jawab', 'answer')
+    const cDel = findCol(map, 'hata dein', 'hatayen', 'delete')
     if (!cTopic || !cAns) continue
 
     for (let r = 2; r <= ws.rowCount; r++) {
@@ -101,6 +117,17 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
       const topic = cellText(row.getCell(cTopic).value).replace(/\s+/g, ' ').trim()
       const answer = cellText(row.getCell(cAns).value).trim()
       if (isPlaceholder(topic)) continue
+
+      const del = cDel ? cellText(row.getCell(cDel).value).trim().toLowerCase() : ''
+      const remove = del === 'haan' || del === 'yes'
+
+      // Sheet mojood hai aur padhne layak row mili — ab file poori sachai hai
+      fullSheet = true
+
+      if (remove) {
+        put(topic, [], answer, true)
+        continue
+      }
       if (!answer) {
         notes.push(`"${topic}" — jawab khali hai, chhod diya`)
         continue
@@ -157,12 +184,12 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
           if (!existing.questions.includes(question)) existing.questions.push(question)
         } else {
           // Topic file mein nahi tha — jawab database se aayega
-          topics.set(key, { topic, questions: [question], answer: '' })
+          topics.set(key, { topic, questions: [question], answer: '', remove: false })
         }
         picked++
       }
     }
   }
 
-  return { topics, picked, notes }
+  return { topics, picked, notes, fullSheet }
 }

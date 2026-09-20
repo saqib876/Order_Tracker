@@ -191,8 +191,9 @@ export async function GET(req: NextRequest) {
   const ws3 = wb.addWorksheet('Mojooda Topics')
   ws3.columns = [
     { header: 'Topic', key: 'topic', width: 30 },
-    { header: 'Sawaal (har line par ek)', key: 'questions', width: 54 },
+    { header: 'Sawaal (har line par ek — Alt+Enter se nayi line)', key: 'questions', width: 54 },
     { header: 'Jawab', key: 'answer', width: 60 },
+    { header: 'Hata dein?', key: 'del', width: 12 },
     { header: 'Kitne Sawaal', key: 'nq', width: 13 },
   ]
   styleHeader(ws3)
@@ -211,8 +212,17 @@ export async function GET(req: NextRequest) {
     row.font = { name: 'Arial', size: 10 }
     row.alignment = { vertical: 'top', wrapText: true }
     // Topic/sawaal/jawab edit kiye ja sakte hain — is liye peele
-    for (const c of ['topic', 'questions', 'answer']) {
+    for (const c of ['topic', 'questions', 'answer', 'del']) {
       row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
+    }
+    // Poora topic hatana ho to yahan "Haan"
+    row.getCell('del').dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: [yesNoRange],
+      showErrorMessage: true,
+      errorTitle: 'Sirf Haan ya Nahi',
+      error: 'Poora topic hatana ho to "Haan" chunein, warna khali chhod dein.',
     }
     row.getCell('nq').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
     row.height = 40

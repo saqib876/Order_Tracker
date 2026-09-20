@@ -89,8 +89,9 @@ export default async function QnaPage({
         <div style={{ flex: 1 }}>
           <h2 style={s.h2}>Bhari hui Excel wapas upload karein</h2>
           <p style={s.p}>
-            Jo rows par aap ne <b>Haan</b> chuna hoga, wo sawaal us topic mein jur jayenge.
-            Naye topics bhi ban jayenge. Jis topic ka <b>jawab khali</b> hoga wo chhod diya jayega.
+            <b>File mein jo hai, wahi database mein ho jata hai.</b> Sawaal ka naam badlein,
+            sawaal hata dein, ya kisi doosre topic mein le jayein — upload ke baad bot bilkul
+            nayi file ke mutabiq chalega. Purani file ka data bacha nahi rehta.
           </p>
           <form action="/api/admin/qna-import" method="POST" encType="multipart/form-data" style={s.form}>
             <input type="hidden" name="key" value={adminKey} />
@@ -100,8 +101,8 @@ export default async function QnaPage({
             </button>
           </form>
           <p style={s.hint}>
-            Upload ke baad natija JSON mein dikhega — kitne topics bane, kitne sawaal jure.
-            Purane topics mitte nahi, sirf update hote hain.
+            Upload ke baad natija JSON mein dikhega — kitne topics bane, kitne sawaal jure,
+            kitne hataye gaye, aur kaun se topics band hue.
           </p>
         </div>
       </section>
@@ -171,9 +172,10 @@ export default async function QnaPage({
               <tr>
                 <td style={s.tdName}>Mojooda Topics</td>
                 <td style={s.td}>
-                  Purane topics — sawaal aur jawab dono yahan se <b>badle</b> ja sakte hain. Naya sawaal
-                  bhi neeche nayi line par likh sakte hain. Greeting ka matan bhi isi sheet ki
-                  <b> “Salaam / Greeting” </b> row mein hai.
+                  Purane topics — sawaal, jawab aur topic ka naam, sab yahan se <b>badle</b> ja
+                  sakte hain. Naya sawaal neeche nayi line par likh dein; hatana ho to line mita
+                  dein. Poora topic hatane ke liye <b>“Hata dein? = Haan”</b>. Greeting ka matan
+                  bhi isi sheet ki <b>“Salaam / Greeting”</b> row mein hai.
                 </td>
               </tr>
             </tbody>
@@ -181,21 +183,56 @@ export default async function QnaPage({
 
           {/* Usool */}
           <h3 style={s.h3}>Yaad rakhne wali baatein</h3>
+          <div style={s.syncBox}>
+            <div style={s.syncTitle}>Sab se ahem usool</div>
+            <p style={s.syncText}>
+              <b>“File mein jo hai, wahi database mein hoga.”</b> Upload ke baad bot sirf nayi
+              file ke mutabiq chalta hai — purana data bacha nahi rehta.
+            </p>
+            <table style={{ ...s.table, marginTop: 10 }}>
+              <tbody>
+                <tr>
+                  <td style={s.tdName}>Sawaal hatana</td>
+                  <td style={s.td}>Us ki line mita dein (poori line, cell khali kar dein)</td>
+                </tr>
+                <tr>
+                  <td style={s.tdName}>Topic ka naam badalna</td>
+                  <td style={s.td}>Topic wale khane mein naya naam likh dein</td>
+                </tr>
+                <tr>
+                  <td style={s.tdName}>Sawaal doosre topic mein</td>
+                  <td style={s.td}>Ek topic se line kaat kar doosre ke sawaalon mein paste kar dein</td>
+                </tr>
+                <tr>
+                  <td style={s.tdName}>Poora topic hatana</td>
+                  <td style={s.td}>
+                    Us row ke <b>“Hata dein?”</b> khane mein <b>Haan</b> chunein
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style={s.syncNote}>
+              Hataya hua topic database se mitta nahi — bas <b>band</b> ho jata hai (neeche list
+              mein OFF dikhega) aur bot use istemal nahi karta. Ghalti ho jaye to bataiye, wapas
+              chalu ho sakta hai.
+            </p>
+          </div>
+
           <ol style={s.ol}>
             <li style={s.li}>
-              <b>Sawaal jurte hain, mitte nahi.</b> Excel se koi line hata kar upload karne se wo
-              sawaal database se nahi hatta. (Hatana ho to mujhe bata dein.)
+              <b>Poori file upload karein.</b> Jo file download hui thi usi ko bhar kar bhejein.
+              Agar file mein <b>“Mojooda Topics”</b> sheet na ho to bot ehtiyatan kuch nahi
+              mitata — sirf naya jorta hai.
             </li>
             <li style={s.li}>
-              <b>Jawab badal jata hai.</b> Jo jawab Excel mein likha hoga wohi naya jawab ban jayega —
-              is liye jawab poora likhein, adhoora nahi.
+              <b>Jawab poora likhein.</b> Excel wala jawab hi naya jawab ban jata hai.
             </li>
             <li style={s.li}>
-              <b>Jawab khali chhoda to wo row chhod di jayegi.</b> Kuch mitega nahi, bas wo topic
-              update nahi hoga.
+              <b>Jawab khali chhoda to wo row chhod di jayegi.</b> Us topic mein koi tabdeeli
+              nahi hogi (band bhi nahi hoga).
             </li>
             <li style={s.li}>
-              <b>Sheet ke naam aur column ke naam na badlein.</b> Column ki tarteeb badalna theek hai,
+              <b>Sheet aur column ke naam na badlein.</b> Column ki tarteeb badalna theek hai,
               naam badalna nahi — warna wo sheet parhi nahi jayegi.
             </li>
             <li style={s.li}>
@@ -203,7 +240,7 @@ export default async function QnaPage({
               <b> chup </b> ho jata hai. Har sawaal sirf ek hi topic mein rakhein.
             </li>
             <li style={s.li}>
-              <b>Peele khaane bharne ke liye hain.</b> Jo khaane khali/peele hain wahi aap ko bharne
+              <b>Peele khaane bharne ke liye hain.</b> Jo khaane peele hain wahi aap ko bharne
               hain; baqi sirf dekhne ke liye hain.
             </li>
             <li style={s.li}>
@@ -211,8 +248,13 @@ export default async function QnaPage({
               sawaalon ka jawab isi row se uthata hai.
             </li>
             <li style={s.li}>
-              <b>File .xlsx hi rahe.</b> CSV ya Google Sheet ka link kaam nahi karega — Google Sheets
-              se “File → Download → Microsoft Excel (.xlsx)” kar ke upload karein.
+              <b>File .xlsx hi rahe.</b> CSV ya Google Sheet ka link kaam nahi karega — Google
+              Sheets se “File → Download → Microsoft Excel (.xlsx)” kar ke upload karein.
+            </li>
+            <li style={s.li}>
+              <b>Ek hi baar mein aadhe se zyada topics band nahi ho sakte.</b> Aisa upload
+              ehtiyatan rok diya jayega aur database mein kuch nahi badlega — taake ghalat file
+              se sab kuch zaya na ho.
             </li>
           </ol>
 
@@ -295,6 +337,16 @@ const s: Record<string, CSSProperties> = {
   },
   keyNote: { fontSize: 12.5, color: '#475569', margin: '11px 0 0', lineHeight: 1.6 },
   ol: { margin: '0 0 4px', paddingLeft: 20, display: 'grid', gap: 9 },
+  syncBox: {
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    borderRadius: 12,
+    padding: '14px 16px',
+    margin: '4px 0 18px',
+  },
+  syncTitle: { fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#78350f' },
+  syncText: { fontSize: 13.5, lineHeight: 1.65, color: '#3f3f46', margin: 0 },
+  syncNote: { fontSize: 12.5, lineHeight: 1.6, color: '#57534e', margin: '10px 0 0' },
   li: { fontSize: 13.5, lineHeight: 1.65, color: '#334155' },
   tdName: {
     padding: '10px 12px',
