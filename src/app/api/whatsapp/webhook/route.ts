@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendWhatsAppText, matchQna, getGreetingMessage } from '@/lib/whatsapp'
+import { sendWhatsAppText, matchQna, getGreetingMessage, getTopicAnswer } from '@/lib/whatsapp'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
@@ -306,6 +306,24 @@ export async function POST(req: NextRequest) {
   // use ye bhejna bemaani hai — pehle "ORDER #48134" par bhi pehle greeting
   // jati thi, phir tracking.
   if (!plan.skipGreeting) await maybeSendGreeting(from)
+
+  // ── 0a) "Apni picture wala cover bana dein" ──────────────────────────────
+  // Customization ka sawaal. Jawab AAP ki Excel ki Customize wali row se
+  // jata hai — pehle poora sawaal Q&A mein dhoondte hain (shayad aap ne
+  // yehi jumla likh rakha ho), aur na mile to usi topic ka jawab bhej dete
+  // hain taake customer chup na reh jaye.
+  //
+  // Ye order-status se PEHLE hai: warna "mujhe apni photo wala case
+  // chahiye" par "apna order number bhejein" chala jata tha.
+  if (plan.customization) {
+    const jawab = (await matchQna(text)) || (await getTopicAnswer('custom'))
+    if (jawab) {
+      await clearState()
+      await sendWhatsAppText(from, jawab)
+      console.log(`[wa] customization — ${from}`)
+      return NextResponse.json({ ok: true })
+    }
+  }
 
   // ── 0b) "Mere model ka cover mil jayega?" ────────────────────────────────
   // Duniya ka koi bhi mobile ya laptop model ho, Urdu/English/Roman — jawab

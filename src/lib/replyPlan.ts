@@ -23,6 +23,7 @@ import {
 import { detectManualReason } from '@/lib/intents'
 import type { ManualReason } from '@/lib/intents'
 import { looksLikeModelAvailability } from '@/lib/modelQuery'
+import { looksLikeCustomization } from '@/lib/customQuery'
 
 export interface MessagePlan {
   /** "No", "Ok", "Thanks", "No abhi nhi" — sawaal hi nahi, bot chup rahe */
@@ -36,6 +37,15 @@ export interface MessagePlan {
    * "apna order number bhejein" bhej deta tha.
    */
   modelAvailability: boolean
+  /**
+   * "Apni picture wala cover bana dein", "customize karwana hai" — is ka
+   * jawab AAP ki Excel ki Customize wali row se jata hai.
+   *
+   * Ye model-availability aur order-status DONO se pehle aata hai, warna
+   * aise sawaal "Yes Available" ya "apna order number bhejein" mein chale
+   * jate the.
+   */
+  customization: boolean
   /** "Order kiya hi nahi" — abhi kharidar hai, order number maangna bekaar */
   notOrderedYet: boolean
   /** Message kisi maujooda order ke baare mein hai */
@@ -86,12 +96,15 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
   // Manual wajah (cancel, galat model mila...) sab par bhaari hai, phir
   // model availability — dono order-status se pehle aate hain.
   const manualReason = noQuestion ? null : detectManualReason(text)
-  const modelAvailability = !noQuestion && !manualReason && looksLikeModelAvailability(text)
+  const customization = !noQuestion && !manualReason && looksLikeCustomization(text)
+  const modelAvailability =
+    !noQuestion && !manualReason && !customization && looksLikeModelAvailability(text)
 
   const orderish =
     !noQuestion &&
     !notOrderedYet &&
     !modelAvailability &&
+    !customization &&
     (looksLikeOrderQuery(text) ||
       isNumericOnlyMessage(text) ||
       mentionsOrderNumber(text) ||
@@ -102,7 +115,11 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
 
   const readNumbers =
     orderish ||
-    (opts.alreadyAskedForNumber && !noQuestion && !notOrderedYet && !modelAvailability)
+    (opts.alreadyAskedForNumber &&
+      !noQuestion &&
+      !notOrderedYet &&
+      !modelAvailability &&
+      !customization)
 
   // Availability wale jawab ke ANDAR hi greeting (how to place order) shamil
   // hoti hai, is liye alag se nahi bhejte — warna do message ban jate hain.
@@ -113,6 +130,7 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
     noQuestion,
     notOrderedYet,
     modelAvailability,
+    customization,
     orderish,
     readNumbers,
     manualReason,

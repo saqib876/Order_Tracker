@@ -166,3 +166,34 @@ export async function debugQna(text: string) {
     matches: explainMatches(index, text, 5),
   }
 }
+
+/**
+ * Kisi topic ka jawab seedha uthata hai (jaise Customize wali row).
+ *
+ * Kaam kya aata hai: customer customization ka sawaal apne andaz mein
+ * poochta hai jo shayad aap ne Excel mein na likha ho. Sawaal pehchan to
+ * liya jata hai, lekin word-matching kisi jumle se na mile to customer
+ * chup reh jata tha. Aise mein us topic ka apna jawab bhej dete hain.
+ *
+ * Topic ka naam poora likhne ki zarurat nahi — SHURU ka tukda kaafi hai
+ * ("custom" se "Customization / Apna Design" mil jata hai), taake Excel
+ * mein row ka naam thora badalne se ye toot na jaye.
+ *
+ * Shuru se milana zaruri hai: "%custom%" se "Camera Open-Close / Custom
+ * Corners / Material Custom" bhi milta hai aur ghalat jawab ja sakta tha.
+ */
+export async function getTopicAnswer(topicPrefix: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('qna_topics')
+    .select('answer')
+    .ilike('topic', `${topicPrefix}%`)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[qna] topic ka jawab nahi mila:', error.message)
+    return null
+  }
+  return data && data.answer ? String(data.answer) : null
+}
