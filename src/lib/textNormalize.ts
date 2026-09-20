@@ -37,6 +37,14 @@ const PHRASE_NORMALIZE: [RegExp, string][] = [
   // Kai lafzon wale phrases ko ek lafz bana dete hain, taake word-matching
   // mein ye ek hi mazboot signal banein (warna "buy 1 get 1" ke tukde
   // alag alag bikhar jate hain).
+  // "apni picture wala cover", "apni marzi ka design" — customer "customize"
+  // ka lafz likhta hi nahi, is liye ye sawaal Customization wale jawab se
+  // match hi nahi hote the (score 0.29-0.38, hadd 0.40 hai).
+  // Dhyan: sirf APNI / MERI / KHUD wali tasveer. "cover ki pics bhej dein"
+  // (yani hamari tasveerein) is se bahar hai.
+  [/\b(apni|apne|apna|meri|mera|mere)\s+(pic|pics|picture|pictures|photo|photos|tasveer|image|design|marzi)\b/g, 'custom'],
+  [/\bkhud\s+(ki|ka|ke)\s+(pic|picture|photo|tasveer|design)\b/g, 'custom'],
+
   [/\ballow\s*to\s*open\b/g, 'allowtoopen'],
   [/\bbuy\s*(1|one)\s*get\s*(1|one)\b/g, 'buyonegetone'],
   [/\bby\s*one\s*get\s*one\b/g, 'buyonegetone'],

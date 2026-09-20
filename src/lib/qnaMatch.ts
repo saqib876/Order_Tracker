@@ -58,6 +58,11 @@ const STOPWORDS = new Set([
   'ok', 'okay', 'oky', 'ohk', 'acha', 'achha', 'achaa', 'thik', 'theek',
   'thek', 'thk', 'han', 'haan', 'hanji', 'yar', 'yaar', 'bro', 'dear',
   'thanks', 'thank', 'thankyou', 'shukriya', 'shukria', 'welcome',
+  // Madadgar fail — 'kar/karo/karna' pehle se yahan hain, ye bhi wahi hain.
+  // In ki wajah se 'bana SAKTE hain' ka muqabla 'wapas kar SAKTE hain'
+  // (Refund) se ho jata tha aur bot ehtiyatan chup ho jata tha.
+  'sakta', 'sakte', 'sakti', 'sakty', 'skta', 'skte', 'skti', 'skty',
+  'sakoon', 'sakun', 'hoga', 'hogi', 'wala', 'wali', 'wale',
 ])
 
 export interface QnaEntry {

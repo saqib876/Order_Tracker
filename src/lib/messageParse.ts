@@ -430,3 +430,30 @@ export function extractIncomingText(message: any): IncomingText | null {
       return null
   }
 }
+
+// ── Email aur link ────────────────────────────────────────────────────────
+// Customer apna email bhej deta hai: "azank6845@gmail.com". Bot us mein se
+// "6845" ko order number aur "AZANK6845" ko confirmation number samajh kar
+// "Is number se koi order nahi mil raha" bhej deta tha.
+//
+// Email/link se koi order number nahi nikalna chahiye, aur agar message
+// mein email ke siwa kuch hai hi nahi to bot ko chup rehna chahiye.
+const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi
+const LINK_RE = /\b(?:https?:\/\/|www\.)\S+/gi
+
+/** Email aur link nikal kar baqi matan — number sirf isi mein se dhoondte hain */
+export function stripContacts(text: string): string {
+  return text.replace(EMAIL_RE, ' ').replace(LINK_RE, ' ')
+}
+
+// Ye do bina /g ke hain. /g wale regex `.test()` ke sath apni jagah yaad
+// rakhte hain, is liye baari baari galat jawab dene lagte hain.
+const HAS_EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i
+const HAS_LINK = /\b(?:https?:\/\/|www\.)\S+/i
+
+/** Message mein email/link ke siwa koi baat hai hi nahi? */
+export function isContactOnly(text: string): boolean {
+  if (!HAS_EMAIL.test(text) && !HAS_LINK.test(text)) return false
+  const baqi = stripContacts(text).replace(/[^a-z0-9؀-ۿ]/gi, '')
+  return baqi.length <= 2
+}

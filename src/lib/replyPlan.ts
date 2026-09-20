@@ -15,6 +15,8 @@ import {
   isNumericOnlyMessage,
   extractTrackingCandidate,
   isAcknowledgementOnly,
+  stripContacts,
+  isContactOnly,
   saysNotOrderedYet,
   saysAlreadyOrdered,
 } from '@/lib/messageParse'
@@ -64,13 +66,17 @@ export interface MessagePlan {
 }
 
 export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }): MessagePlan {
-  const noQuestion = isAcknowledgementOnly(text)
+  // Email / link ke andar ke adad order number nahi hain
+  const numbersText = stripContacts(text)
+
+  // Sirf email bheja ho to bot chup — ye sawaal hi nahi hai
+  const noQuestion = isAcknowledgementOnly(text) || isContactOnly(text)
   const notOrderedYet = !noQuestion && saysNotOrderedYet(text)
 
-  const confirmationNumber = extractConfirmationNumber(text)
-  const orderNumber = extractOrderNumber(text)
-  const phoneInText = extractPhone(text)
-  const trackingCandidate = extractTrackingCandidate(text)
+  const confirmationNumber = extractConfirmationNumber(numbersText)
+  const orderNumber = extractOrderNumber(numbersText)
+  const phoneInText = extractPhone(numbersText)
+  const trackingCandidate = extractTrackingCandidate(numbersText)
 
   // Kya ye message waqai order ke baare mein hai?
   //
