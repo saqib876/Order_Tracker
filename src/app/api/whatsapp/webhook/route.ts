@@ -15,6 +15,8 @@ const MAX_WORKING_DAYS = 15
 
 // Ek hi order ki tracking isi customer ko is waqt ke andar dobara nahi jati
 const TRACKING_REPEAT_HOURS = Number(process.env.TRACKING_REPEAT_HOURS) || 24
+// Model available hai ya nahi — is ke jawab ki pehli line
+const AVAILABLE_LINE = '*Yes Available*'
 // Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
 const ASK_STATE_HOURS = 24
 
@@ -322,6 +324,24 @@ export async function POST(req: NextRequest) {
   // jati thi, phir tracking.
   if (!plan.skipGreeting) await maybeSendGreeting(from)
 
+  // ── 0b) "Mere model ka cover mil jayega?" ────────────────────────────────
+  // Duniya ka koi bhi mobile ya laptop model ho, Urdu/English/Roman — jawab
+  // ek hi hai: haan available hai, aur order aise place karein. DONO baatein
+  // EK hi message mein jati hain, do alag messages nahi.
+  //
+  // Ye order-status se pehle hai: "Samsung A54 ka cover mil jayega" mein
+  // "mil jayega" ki wajah se bot pehle "apna order number bhejein" bhej
+  // deta tha.
+  if (plan.modelAvailability) {
+    const orderGuide = await getGreetingMessage()
+    await clearState()
+    await sendWhatsAppText(from, orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
+    // Greeting isi message mein ja chuki — alag se dobara na jaye
+    await markGreeted(from)
+    console.log(`[wa] model availability — ${from}`)
+    return NextResponse.json({ ok: true })
+  }
+
   // ── 1) Cancel / address / design / phone change / shikayat ───────────────
   // Ye cheezein bot ko khud nahi karni chahiye. Holding reply bhejte hain aur
   // message ko manual review queue mein daal dete hain.
@@ -539,6 +559,11 @@ async function maybeSendGreeting(phone: string): Promise<void> {
   if (!greeting) return // aap ne greeting likhi hi nahi
 
   await sendWhatsAppText(phone, greeting)
+  await markGreeted(phone)
+}
+
+/** Greeting ja chuki — chahe akeli, chahe kisi aur jawab ke andar. */
+async function markGreeted(phone: string): Promise<void> {
   await supabaseAdmin
     .from('wa_greeted')
     .upsert({ phone, greeted_at: new Date().toISOString() })

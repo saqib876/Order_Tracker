@@ -20,10 +20,20 @@ import {
 } from '@/lib/messageParse'
 import { detectManualReason } from '@/lib/intents'
 import type { ManualReason } from '@/lib/intents'
+import { looksLikeModelAvailability } from '@/lib/modelQuery'
 
 export interface MessagePlan {
   /** "No", "Ok", "Thanks", "No abhi nhi" — sawaal hi nahi, bot chup rahe */
   noQuestion: boolean
+  /**
+   * "Samsung A54 ka cover mil jayega?", "13 pro max?", "oppo a16 available ha"
+   * — kisi bhi mobile/laptop model ki availability ka sawaal. Is par ek hi
+   * message jata hai: "Yes Available" + order kaise place karna hai.
+   *
+   * Ye order-status se PEHLE aata hai, warna "mil jayega" ki wajah se bot
+   * "apna order number bhejein" bhej deta tha.
+   */
+  modelAvailability: boolean
   /** "Order kiya hi nahi" — abhi kharidar hai, order number maangna bekaar */
   notOrderedYet: boolean
   /** Message kisi maujooda order ke baare mein hai */
@@ -67,9 +77,15 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
   // Pehle har message mein se koi bhi 3-6 digit ka number uthhaya jata tha,
   // chahe wo price ho ("1400 ka hai?") ya mobile model — us se kisi AUR ka
   // order is ajnabi ko chala jata tha. Isi liye ye guard hai.
+  // Manual wajah (cancel, galat model mila...) sab par bhaari hai, phir
+  // model availability — dono order-status se pehle aate hain.
+  const manualReason = noQuestion ? null : detectManualReason(text)
+  const modelAvailability = !noQuestion && !manualReason && looksLikeModelAvailability(text)
+
   const orderish =
     !noQuestion &&
     !notOrderedYet &&
+    !modelAvailability &&
     (looksLikeOrderQuery(text) ||
       isNumericOnlyMessage(text) ||
       mentionsOrderNumber(text) ||
@@ -78,15 +94,19 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
       // order dhoondwana.
       phoneInText !== null)
 
-  const readNumbers = orderish || (opts.alreadyAskedForNumber && !noQuestion && !notOrderedYet)
+  const readNumbers =
+    orderish ||
+    (opts.alreadyAskedForNumber && !noQuestion && !notOrderedYet && !modelAvailability)
 
-  const manualReason = noQuestion ? null : detectManualReason(text)
-
-  const skipGreeting = orderish || confirmationNumber !== null || manualReason !== null
+  // Availability wale jawab ke ANDAR hi greeting (how to place order) shamil
+  // hoti hai, is liye alag se nahi bhejte — warna do message ban jate hain.
+  const skipGreeting =
+    orderish || modelAvailability || confirmationNumber !== null || manualReason !== null
 
   return {
     noQuestion,
     notOrderedYet,
+    modelAvailability,
     orderish,
     readNumbers,
     manualReason,
