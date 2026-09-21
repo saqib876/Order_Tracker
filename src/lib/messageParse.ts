@@ -173,8 +173,9 @@ export function isGreetingOnly(text: string): boolean {
   const words = t.split(/\s+/).filter(Boolean)
   if (words.length === 0 || words.length > 5) return false
 
-  // "A o A" jaise bikhre hue salaam — sab lafz mila kar dekhte hain
-  if (isGreetingWord(words.join(''))) return true
+  // "A o A" jaise bikhre hue salaam — sab lafz mila kar dekhte hain. Sirf
+  // chhote tukron par: warna "Hi price" bhi "hiprice" ban kar salaam lagta tha.
+  if (words.every((w) => w.length <= 3) && isGreetingWord(words.join(''))) return true
 
   // Kam se kam ek asal greeting lazmi hai, baqi sab filler ho sakte hain.
   let greetings = 0
@@ -456,4 +457,23 @@ export function isContactOnly(text: string): boolean {
   if (!HAS_EMAIL.test(text) && !HAS_LINK.test(text)) return false
   const baqi = stripContacts(text).replace(/[^a-z0-9؀-ۿ]/gi, '')
   return baqi.length <= 2
+}
+
+/**
+ * Aisa message jo "Naye Sawaal" ki Excel mein kabhi nahi aana chahiye:
+ * "?", "Hi", "AoA", "Hello", "Ok", "Thanks", sirf email/link, emoji.
+ * Ye sawaal hi nahi — list mein sirf bheer banate the.
+ */
+export function isJunkMessage(text: string): boolean {
+  const t = String(text || '').trim()
+  if (!t) return true
+  // Na koi harf, na adad — "?", "...", "👍"
+  if (!/[a-zA-Z0-9\u00C0-\u024F\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(t)) return true
+  if (isGreetingOnly(t) || isAcknowledgementOnly(t) || isContactOnly(t)) return true
+  // "A-O-A", "🤧AchAa" — nishaan/emoji hata kar dobara dekhte hain
+  const saaf = t.replace(/[^a-zA-Z0-9\u0600-\u06FF\s]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!saaf) return true
+  if (saaf !== t && (isGreetingOnly(saaf) || isAcknowledgementOnly(saaf))) return true
+  // Sirf "Sir", "G", "Bhai"
+  return saaf.toLowerCase().split(' ').every((w) => GREETING_FILLER.has(w))
 }

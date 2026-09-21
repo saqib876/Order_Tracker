@@ -3,14 +3,18 @@
  *
  *   /api/admin/qna-export?key=ADMIN_KEY
  *
- * Excel mein chaar sheets hoti hain:
+ * Excel mein do sheets hoti hain:
  *
  *   1. "Naye Sawaal"      — jo naye sawaal bot samajh nahi paya. Har row par
  *                           dropdown: add karna hai ya nahi, aur kis topic mein.
- *   2. "Naya Topic"       — khali rows, jahan aap khud naya topic + sawaal +
- *                           jawab likh sakte hain.
- *   3. "Mojooda Topics"   — abhi jo Q&A live hai (padhne ke liye).
- *   4. "Lists"            — dropdown ke liye (chhupi hui).
+ *   2. "Mojooda Topics"   — abhi jo Q&A live hai. Yahin badlein, aur NAYA
+ *                           topic neeche ki khali (peeli) rows mein likhein —
+ *                           wo foran "Kis Topic mein?" dropdown mein aa jata hai.
+ *
+ * "Naye Sawaal" mein ye KABHI nahi aate:
+ *   - jin par aap pehle "Nahi" kar chuke (qna_ignored table)
+ *   - "?", "Hi", "AoA", "Hello", "Ok" jaise message
+ *   - jin ka jawab bot ab khud de deta hai (Q&A, order, model, customization)
  *
  * Har export ke baad un messages par nishaan lag jata hai, is liye agli dafa
  * SIRF naye sawaal aayenge. Sirf dekhna ho, nishaan na lage — `&peek=1`.
@@ -19,6 +23,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ExcelJS from 'exceljs'
 import { supabaseAdmin } from '@/lib/supabase'
+import { GREETING_TOPIC } from '@/lib/whatsapp'
+import { buildIndex, matchAgainstIndex } from '@/lib/qnaMatch'
+import { planReply } from '@/lib/replyPlan'
+import { isJunkMessage } from '@/lib/messageParse'
+import { ignoreKey } from '@/lib/qnaIgnore'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,19 +35,20 @@ export const runtime = 'nodejs'
 const HEADER_FILL = 'FF1F3864'
 const FILL_ME = 'FFFFFF00'
 const FILL_READ = 'FFF2F2F2'
-const NEW_TOPIC_OPTION = '++ NAYA TOPIC ++'
 
-// "Naya Topic" sheet: row 2 MISAAL hai, asli khali rows 3 se shuru
-const NEW_TOPIC_FIRST_ROW = 3
-const NEW_TOPIC_ROWS = 30
-// "Mojooda Topics" ke neeche bhi kuch khali jagah dropdown mein shamil —
-// agar koi wahan nayi row bana de to wo bhi chuni ja sake
-const SPARE_TOPIC_ROWS = 15
+// Supabase ek dafa mein 1000 se zyada rows nahi deta — pehle `.limit(5000)`
+// likha tha lekin aata 1000 hi tha, aur baqi purane sawaal agli file mein
+// "wapas" aate dikhte the. Ab safha-dar-safha parhte hain.
+const PAGE = 1000
+const MAX_ROWS = 50000
 
-/** Is row ke topic ke liye "Naye Sawaal" sheet mein kitne "Haan" */
-function countFormula(rowNumber: number): string {
-  return `IF(A${rowNumber}="","",COUNTIFS('Naye Sawaal'!$D:$D,"Haan",'Naye Sawaal'!$E:$E,A${rowNumber}))`
-}
+// "Mojooda Topics" ke neeche itni khali peeli rows — naye topic ke liye
+const BLANK_TOPIC_ROWS = 40
+// "Kis Topic mein?" dropdown seedha Mojooda Topics ka A column parhta hai.
+// Koi formula nahi (formula wali list kuch Excel mein khaali dikhti thi).
+const TOPIC_LIST_LAST_ROW = 500
+const TOPIC_RANGE = `'Mojooda Topics'!$A$2:$A$${TOPIC_LIST_LAST_ROW}`
+const YES_NO = '"Haan,Nahi"'
 
 function todayInPakistan(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -55,6 +65,21 @@ function styleHeader(ws: { getRow: (n: number) => any }) {
   row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
   row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
   row.height = 30
+}
+
+/** Poori table safha-dar-safha (1000 ki had se bachne ke liye) */
+async function fetchAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; from < MAX_ROWS; from += PAGE) {
+    const { data, error } = await build(from, from + PAGE - 1)
+    if (error) throw new Error(error.message)
+    const rows = data || []
+    all.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return all
 }
 
 export async function GET(req: NextRequest) {
@@ -82,23 +107,65 @@ export async function GET(req: NextRequest) {
   // yehi hua tha: har cheez do-do dafa chal rahi thi).
   const activeTopics = (topics || []).filter((t) => t.is_active !== false && t.topic)
 
-  // ── 2. Naye unanswered sawaal ───────────────────────────────────────────
-  const { data: unmatched, error: unmatchedError } = await supabaseAdmin
-    .from('unmatched_messages')
-    .select('id, message_text, created_at')
-    .is('exported_at', null)
-    .order('created_at', { ascending: false })
-    .limit(5000)
+  // Bot abhi kin sawaalon ka jawab deta hai — wahi index jo webhook use karta hai
+  const index = buildIndex(
+    activeTopics
+      .filter((t) => t.topic !== GREETING_TOPIC && t.answer)
+      .map((t) => ({
+        topic: String(t.topic),
+        answer: String(t.answer),
+        priority: Number(t.priority) || 0,
+        questions: String(t.questions || '')
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }))
+  )
 
-  if (unmatchedError) {
-    return NextResponse.json({ error: unmatchedError.message }, { status: 500 })
+  // ── 2. Naye unanswered sawaal ───────────────────────────────────────────
+  let unmatched: { id: string; message_text: string | null; created_at: string }[]
+  let ignoredKeys: Set<string>
+  try {
+    unmatched = await fetchAll((from, to) =>
+      supabaseAdmin
+        .from('unmatched_messages')
+        .select('id, message_text, created_at')
+        .is('exported_at', null)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    )
+    // Table na bani ho to khali set — export phir bhi chale
+    const ignoredRows = await fetchAll<{ text_norm: string }>((from, to) =>
+      supabaseAdmin.from('qna_ignored').select('text_norm').range(from, to)
+    ).catch((e) => {
+      console.warn('[qna-export] qna_ignored parh nahi saka:', e.message)
+      return []
+    })
+    ignoredKeys = new Set(ignoredRows.map((r) => r.text_norm))
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'unmatched_messages parh nahi saka' }, { status: 500 })
   }
 
+  const skip = { nahi: 0, faltu: 0, botDetaHai: 0 }
   const grouped = new Map<string, { text: string; count: number }>()
-  for (const row of unmatched || []) {
+  for (const row of unmatched) {
     const text = String(row.message_text || '').replace(/\s+/g, ' ').trim()
     if (!text) continue
-    const key = text.toLowerCase()
+
+    if (ignoredKeys.has(ignoreKey(text))) {
+      skip.nahi++
+      continue
+    }
+    if (isJunkMessage(text)) {
+      skip.faltu++
+      continue
+    }
+    if (botHandles(text, index)) {
+      skip.botDetaHai++
+      continue
+    }
+
+    const key = ignoreKey(text) || text.toLowerCase()
     const existing = grouped.get(key)
     if (existing) existing.count++
     else grouped.set(key, { text, count: 1 })
@@ -112,56 +179,6 @@ export async function GET(req: NextRequest) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Myzan Order Tracker'
   wb.created = new Date()
-  // File khulte hi saare formula dobara hisaab hon (dropdown ki list aur
-  // ginti formula se banti hai — bina is ke kuch Excel versions mein khaali
-  // dikh sakti hai jab tak koi khana na chheda jaye)
-  wb.calcProperties = { fullCalcOnLoad: true }
-
-  // ── Sheet 4 (pehle banate hain, dropdown isi par depend karta hai) ──────
-  const wsList = wb.addWorksheet('Lists')
-  wsList.getCell('A1').value = 'Topics'
-  wsList.getCell('B1').value = 'Haan/Nahi'
-
-  // Dropdown ki list SEEDHI dono sheets se judi hai (formula), is liye:
-  //   - "Naya Topic" sheet mein naya topic likhein -> foran dropdown mein
-  //   - "Mojooda Topics" mein naam badlein          -> dropdown mein bhi badal
-  // Pehle ye list download ke waqt likh di jati thi aur file ke andar ki
-  // tabdeeliyan dropdown mein nahi aati thin — naye topic chune hi nahi ja
-  // sakte the, aur purane naam chune jate the.
-  const mojoodaRows = activeTopics.length + SPARE_TOPIC_ROWS
-  let listRow = 2
-  for (let r = 2; r < 2 + mojoodaRows; r++) {
-    wsList.getCell('A' + listRow++).value = {
-      formula: `IF('Mojooda Topics'!A${r}="","",'Mojooda Topics'!A${r})`,
-    } as any
-  }
-  for (let r = NEW_TOPIC_FIRST_ROW; r < NEW_TOPIC_FIRST_ROW + NEW_TOPIC_ROWS; r++) {
-    wsList.getCell('A' + listRow++).value = {
-      formula: `IF('Naya Topic'!A${r}="","",'Naya Topic'!A${r})`,
-    } as any
-  }
-  wsList.getCell('A' + listRow).value = NEW_TOPIC_OPTION
-  const topicListEnd = listRow
-  wsList.getCell('B2').value = 'Haan'
-  wsList.getCell('B3').value = 'Nahi'
-
-  // Ye sheet sirf dropdown ko khilati hai — customer/aap ne is mein kuch
-  // nahi bharna. Phir bhi kabhi nazar aa jaye to tanbeeh saamne rahe.
-  wsList.getCell('D1').value =
-    'Ye sheet sirf dropdown ki list hai. Is mein kuch NA likhein aur ise delete NA karein — ' +
-    'warna "Add karein?", "Kis Topic mein?" aur "Hata dein?" wale dropdown kaam karna chhod denge. ' +
-    'Upload karte waqt is sheet ko parha hi nahi jata.'
-  wsList.getCell('D1').font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFB91C1C' } }
-  wsList.getColumn('D').width = 70
-  wsList.getCell('A1').font = { name: 'Arial', size: 10, bold: true }
-  wsList.getCell('B1').font = { name: 'Arial', size: 10, bold: true }
-
-  // 'veryHidden' — Excel ke menu se bhi nazar nahi aati (sirf 'hidden' ho to
-  // kuch Excel versions mein ye khul kar saamne aa jati thi).
-  wsList.state = 'veryHidden'
-
-  const topicRange = `=Lists!$A$2:$A$${topicListEnd}`
-  const yesNoRange = '=Lists!$B$2:$B$3'
 
   // ── Sheet 1: Naye Sawaal ────────────────────────────────────────────────
   const ws1 = wb.addWorksheet('Naye Sawaal')
@@ -187,79 +204,55 @@ export async function GET(req: NextRequest) {
     row.getCell('add').dataValidation = {
       type: 'list',
       allowBlank: true,
-      formulae: [yesNoRange],
+      formulae: [YES_NO],
       showErrorMessage: true,
       errorTitle: 'Sirf Haan ya Nahi',
-      error: 'Is khane mein sirf "Haan" ya "Nahi" chun sakte hain.',
+      error: 'Haan = is topic mein jor do. Nahi = ye sawaal aainda kabhi na dikhao.',
     }
     row.getCell('topic').dataValidation = {
       type: 'list',
       allowBlank: true,
-      formulae: [topicRange],
+      formulae: [TOPIC_RANGE],
       showErrorMessage: true,
       errorTitle: 'List mein se chunein',
-      error: 'Topic list mein se chunein. Naya topic banana ho to "Naya Topic" sheet use karein.',
+      error: 'Topic list mein se chunein. Naya topic chahiye to "Mojooda Topics" sheet ki neeche wali khali row mein likhein — phir wo is list mein aa jayega.',
     }
   })
 
   ws1.views = [{ state: 'frozen', ySplit: 1 }]
   ws1.autoFilter = { from: 'A1', to: 'F1' }
 
-  // ── Sheet 2: Naya Topic ─────────────────────────────────────────────────
-  const ws2 = wb.addWorksheet('Naya Topic')
-  ws2.columns = [
-    { header: 'Naya Topic ka Naam', key: 'topic', width: 32 },
-    { header: 'Sawaal (har line par ek — Alt+Enter se nayi line)', key: 'questions', width: 58 },
-    { header: 'Jawab', key: 'answer', width: 58 },
-    { header: 'Naye Sawaal se jure (is file mein)', key: 'nn', width: 16 },
-  ]
-  styleHeader(ws2)
-
-  const example = ws2.addRow({
-    topic: 'MISAAL — is row ko mita dein',
-    questions: 'gift wrap ho sakti hai\ngift packing karte ho\ncan you gift wrap it',
-    answer: 'Ji haan, gift packing available hai. Order karte waqt note mein likh dein.',
-  })
-  example.font = { name: 'Arial', size: 10, italic: true }
-  example.alignment = { vertical: 'top', wrapText: true }
-  for (const c of ['topic', 'questions', 'answer']) {
-    example.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } }
-  }
-  example.height = 46
-
-  for (let i = 0; i < NEW_TOPIC_ROWS; i++) {
-    const row = ws2.addRow({})
-    row.font = { name: 'Arial', size: 10 }
-    row.alignment = { vertical: 'top', wrapText: true }
-    for (const c of ['topic', 'questions', 'answer']) {
-      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
-    }
-    row.getCell('nn').value = { formula: countFormula(row.number) } as any
-    row.getCell('nn').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
-    row.getCell('nn').alignment = { vertical: 'top', horizontal: 'center' }
-  }
-  ws2.views = [{ state: 'frozen', ySplit: 1 }]
-
-  // ── Sheet 3: Mojooda Topics (reference) ─────────────────────────────────
+  // ── Sheet 2: Mojooda Topics ─────────────────────────────────────────────
   // Poore sawaal bhi isi sheet mein aate hain, taake file "round-trip" kare:
   // download -> edit -> upload. Jo yahan badlenge wo upload par update ho jayega.
-  const ws3 = wb.addWorksheet('Mojooda Topics')
-  ws3.columns = [
+  const ws2 = wb.addWorksheet('Mojooda Topics')
+  ws2.columns = [
     { header: 'Topic', key: 'topic', width: 30 },
     { header: 'Sawaal (har line par ek — Alt+Enter se nayi line)', key: 'questions', width: 54 },
     { header: 'Jawab', key: 'answer', width: 60 },
     { header: 'Hata dein?', key: 'del', width: 12 },
     { header: 'Kitne Sawaal', key: 'nq', width: 13 },
-    { header: 'Naye Sawaal se jure (is file mein)', key: 'nn', width: 16 },
   ]
-  styleHeader(ws3)
+  styleHeader(ws2)
+  ws2.getCell('A1').note =
+    'Naya topic: sab se neeche wali khali peeli row mein Topic, Sawaal aur Jawab likhein. ' +
+    'Wo foran "Naye Sawaal" ke "Kis Topic mein?" dropdown mein aa jayega.'
+
+  const deleteValidation = {
+    type: 'list' as const,
+    allowBlank: true,
+    formulae: [YES_NO],
+    showErrorMessage: true,
+    errorTitle: 'Sirf Haan ya Nahi',
+    error: 'Poora topic hatana ho to "Haan" chunein, warna khali chhod dein.',
+  }
 
   for (const t of activeTopics) {
     const qs = String(t.questions || '')
       .split(/\r?\n/)
       .map((x) => x.trim())
       .filter(Boolean)
-    const row = ws3.addRow({
+    const row = ws2.addRow({
       topic: t.topic,
       questions: qs.join('\n'),
       answer: t.answer,
@@ -271,28 +264,28 @@ export async function GET(req: NextRequest) {
     for (const c of ['topic', 'questions', 'answer', 'del']) {
       row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
     }
-    // Poora topic hatana ho to yahan "Haan"
-    row.getCell('del').dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: [yesNoRange],
-      showErrorMessage: true,
-      errorTitle: 'Sirf Haan ya Nahi',
-      error: 'Poora topic hatana ho to "Haan" chunein, warna khali chhod dein.',
-    }
+    row.getCell('del').dataValidation = deleteValidation
     row.getCell('nq').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
-    // "Naye Sawaal" sheet mein jitne sawaal is topic ke liye "Haan" kiye —
-    // zinda ginti, taake foran pata chal jaye ke chunaav darj ho gaya
-    row.getCell('nn').value = { formula: countFormula(row.number) } as any
-    row.getCell('nn').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
-    row.getCell('nn').alignment = { vertical: 'top', horizontal: 'center' }
     row.height = 40
   }
-  ws3.views = [{ state: 'frozen', ySplit: 1 }]
+
+  // Naye topic ke liye khali rows — yahan likha naam dropdown mein foran aata hai
+  for (let i = 0; i < BLANK_TOPIC_ROWS; i++) {
+    const row = ws2.addRow({})
+    row.font = { name: 'Arial', size: 10 }
+    row.alignment = { vertical: 'top', wrapText: true }
+    for (const c of ['topic', 'questions', 'answer', 'del']) {
+      row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
+    }
+    row.getCell('del').dataValidation = deleteValidation
+  }
+  ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
   // ── Export ho gaye — nishaan laga do ────────────────────────────────────
+  // Jo rows chhaant di gayin (Nahi / faltu / bot jawab deta hai) un par bhi —
+  // warna wo har dafa dobara parhi jatin.
   let markedCount = 0
-  if (!peek && unmatched && unmatched.length > 0) {
+  if (!peek && unmatched.length > 0) {
     const ids = unmatched.map((r) => r.id)
     const now = new Date().toISOString()
     for (let i = 0; i < ids.length; i += 200) {
@@ -310,7 +303,9 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(
-    `[qna-export] ${newQuestions.length} naye sawaal, ${activeTopics.length} topics, marked=${markedCount}, peek=${peek}`
+    `[qna-export] ${unmatched.length} messages parhe → ${newQuestions.length} naye sawaal ` +
+      `(chhode: nahi=${skip.nahi} faltu=${skip.faltu} bot_deta_hai=${skip.botDetaHai}), ` +
+      `${activeTopics.length} topics, marked=${markedCount}, peek=${peek}`
   )
 
   const buffer = await wb.xlsx.writeBuffer()
@@ -323,4 +318,16 @@ export async function GET(req: NextRequest) {
       'Cache-Control': 'no-store',
     },
   })
+}
+
+/**
+ * Is message ka jawab bot AB khud de deta hai? (to Excel mein dikhane ki
+ * zarurat nahi) — webhook wala hi faisla, bina database ke.
+ */
+function botHandles(text: string, index: ReturnType<typeof buildIndex>): boolean {
+  const plan = planReply(text, { alreadyAskedForNumber: false })
+  if (plan.noQuestion) return true
+  if (plan.customization || plan.modelAvailability || plan.manualReason) return true
+  if (plan.orderish || plan.confirmationNumber) return true
+  return matchAgainstIndex(index, text) !== null
 }

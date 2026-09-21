@@ -38,6 +38,7 @@ import ExcelJS from 'exceljs'
 import { supabaseAdmin } from '@/lib/supabase'
 import { invalidateQnaCache, GREETING_TOPIC } from '@/lib/whatsapp'
 import { parseQnaWorkbook, splitQuestions } from '@/lib/qnaImportParse'
+import { ignoreKey } from '@/lib/qnaIgnore'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { topics: incoming, picked, notes, fullSheet, orphans, unassigned } = parseQnaWorkbook(wb)
+  const { topics: incoming, picked, notes, fullSheet, orphans, unassigned, ignored } = parseQnaWorkbook(wb)
 
   if (incoming.size === 0) {
     return NextResponse.json(
@@ -233,6 +234,23 @@ export async function POST(req: NextRequest) {
     if (!error && rows) wapasQueue += rows.length
   }
 
+  // ── "Nahi" wale sawaal yaad rakho — aainda kisi Excel mein nahi ────────
+  // Pehle "Nahi" ka koi asar nahi hota tha: wahi "Hi", "AoA", "?" agli file
+  // mein phir aa jate the (purane messages ki qatar se).
+  let yaadRakhe = 0
+  const nahiKeys = Array.from(new Set(ignored.map(ignoreKey).filter(Boolean)))
+  for (let i = 0; i < nahiKeys.length; i += 200) {
+    const chunk = nahiKeys.slice(i, i + 200).map((text_norm) => ({ text_norm }))
+    const { error } = await supabaseAdmin
+      .from('qna_ignored')
+      .upsert(chunk, { onConflict: 'text_norm', ignoreDuplicates: true })
+    if (error) {
+      notes.push('"Nahi" wale sawaal yaad nahi rakhe ja sake: ' + error.message)
+      break
+    }
+    yaadRakhe += chunk.length
+  }
+
   invalidateQnaCache()
 
   const result = {
@@ -247,6 +265,7 @@ export async function POST(req: NextRequest) {
     band_kiye_gaye_topics: bandHue,
     naye_sawaal_sheet_se_chune: picked,
     agli_excel_mein_wapas_aayenge: wapasQueue,
+    nahi_wale_aainda_nahi_aayenge: yaadRakhe,
     jawab_khali_is_liye_chhode: skipped,
     notes: notes.slice(0, 30),
   }

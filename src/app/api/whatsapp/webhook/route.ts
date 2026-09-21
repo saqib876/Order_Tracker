@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendWhatsAppText, matchQna, matchQnaDetailed, getGreetingMessage, getTopicAnswer } from '@/lib/whatsapp'
+import {
+  sendWhatsAppText,
+  matchQna,
+  matchQnaDetailed,
+  getGreetingMessage,
+  getTopicAnswer,
+  getTrackLinkAnswer,
+} from '@/lib/whatsapp'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
 import type { CourierStage } from '@/lib/courierStatus'
-import { phoneVariants, extractIncomingText } from '@/lib/messageParse'
-import { planReply } from '@/lib/replyPlan'
+import { phoneVariants, extractIncomingText, isJunkMessage, normalizeExtractedPhone } from '@/lib/messageParse'
+import { planReply, greetingWithAnswer, TRACK_LINK } from '@/lib/replyPlan'
 
 export const dynamic = 'force-dynamic'
 
@@ -300,12 +307,27 @@ export async function POST(req: NextRequest) {
   const plan = planReply(text, { alreadyAskedForNumber: askedBefore })
   const { confirmationNumber, orderNumber, phoneInText, trackingCandidate, manualReason } = plan
 
-  // ── 0) Greeting — sirf naye kharidar ko ──────────────────────────────────
-  // Greeting "how to place your order" hai. Jo customer apne maujooda order
-  // ki baat kar raha hai (order number, "I have ordered", cancel, address)
-  // use ye bhejna bemaani hai — pehle "ORDER #48134" par bhi pehle greeting
-  // jati thi, phir tracking.
-  if (!plan.skipGreeting) await maybeSendGreeting(from)
+  // ── Greeting — sirf naye kharidar ko, aur kabhi do dafa nahi ────────────
+  // Greeting "how to place your order" hai. Ab ye har raaste par ALAG se
+  // tay hota hai, jawab dekh kar (pehle sab se upar ek dafa bhej di jati thi):
+  //   - order ki baat (number, "I have ordered", cancel, address) → nahi
+  //   - Q&A ka jawab khud how-to-place samjhata ho (Buy 1 Get 1, Name
+  //     Design...) → nahi, warna wahi lamba matan do dafa jata tha
+  //   - order ke baad wala topic (refund, quality complaint...) → nahi
+  //   - "Parcel allow to open" → sirf agar is number par koi order na ho
+  //   - jawab greeting ke andar hi ho ("Price") → sirf greeting, ek message
+  // Wapas: true = jawab ab alag se NAHI bhejna (greeting mein aa gaya)
+  const greetBefore = async (qnaTopic?: string, qnaAnswer?: string): Promise<boolean> => {
+    if (plan.skipGreeting) return false
+    if (qnaAnswer !== undefined) {
+      const faisla = greetingWithAnswer(qnaTopic || '', qnaAnswer, await getGreetingMessage())
+      if (faisla === 'skip') return false
+      if (faisla === 'if-no-order' && (await phoneHasOrder(from))) return false
+      if (faisla === 'instead') return maybeSendGreeting(from)
+    }
+    await maybeSendGreeting(from)
+    return false
+  }
 
   // ── 0a) "Apni picture wala cover bana dein" ──────────────────────────────
   // Customization ka sawaal. Jawab AAP ki Excel ki Customize wali row se
@@ -316,10 +338,12 @@ export async function POST(req: NextRequest) {
   // Ye order-status se PEHLE hai: warna "mujhe apni photo wala case
   // chahiye" par "apna order number bhejein" chala jata tha.
   if (plan.customization) {
-    const jawab = (await matchQna(text)) || (await getTopicAnswer('custom'))
+    const mila = await matchQnaDetailed(text)
+    const jawab = mila ? mila.answer : await getTopicAnswer('custom')
     if (jawab) {
+      const greetingMeinAaGaya = await greetBefore(mila ? mila.topic : 'Customization', jawab)
       await clearState()
-      await sendWhatsAppText(from, jawab)
+      if (!greetingMeinAaGaya) await sendWhatsAppText(from, jawab)
       console.log(`[wa] customization — ${from}`)
       return NextResponse.json({ ok: true })
     }
@@ -429,19 +453,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Number diya tha lekin koi order nahi mila — batana zaroori hai, warna
-  // customer intezaar karta reh jayega.
+  // Number diya tha lekin live tracking nahi bhej sake (order nahi mila —
+  // ghalat order / mobile / confirmation number). Ab AAP ki Excel ka web
+  // tracking wala jawab jata hai (track-your-order link), taake customer
+  // website par khud dekh le. Wo row na ho to purana message.
   if (confirmationNumber || (plan.readNumbers && (orderNumber || phoneInText))) {
     await clearState()
+    const webTrack = await getTrackLinkAnswer()
     await sendWhatsAppText(
       from,
-      [
-        'Is Number Se Koi Order Nahi Mil Raha. Please Apna Correct ',
-        '',
-        'Order Number (Jaise 40981), ',
-        'Confirmation Number (Jaise #N8FNNZAKE) ',
-        'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Again Check Karti Hun.',
-      ].join('\n')
+      webTrack ||
+        [
+          'Is Number Se Koi Order Nahi Mil Raha. Please Apna Correct ',
+          '',
+          'Order Number (Jaise 40981), ',
+          'Confirmation Number (Jaise #N8FNNZAKE) ',
+          'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Again Check Karti Hun.',
+        ].join('\n')
     )
     return NextResponse.json({ ok: true })
   }
@@ -452,18 +480,23 @@ export async function POST(req: NextRequest) {
   const qna = plan.noQuestion ? null : await matchQnaDetailed(text)
 
   // Jawab SIRF tracking page ka link ho ("Order Placed / Confirmed", "Order
-  // Number Bheja" jaise topics) aur customer ne order number nahi diya — to
-  // link bhejne ke bajaye pehle order number maangte hain, taake WhatsApp
-  // par hi LIVE tracking bhej sakein. Pehle "I have already ordered" par
-  // seedha link chala jata tha aur tracking ka mauqa hi nikal jata tha.
+  // Number Bheja") aur message ORDER ki baat hai lekin number nahi diya:
+  //   - pehli dafa → link nahi, order number maangte hain (neeche step 4),
+  //     taake WhatsApp par hi LIVE tracking bhej sakein
+  //   - number pehle hi maang chuke → bot CHUP (wahi cheez dobara nahi)
+  // Order ki baat na lagti ho lekin sawaal inhi topics se mile → link jata hai.
   //
   // Pehchan jawab ke link se hoti hai, topic ke naam se nahi — taake Excel
-  // mein topic ka naam badalne se ye na toote. Doosri dafa (number ek dafa
-  // maang chuke hon) link hi chala jata hai.
-  const sirfTrackingLink = qna !== null && /track-your-order/i.test(qna.answer)
+  // mein topic ka naam badalne se ye na toote.
+  const sirfTrackingLink = qna !== null && TRACK_LINK.test(qna.answer)
+  if (sirfTrackingLink && plan.orderish && !plan.mayAskForNumber) {
+    console.log(`[wa] order number pehle maang chuke — ${from} ko dobara kuch nahi`)
+    return NextResponse.json({ ok: true })
+  }
   if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
+    const greetingMeinAaGaya = await greetBefore(qna.topic, qna.answer)
     if (state) await clearState()
-    await sendWhatsAppText(from, qna.answer)
+    if (!greetingMeinAaGaya) await sendWhatsAppText(from, qna.answer)
     return NextResponse.json({ ok: true })
   }
 
@@ -492,11 +525,15 @@ export async function POST(req: NextRequest) {
   // Jaan boojh kar koi reply nahi jata. Agar bot number maang chuka hai to
   // wo intezaar barqarar rehta hai (baad mein number aaye to pehchana jaye),
   // warna saaf kar dete hain.
+  // Naya customer "Hi" / "AoA" likhe to greeting yahin jati hai
+  await greetBefore()
+
   if (state && !askedBefore) await clearState()
 
-  // "Ok / No / Thanks" rozana ki Excel mein faltu bheer banate — sirf asal
-  // sawaal log hote hain.
-  if (!plan.noQuestion) {
+  // "?", "Hi", "AoA", "Ok", "Thanks" rozana ki Excel mein faltu bheer banate
+  // — sirf asal sawaal log hote hain. Order ki baat (jis par number pehle hi
+  // maang chuke) bhi sawaal nahi, bot use pehchan chuka hai.
+  if (!plan.noQuestion && !plan.orderish && !isJunkMessage(text)) {
     await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
   }
 
@@ -548,7 +585,7 @@ async function markTrackingSent(phone: string, orderNumber: string | number): Pr
  * message bhejta hai. Jo greeting Excel ki "Salaam / Greeting" row mein hai,
  * wahi jati hai — wo row khali ho to kuch nahi jata.
  */
-async function maybeSendGreeting(phone: string): Promise<void> {
+async function maybeSendGreeting(phone: string): Promise<boolean> {
   const cooldownHours = Number(process.env.GREETING_COOLDOWN_HOURS) || 24
   const cutoff = new Date(Date.now() - cooldownHours * 3600 * 1000).toISOString()
 
@@ -561,17 +598,37 @@ async function maybeSendGreeting(phone: string): Promise<void> {
   if (error) {
     // Table abhi banayi nahi gayi — greeting chhod kar aage badh jao
     console.warn('[wa] wa_greeted parh nahi saka:', error.message)
-    return
+    return false
   }
 
   // Pehle hi bhej chuke hain (cooldown ke andar)
-  if (seen && seen.greeted_at && String(seen.greeted_at) > cutoff) return
+  if (seen && seen.greeted_at && String(seen.greeted_at) > cutoff) return false
 
   const greeting = await getGreetingMessage()
-  if (!greeting) return // aap ne greeting likhi hi nahi
+  if (!greeting) return false // aap ne greeting likhi hi nahi
 
   await sendWhatsAppText(phone, greeting)
   await markGreeted(phone)
+  return true
+}
+
+/**
+ * Is WhatsApp number par pehle se koi order hai? ("Parcel allow to open"
+ * jaisa sawaal order se pehle bhi hota hai aur baad mein bhi — order ho
+ * chuka ho to greeting / how-to-place nahi jati.)
+ */
+async function phoneHasOrder(phone: string): Promise<boolean> {
+  const normalized = normalizeExtractedPhone(phone) || phone
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select('id')
+    .in('customer_phone', phoneVariants(normalized))
+    .limit(1)
+  if (error) {
+    console.warn('[wa] order dhoond nahi saka:', error.message)
+    return false
+  }
+  return Boolean(data && data.length)
 }
 
 /** Greeting ja chuki — chahe akeli, chahe kisi aur jawab ke andar. */

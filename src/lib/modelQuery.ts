@@ -111,6 +111,24 @@ const OTHER_TOPIC = [
   'side cut', 'original',
   // "Karachi delivery available??" — ye delivery ka sawaal hai, model ka nahi
   'delivery', 'deliver', 'shipping',
+  // "COD available??" — payment ka sawaal
+  'cod', 'cash on', 'payment', 'easypaisa', 'jazzcash',
+  // "aik iphone and the other one android?" — Same Models wala topic
+  'other one', 'different', 'diffrent',
+]
+
+// Model ka naam liye BAGHAIR aam sawaal — "Cover kon kon se hai", "Do you
+// have covers for all models", "Pic send me". normalizeForMatch "do/have"
+// jaise lafz hata deta hai, is liye ye asal (lowercase) text par chalte hain.
+const GENERIC_ASK = [
+  /\bkon\s*kon\s*s[aeiy]/,
+  /\b(all|sab|saray|sare|saare|har|every|any)\s+(models?|mobiles?|phones?)\b/,
+  /\b(mere|meray|mera|meri|my)\s+(model|mobile|phone)\s+(k|ka|ki|ke|ky|for)?\s*(cover|case)/,
+  /\bdo\s+(you|u)\s+have\b.*\b(covers?|cases?|designs?)\b/,
+  /\b(covers?|cases?|designs?)\s+kit?n[aeiy]+\s+(h|hn|hai|hain|hen|he)\b/,
+  /\b(pics?|pictures?|photos?)\s+(send|bhej|bhij|dikha)/,
+  /\bsend\s+(me\s+)?(the\s+)?(pics?|pictures?|photos?)\b/,
+  /\b(designs?)\s+(dikha|show)/,
 ]
 
 function hasAny(t: string, list: string[]): boolean {
@@ -141,6 +159,9 @@ export function looksLikeModelAvailability(text: string): boolean {
   if (hasAny(t, PRICE_CONTEXT)) return false
 
   if (mentionsDeviceModel(text)) return true
+
+  const raw = text.toLowerCase().replace(/\s+/g, ' ')
+  if (GENERIC_ASK.some((re) => re.test(raw))) return true
 
   // Model ka naam liye baghair — "covers available hain?", "Available?"
   const strong = hasAny(t, STRONG_AVAILABILITY)

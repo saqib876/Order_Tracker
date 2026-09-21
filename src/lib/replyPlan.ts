@@ -142,3 +142,51 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
     trackingCandidate,
   }
 }
+
+// ── Greeting (how to place order) Q&A jawab ke sath jaye ya nahi ──────────
+
+/** Jawab mein ye link ho to wo khud "order kaise karein" samjha raha hai */
+export const HOW_TO_PLACE_LINK = /how-to-place-your-order/i
+/** Jawab mein ye link ho to wo order ke BAAD ka (tracking) jawab hai */
+export const TRACK_LINK = /track-your-order/i
+
+// Order ke BAAD wale topics — customer order kar chuka hai, use "how to place
+// order" bhejna bemaani hai. Naam ke hisse se pehchan, taake Excel mein naam
+// thora badalne se na toote.
+const POST_ORDER_TOPIC =
+  /refund|replacement|quality complaint|ghalat item|order placed|order number|design change|cancel|address change/i
+// Ye sawaal order se pehle bhi hota hai aur baad mein bhi — faisla is par ke
+// bhejne wale ke number par koi order hai ya nahi
+const EITHER_TOPIC = /allow to open/i
+
+/**
+ * send        — pehle greeting, phir jawab
+ * skip        — sirf jawab
+ * if-no-order — number par order na ho to greeting bhi
+ * instead     — jawab greeting ke ANDAR hi hai ("Price": 1000/Buy 1 Get 1):
+ *               greeting jaye to jawab alag se nahi; greeting 24 ghante mein
+ *               ja chuki ho to sirf jawab
+ */
+export type GreetingDecision = 'send' | 'skip' | 'if-no-order' | 'instead'
+
+/**
+ * Q&A ka jawab `answer` (topic `topic`) ja raha hai — greeting pehle bhejein?
+ *   - jawab khud how-to-place samjhata hai  → skip (warna wahi baat do dafa)
+ *   - poori greeting jawab ke andar hai       → skip
+ *   - jawab greeting ke andar ka tukra hai    → instead (ek hi message)
+ *   - order ke baad wala topic / tracking link → skip
+ *   - "Parcel allow to open"                  → sirf agar number par order na ho
+ */
+export function greetingWithAnswer(topic: string, answer: string, greeting: string | null): GreetingDecision {
+  const norm = (s: string) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  if (HOW_TO_PLACE_LINK.test(answer) || TRACK_LINK.test(answer)) return 'skip'
+  if (greeting) {
+    const a = norm(answer)
+    const g = norm(greeting)
+    if (a && g && a.includes(g)) return 'skip'
+  }
+  if (POST_ORDER_TOPIC.test(topic)) return 'skip'
+  if (greeting && norm(answer) && norm(greeting).includes(norm(answer))) return 'instead'
+  if (EITHER_TOPIC.test(topic)) return 'if-no-order'
+  return 'send'
+}

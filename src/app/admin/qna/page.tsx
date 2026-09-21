@@ -71,13 +71,15 @@ export default async function QnaPage({
           <p style={s.p}>
             Is mein woh naye sawaal aayenge jo bot samajh nahi paya. Har row par dropdown hai —
             <b> Add karein? </b> aur <b> Kis Topic mein? </b>. Naya topic banana ho to
-            <b> “Naya Topic” </b> sheet use karein.
+            <b> “Mojooda Topics” </b> sheet ki neeche wali khali peeli row mein likhein.
           </p>
           <a href={exportUrl} style={s.btn}>
             Excel download karein
           </a>
           <p style={s.hint}>
             Download hote hi in sawaalon par nishaan lag jata hai — agli dafa sirf naye aayenge.
+            Is list mein ye <b>kabhi nahi</b> aate: jin par aap <b>Nahi</b> kar chuke, “?”, “Hi”,
+            “AoA”, “Hello”, “Ok” jaise message, aur woh sawaal jin ka jawab bot ab khud de deta hai.
             Sirf dekhna ho to link ke aakhir mein <code>&amp;peek=1</code> laga dein.
           </p>
         </div>
@@ -144,7 +146,7 @@ export default async function QnaPage({
             </p>
           </div>
 
-          {/* Teen sheets */}
+          {/* Do sheets */}
           <h3 style={s.h3}>File ki sheets</h3>
           <table style={s.table}>
             <thead>
@@ -159,28 +161,10 @@ export default async function QnaPage({
                 <td style={s.td}>
                   Customer ke woh sawaal jin ka jawab bot ke paas nahi tha. Jis sawaal ka jawab dena ho
                   us row mein <b>Add karein? = Haan</b> chunein <i>aur</i> <b>Kis Topic mein?</b> se topic
-                  chunein. <b>Dropdown zinda hai</b> — “Naya Topic” sheet mein jo naya topic likhenge, ya
-                  “Mojooda Topics” mein jo naam badlenge, wo <b>foran</b> is dropdown mein aa jata hai.
-                  Jis par <b>Nahi</b> chuna wo dobara nahi aayega. <b>Haan</b> kiya lekin topic na chuna
+                  chunein. <b>Dropdown zinda hai</b> — “Mojooda Topics” mein jo naya topic likhenge ya
+                  jo naam badlenge, wo <b>foran</b> is dropdown mein aa jata hai.
+                  Jis par <b>Nahi</b> chuna wo upload ke baad <b>kabhi kisi Excel mein</b> nahi aayega. <b>Haan</b> kiya lekin topic na chuna
                   ja saka — wo sawaal <b>agli Excel mein wapas</b> aa jayega, gum nahi hoga.
-                </td>
-              </tr>
-              <tr>
-                <td style={s.tdName}>Naya Topic</td>
-                <td style={s.td}>
-                  Bilkul naya topic banane ke liye: naam, us ke sawaal (har line par ek), aur jawab.
-                  Sab se upar wali hari <b>“MISAAL”</b> row sirf namoona hai — wo upload nahi hoti.
-                </td>
-              </tr>
-              <tr>
-                <td style={s.tdName}>Lists (chhupi hui)</td>
-                <td style={s.td}>
-                  <b>Is mein kuch nahi karna.</b> Ye sirf dropdown ki list hai — is mein woh
-                  topic ke naam hain jo <b>“Kis Topic mein?”</b> mein aate hain, aur do lafz
-                  <b> “Haan” </b> aur <b> “Nahi” </b> jo <b>“Add karein?”</b> aur
-                  <b> “Hata dein?” </b> ke dropdown mein aate hain. Upload karte waqt ye sheet
-                  parhi hi nahi jati. Ise <b>delete na karein</b> — warna dropdown kaam karna
-                  chhod denge.
                 </td>
               </tr>
               <tr>
@@ -188,11 +172,10 @@ export default async function QnaPage({
                 <td style={s.td}>
                   Purane topics — sawaal, jawab aur topic ka naam, sab yahan se <b>badle</b> ja
                   sakte hain. Naya sawaal neeche nayi line par likh dein; hatana ho to line mita
-                  dein. Poora topic hatane ke liye <b>“Hata dein? = Haan”</b>. Greeting ka matan
-                  bhi isi sheet ki <b>“Salaam / Greeting”</b> row mein hai. Aakhri column
-                  <b> “Naye Sawaal se jure” </b> foran batata hai ke “Naye Sawaal” sheet se kitne
-                  sawaal is topic mein jayenge — upload ke baad agli Excel mein wo isi topic ke
-                  sawaalon mein nazar aayenge.
+                  dein. Poora topic hatane ke liye <b>“Hata dein? = Haan”</b>. <b>Naya topic:</b> sab se
+                  neeche wali khali peeli rows mein naam, sawaal aur jawab likhein — wo foran “Kis
+                  Topic mein?” dropdown mein aa jata hai. Greeting (how to place order) ka matan bhi
+                  isi sheet ki <b>“Salaam / Greeting”</b> row mein hai.
                 </td>
               </tr>
             </tbody>
@@ -283,14 +266,17 @@ export default async function QnaPage({
               <b> “Hata dein? = Haan” </b> hai.
             </li>
             <li style={s.li}>
-              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Isi row ka jawab har naye
-              customer ko jata hai. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
+              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Isi row ka jawab naye
+              kharidar ko (24 ghante mein ek dafa) jata hai, aur “Yes Available” ke neeche bhi yahi
+              matan jata hai. Jo customer order kar chuka ho (refund, order number, cancel,
+              address...) use ye nahi jata. Jis jawab mein pehle se how-to-place ka link ho
+              (Buy 1 Get 1, Name Design...) us ke sath bhi alag se nahi jata — do dafa nahi. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
               sirf <b>“Hata dein? = Haan”</b> se hi band hoti hai.
             </li>
             <li style={s.li}>
               <b>Band topics file mein nahi aate.</b> Kisi band topic ko wapas chalu karna ho to
-              “Naya Topic” sheet mein <b>bilkul wohi naam</b> jawab ke sath likh dein — wo dobara
-              chalu ho jayega.
+              “Mojooda Topics” ki neeche wali khali row mein <b>bilkul wohi naam</b> jawab ke sath
+              likh dein — wo dobara chalu ho jayega.
             </li>
           </ol>
 

@@ -45,6 +45,8 @@ export interface ParseResult {
   orphans: { question: string; topic: string }[]
   /** Haan kiya lekin topic chuna hi nahi (ya "++ NAYA TOPIC ++") — ye bhi wapas aate hain */
   unassigned: string[]
+  /** "Add karein? = Nahi" — ye sawaal aainda kisi Excel mein nahi aayenge */
+  ignored: string[]
 }
 
 /** exceljs ka cell kabhi object hota hai (rich text / formula) — saaf text nikalo */
@@ -99,6 +101,7 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
   let fullSheet = false
   const orphans: { question: string; topic: string }[] = []
   const unassigned: string[] = []
+  const ignored: string[] = []
 
   const put = (topic: string, questions: string[], answer: string, remove = false) => {
     const key = topic.toLowerCase()
@@ -147,7 +150,7 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
     }
   }
 
-  // ── "Naya Topic" ────────────────────────────────────────────────────────
+  // ── "Naya Topic" (purani files — ab naya topic Mojooda ke neeche likhte hain)
   const wsNew = wb.getWorksheet('Naya Topic')
   if (wsNew) {
     const map = headerMap(wsNew)
@@ -180,9 +183,13 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
       for (let r = 2; r <= wsQ.rowCount; r++) {
         const row = wsQ.getRow(r)
         const add = cellText(row.getCell(cAdd).value).trim().toLowerCase()
+        const question = cellText(row.getCell(cQ).value).replace(/\s+/g, ' ').trim()
+        if ((add === 'nahi' || add === 'no') && question) {
+          ignored.push(question)
+          continue
+        }
         if (add !== 'haan' && add !== 'yes') continue
 
-        const question = cellText(row.getCell(cQ).value).replace(/\s+/g, ' ').trim()
         const topic = cellText(row.getCell(cTopic).value).replace(/\s+/g, ' ').trim()
         if (!question) continue
         if (!topic || topic.includes('NAYA TOPIC')) {
@@ -210,5 +217,5 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
     }
   }
 
-  return { topics, picked, notes, fullSheet, orphans, unassigned }
+  return { topics, picked, notes, fullSheet, orphans, unassigned, ignored }
 }

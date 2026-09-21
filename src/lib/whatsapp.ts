@@ -197,3 +197,27 @@ export async function getTopicAnswer(topicPrefix: string): Promise<string | null
   }
   return data && data.answer ? String(data.answer) : null
 }
+
+/**
+ * Aap ki Excel ka "web tracking" wala jawab (jis mein track-your-order ka
+ * link hai — "Order Number Bheja" / "Order Placed" row).
+ *
+ * Kaam kya aata hai: customer ne number bheja lekin live tracking nahi bhej
+ * sake (order nahi mila, ya ghalat number) — tab code ka apna message nahi,
+ * AAP ka likha hua jawab jata hai. "Order Number" wali row ko tarjeeh.
+ */
+export async function getTrackLinkAnswer(): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('qna_topics')
+    .select('topic, answer')
+    .eq('is_active', true)
+    .ilike('answer', '%track-your-order%')
+
+  if (error) {
+    console.warn('[qna] tracking link wala jawab nahi mila:', error.message)
+    return null
+  }
+  const rows = (data || []).filter((r) => r.answer)
+  const best = rows.find((r) => /order number/i.test(String(r.topic))) || rows[0]
+  return best ? String(best.answer) : null
+}
