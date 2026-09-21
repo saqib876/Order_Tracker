@@ -145,7 +145,7 @@ export default async function QnaPage({
           </div>
 
           {/* Teen sheets */}
-          <h3 style={s.h3}>File mein teen sheets hain</h3>
+          <h3 style={s.h3}>File ki sheets</h3>
           <table style={s.table}>
             <thead>
               <tr>
@@ -167,6 +167,17 @@ export default async function QnaPage({
                 <td style={s.td}>
                   Bilkul naya topic banane ke liye: naam, us ke sawaal (har line par ek), aur jawab.
                   Sab se upar wali hari <b>“MISAAL”</b> row sirf namoona hai — wo upload nahi hoti.
+                </td>
+              </tr>
+              <tr>
+                <td style={s.tdName}>Lists (chhupi hui)</td>
+                <td style={s.td}>
+                  <b>Is mein kuch nahi karna.</b> Ye sirf dropdown ki list hai — is mein woh
+                  topic ke naam hain jo <b>“Kis Topic mein?”</b> mein aate hain, aur do lafz
+                  <b> “Haan” </b> aur <b> “Nahi” </b> jo <b>“Add karein?”</b> aur
+                  <b> “Hata dein?” </b> ke dropdown mein aate hain. Upload karte waqt ye sheet
+                  parhi hi nahi jati. Ise <b>delete na karein</b> — warna dropdown kaam karna
+                  chhod denge.
                 </td>
               </tr>
               <tr>

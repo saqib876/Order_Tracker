@@ -107,7 +107,21 @@ export async function GET(req: NextRequest) {
   wsList.getCell('A' + (topicNames.length + 2)).value = NEW_TOPIC_OPTION
   wsList.getCell('B2').value = 'Haan'
   wsList.getCell('B3').value = 'Nahi'
-  wsList.state = 'hidden'
+
+  // Ye sheet sirf dropdown ko khilati hai — customer/aap ne is mein kuch
+  // nahi bharna. Phir bhi kabhi nazar aa jaye to tanbeeh saamne rahe.
+  wsList.getCell('D1').value =
+    'Ye sheet sirf dropdown ki list hai. Is mein kuch NA likhein aur ise delete NA karein — ' +
+    'warna "Add karein?", "Kis Topic mein?" aur "Hata dein?" wale dropdown kaam karna chhod denge. ' +
+    'Upload karte waqt is sheet ko parha hi nahi jata.'
+  wsList.getCell('D1').font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFB91C1C' } }
+  wsList.getColumn('D').width = 70
+  wsList.getCell('A1').font = { name: 'Arial', size: 10, bold: true }
+  wsList.getCell('B1').font = { name: 'Arial', size: 10, bold: true }
+
+  // 'veryHidden' — Excel ke menu se bhi nazar nahi aati (sirf 'hidden' ho to
+  // kuch Excel versions mein ye khul kar saamne aa jati thi).
+  wsList.state = 'veryHidden'
 
   const topicRange = `=Lists!$A$2:$A$${topicNames.length + 2}`
   const yesNoRange = '=Lists!$B$2:$B$3'
