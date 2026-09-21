@@ -159,7 +159,10 @@ export default async function QnaPage({
                 <td style={s.td}>
                   Customer ke woh sawaal jin ka jawab bot ke paas nahi tha. Jis sawaal ka jawab dena ho
                   us row mein <b>Add karein? = Haan</b> chunein <i>aur</i> <b>Kis Topic mein?</b> se topic
-                  chunein. Dono chunna zaroori hai. Jo rows chhod dein wo agli dafa dobara nahi aayengi.
+                  chunein. <b>Dropdown zinda hai</b> — “Naya Topic” sheet mein jo naya topic likhenge, ya
+                  “Mojooda Topics” mein jo naam badlenge, wo <b>foran</b> is dropdown mein aa jata hai.
+                  Jis par <b>Nahi</b> chuna wo dobara nahi aayega. <b>Haan</b> kiya lekin topic na chuna
+                  ja saka — wo sawaal <b>agli Excel mein wapas</b> aa jayega, gum nahi hoga.
                 </td>
               </tr>
               <tr>
@@ -186,7 +189,10 @@ export default async function QnaPage({
                   Purane topics — sawaal, jawab aur topic ka naam, sab yahan se <b>badle</b> ja
                   sakte hain. Naya sawaal neeche nayi line par likh dein; hatana ho to line mita
                   dein. Poora topic hatane ke liye <b>“Hata dein? = Haan”</b>. Greeting ka matan
-                  bhi isi sheet ki <b>“Salaam / Greeting”</b> row mein hai.
+                  bhi isi sheet ki <b>“Salaam / Greeting”</b> row mein hai. Aakhri column
+                  <b> “Naye Sawaal se jure” </b> foran batata hai ke “Naye Sawaal” sheet se kitne
+                  sawaal is topic mein jayenge — upload ke baad agli Excel mein wo isi topic ke
+                  sawaalon mein nazar aayenge.
                 </td>
               </tr>
             </tbody>
@@ -208,7 +214,11 @@ export default async function QnaPage({
                 </tr>
                 <tr>
                   <td style={s.tdName}>Topic ka naam badalna</td>
-                  <td style={s.td}>Topic wale khane mein naya naam likh dein</td>
+                  <td style={s.td}>
+                    Topic wale khane mein naya naam likh dein. <b>Pehle naam badlein, phir</b> “Naye
+                    Sawaal” mein topic chunein — jo sawaal purane naam par chune gaye hon wo agli
+                    Excel mein wapas aa jate hain.
+                  </td>
                 </tr>
                 <tr>
                   <td style={s.tdName}>Sawaal doosre topic mein</td>
@@ -271,6 +281,16 @@ export default async function QnaPage({
               <b>Sawaal ka khana khali chhod dein to purane sawaal jyun ke tyun rehte hain.</b>
               Ye ghalti se saaf ho jaye to kuch zaya nahi hota. Waqai sab hatane hon to
               <b> “Hata dein? = Haan” </b> hai.
+            </li>
+            <li style={s.li}>
+              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Isi row ka jawab har naye
+              customer ko jata hai. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
+              sirf <b>“Hata dein? = Haan”</b> se hi band hoti hai.
+            </li>
+            <li style={s.li}>
+              <b>Band topics file mein nahi aate.</b> Kisi band topic ko wapas chalu karna ho to
+              “Naya Topic” sheet mein <b>bilkul wohi naam</b> jawab ke sath likh dein — wo dobara
+              chalu ho jayega.
             </li>
           </ol>
 

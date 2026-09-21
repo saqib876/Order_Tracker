@@ -28,6 +28,18 @@ const FILL_ME = 'FFFFFF00'
 const FILL_READ = 'FFF2F2F2'
 const NEW_TOPIC_OPTION = '++ NAYA TOPIC ++'
 
+// "Naya Topic" sheet: row 2 MISAAL hai, asli khali rows 3 se shuru
+const NEW_TOPIC_FIRST_ROW = 3
+const NEW_TOPIC_ROWS = 30
+// "Mojooda Topics" ke neeche bhi kuch khali jagah dropdown mein shamil —
+// agar koi wahan nayi row bana de to wo bhi chuni ja sake
+const SPARE_TOPIC_ROWS = 15
+
+/** Is row ke topic ke liye "Naye Sawaal" sheet mein kitne "Haan" */
+function countFormula(rowNumber: number): string {
+  return `IF(A${rowNumber}="","",COUNTIFS('Naye Sawaal'!$D:$D,"Haan",'Naye Sawaal'!$E:$E,A${rowNumber}))`
+}
+
 function todayInPakistan(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Karachi',
@@ -64,7 +76,11 @@ export async function GET(req: NextRequest) {
     .select('id, topic, questions, answer, priority, is_active')
     .order('topic', { ascending: true })
 
-  const topicNames = (topics || []).map((t) => String(t.topic)).filter(Boolean)
+  // Sirf CHALU topics file mein jate hain. Band topics shamil hote to file
+  // bina chhere wapas upload karne par wo sab dobara chalu ho jate — aur
+  // naam badle hue topics ke purane naam phir se zinda ho jate (21 Sept ko
+  // yehi hua tha: har cheez do-do dafa chal rahi thi).
+  const activeTopics = (topics || []).filter((t) => t.is_active !== false && t.topic)
 
   // ── 2. Naye unanswered sawaal ───────────────────────────────────────────
   const { data: unmatched, error: unmatchedError } = await supabaseAdmin
@@ -96,15 +112,36 @@ export async function GET(req: NextRequest) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Myzan Order Tracker'
   wb.created = new Date()
+  // File khulte hi saare formula dobara hisaab hon (dropdown ki list aur
+  // ginti formula se banti hai — bina is ke kuch Excel versions mein khaali
+  // dikh sakti hai jab tak koi khana na chheda jaye)
+  wb.calcProperties = { fullCalcOnLoad: true }
 
   // ── Sheet 4 (pehle banate hain, dropdown isi par depend karta hai) ──────
   const wsList = wb.addWorksheet('Lists')
   wsList.getCell('A1').value = 'Topics'
   wsList.getCell('B1').value = 'Haan/Nahi'
-  topicNames.forEach((t, i) => {
-    wsList.getCell('A' + (i + 2)).value = t
-  })
-  wsList.getCell('A' + (topicNames.length + 2)).value = NEW_TOPIC_OPTION
+
+  // Dropdown ki list SEEDHI dono sheets se judi hai (formula), is liye:
+  //   - "Naya Topic" sheet mein naya topic likhein -> foran dropdown mein
+  //   - "Mojooda Topics" mein naam badlein          -> dropdown mein bhi badal
+  // Pehle ye list download ke waqt likh di jati thi aur file ke andar ki
+  // tabdeeliyan dropdown mein nahi aati thin — naye topic chune hi nahi ja
+  // sakte the, aur purane naam chune jate the.
+  const mojoodaRows = activeTopics.length + SPARE_TOPIC_ROWS
+  let listRow = 2
+  for (let r = 2; r < 2 + mojoodaRows; r++) {
+    wsList.getCell('A' + listRow++).value = {
+      formula: `IF('Mojooda Topics'!A${r}="","",'Mojooda Topics'!A${r})`,
+    } as any
+  }
+  for (let r = NEW_TOPIC_FIRST_ROW; r < NEW_TOPIC_FIRST_ROW + NEW_TOPIC_ROWS; r++) {
+    wsList.getCell('A' + listRow++).value = {
+      formula: `IF('Naya Topic'!A${r}="","",'Naya Topic'!A${r})`,
+    } as any
+  }
+  wsList.getCell('A' + listRow).value = NEW_TOPIC_OPTION
+  const topicListEnd = listRow
   wsList.getCell('B2').value = 'Haan'
   wsList.getCell('B3').value = 'Nahi'
 
@@ -123,7 +160,7 @@ export async function GET(req: NextRequest) {
   // kuch Excel versions mein ye khul kar saamne aa jati thi).
   wsList.state = 'veryHidden'
 
-  const topicRange = `=Lists!$A$2:$A$${topicNames.length + 2}`
+  const topicRange = `=Lists!$A$2:$A$${topicListEnd}`
   const yesNoRange = '=Lists!$B$2:$B$3'
 
   // ── Sheet 1: Naye Sawaal ────────────────────────────────────────────────
@@ -174,6 +211,7 @@ export async function GET(req: NextRequest) {
     { header: 'Naya Topic ka Naam', key: 'topic', width: 32 },
     { header: 'Sawaal (har line par ek — Alt+Enter se nayi line)', key: 'questions', width: 58 },
     { header: 'Jawab', key: 'answer', width: 58 },
+    { header: 'Naye Sawaal se jure (is file mein)', key: 'nn', width: 16 },
   ]
   styleHeader(ws2)
 
@@ -189,13 +227,16 @@ export async function GET(req: NextRequest) {
   }
   example.height = 46
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < NEW_TOPIC_ROWS; i++) {
     const row = ws2.addRow({})
     row.font = { name: 'Arial', size: 10 }
     row.alignment = { vertical: 'top', wrapText: true }
     for (const c of ['topic', 'questions', 'answer']) {
       row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_ME } }
     }
+    row.getCell('nn').value = { formula: countFormula(row.number) } as any
+    row.getCell('nn').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    row.getCell('nn').alignment = { vertical: 'top', horizontal: 'center' }
   }
   ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
@@ -209,10 +250,11 @@ export async function GET(req: NextRequest) {
     { header: 'Jawab', key: 'answer', width: 60 },
     { header: 'Hata dein?', key: 'del', width: 12 },
     { header: 'Kitne Sawaal', key: 'nq', width: 13 },
+    { header: 'Naye Sawaal se jure (is file mein)', key: 'nn', width: 16 },
   ]
   styleHeader(ws3)
 
-  for (const t of topics || []) {
+  for (const t of activeTopics) {
     const qs = String(t.questions || '')
       .split(/\r?\n/)
       .map((x) => x.trim())
@@ -239,6 +281,11 @@ export async function GET(req: NextRequest) {
       error: 'Poora topic hatana ho to "Haan" chunein, warna khali chhod dein.',
     }
     row.getCell('nq').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    // "Naye Sawaal" sheet mein jitne sawaal is topic ke liye "Haan" kiye —
+    // zinda ginti, taake foran pata chal jaye ke chunaav darj ho gaya
+    row.getCell('nn').value = { formula: countFormula(row.number) } as any
+    row.getCell('nn').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_READ } }
+    row.getCell('nn').alignment = { vertical: 'top', horizontal: 'center' }
     row.height = 40
   }
   ws3.views = [{ state: 'frozen', ySplit: 1 }]
@@ -263,7 +310,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(
-    `[qna-export] ${newQuestions.length} naye sawaal, ${topicNames.length} topics, marked=${markedCount}, peek=${peek}`
+    `[qna-export] ${newQuestions.length} naye sawaal, ${activeTopics.length} topics, marked=${markedCount}, peek=${peek}`
   )
 
   const buffer = await wb.xlsx.writeBuffer()

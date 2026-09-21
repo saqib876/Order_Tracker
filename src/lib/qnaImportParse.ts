@@ -36,6 +36,15 @@ export interface ParseResult {
    * adhoori hai, aur hum sirf jorte hain — kuch mitate nahi.
    */
   fullSheet: boolean
+  /**
+   * "Naye Sawaal" mein Haan kiya, lekin jo topic chuna wo file mein hai hi
+   * nahi (aksar is liye ke usi file mein us topic ka naam badal diya gaya).
+   * Ye sawaal kisi PURANE topic ko zinda nahi karte — agli Excel mein wapas
+   * aate hain taake sahi topic chuna ja sake.
+   */
+  orphans: { question: string; topic: string }[]
+  /** Haan kiya lekin topic chuna hi nahi (ya "++ NAYA TOPIC ++") — ye bhi wapas aate hain */
+  unassigned: string[]
 }
 
 /** exceljs ka cell kabhi object hota hai (rich text / formula) — saaf text nikalo */
@@ -88,6 +97,8 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
   let picked = 0
 
   let fullSheet = false
+  const orphans: { question: string; topic: string }[] = []
+  const unassigned: string[] = []
 
   const put = (topic: string, questions: string[], answer: string, remove = false) => {
     const key = topic.toLowerCase()
@@ -175,15 +186,23 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
         const topic = cellText(row.getCell(cTopic).value).replace(/\s+/g, ' ').trim()
         if (!question) continue
         if (!topic || topic.includes('NAYA TOPIC')) {
-          notes.push(`"${question.slice(0, 40)}" — topic nahi chuna, chhod diya`)
+          unassigned.push(question)
+          notes.push(`"${question.slice(0, 40)}" — topic nahi chuna, agli Excel mein wapas aayega`)
           continue
         }
         const key = topic.toLowerCase()
         const existing = topics.get(key)
         if (existing) {
           if (!existing.questions.includes(question)) existing.questions.push(question)
+        } else if (fullSheet) {
+          // Poori file hai lekin ye topic us mein nahi — naam badla gaya hoga.
+          // Purane naam ko zinda karna ghalat hoga (do topics ek jaise ban
+          // jate hain aur bot chup ho jata hai), is liye sawaal wapas queue mein.
+          orphans.push({ question, topic })
+          notes.push(`"${question.slice(0, 40)}" — topic "${topic.slice(0, 30)}" file mein nahi (naam badla?), agli Excel mein wapas aayega`)
+          continue
         } else {
-          // Topic file mein nahi tha — jawab database se aayega
+          // Adhoori file — topic database mein hoga, jawab wahin se aayega
           topics.set(key, { topic, questions: [question], answer: '', remove: false })
         }
         picked++
@@ -191,5 +210,5 @@ export function parseQnaWorkbook(wb: Workbook): ParseResult {
     }
   }
 
-  return { topics, picked, notes, fullSheet }
+  return { topics, picked, notes, fullSheet, orphans, unassigned }
 }

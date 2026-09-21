@@ -186,6 +186,35 @@ export const ORDER_STATUS_QUESTIONS: string[] = [
   "order update pls",
   "still waiting for my order",
   "yes, receive ni kr skky thy,again kiyya ta k whi bhj den aap",
+
+  // ── 21 Sept: aap ki Excel se — ye sab tracking ke sawaal hain jo bot
+  //    pehle nahi pehchan raha tha (26 mein se ek bhi nahi pakda jata tha) ──
+  "Abhi delivery naiii ai",
+  "I want to know about my order",
+  "Can I know about my order?",
+  "I am extremely waiting for my phonecovers",
+  "It has been now Soo many days when will the parcel come or is it not gonna come",
+  "Main apsy ye poch rehi hn k mainy order keya howa wo mujy kb tk mily ga",
+  "Main order Kai ap ko kab tak aya gai",
+  "Maine already order Kiye huye hai",
+  "Me ne order place kia hwa hai",
+  "Mera order recieve ne howa",
+  "Mere order nihi ab tak",
+  "Wher,s my order",
+  "Yes I have already place the order",
+  "AP smjhinn k kse or NY order kia ha",
+  "Ap confirm kar dein agar interested hai",
+  "Ap mujy bata skty kiya order kiya",
+  "Apki website per order place kardiya ha",
+  "It's confirmed or not",
+  "Ma ny insta sy order kiya wahn nahi tha",
+  "Order confirme b huva tha",
+  "Order place hugaya ha",
+  "Please ye order done kr den",
+  "Ye many order kiya hein",
+  "insta py oder diya tha apko",
+  "order place krdiy",
+  "kitna din ma ab dilver ho ga",
 ]
 
 let cached: QnaIndex | null = null

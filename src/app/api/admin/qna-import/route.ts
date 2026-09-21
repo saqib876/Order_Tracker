@@ -36,7 +36,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ExcelJS from 'exceljs'
 import { supabaseAdmin } from '@/lib/supabase'
-import { invalidateQnaCache } from '@/lib/whatsapp'
+import { invalidateQnaCache, GREETING_TOPIC } from '@/lib/whatsapp'
 import { parseQnaWorkbook, splitQuestions } from '@/lib/qnaImportParse'
 
 export const dynamic = 'force-dynamic'
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { topics: incoming, picked, notes, fullSheet } = parseQnaWorkbook(wb)
+  const { topics: incoming, picked, notes, fullSheet, orphans, unassigned } = parseQnaWorkbook(wb)
 
   if (incoming.size === 0) {
     return NextResponse.json(
@@ -102,6 +102,20 @@ export async function POST(req: NextRequest) {
     for (const row of existingRows || []) {
       if (row.is_active === false) continue
       const item = incoming.get(String(row.topic).toLowerCase())
+
+      // Greeting ke baghair bot naye customer ko kuch nahi bhejta, aur
+      // "Yes Available" ke neeche order-guide bhi isi se aata hai. Is liye
+      // ye row file mein na ho to band NAHI hoti — sirf "Hata dein? = Haan"
+      // se. (21 Sept ko row ghalti se chhoot gayi thi aur greeting band ho
+      // gayi thi.)
+      if (!item && String(row.topic) === GREETING_TOPIC) {
+        notes.push(
+          `"${GREETING_TOPIC}" file mein nahi thi — ise band NAHI kiya (greeting zaroori hai). ` +
+            'Waqai hatani ho to us row mein "Hata dein? = Haan" chunein.'
+        )
+        continue
+      }
+
       if (!item || item.remove) bandKarne.push(row)
     }
   }
@@ -203,6 +217,22 @@ export async function POST(req: NextRequest) {
     bandHue.push(String(row.topic))
   }
 
+  // ── Jo sawaal kisi topic mein nahi ja sake, agli Excel mein wapas ─────
+  // Download karte hi sawaal par "export ho gaya" ka nishaan lag jata hai.
+  // Agar aap ne Haan kiya lekin topic na chuna ja saka (ya naam badal
+  // gaya), to wo sawaal hamesha ke liye gum ho jata tha. Ab wapas aata hai.
+  let wapasQueue = 0
+  const wapasBhejne = Array.from(new Set([...orphans.map((o) => o.question), ...unassigned]))
+  for (const q of wapasBhejne) {
+    const { data: rows, error } = await supabaseAdmin
+      .from('unmatched_messages')
+      .update({ exported_at: null })
+      .ilike('message_text', looseLike(q))
+      .not('exported_at', 'is', null)
+      .select('id')
+    if (!error && rows) wapasQueue += rows.length
+  }
+
   invalidateQnaCache()
 
   const result = {
@@ -216,9 +246,24 @@ export async function POST(req: NextRequest) {
     sawaal_hataye_gaye: removedQuestions,
     band_kiye_gaye_topics: bandHue,
     naye_sawaal_sheet_se_chune: picked,
+    agli_excel_mein_wapas_aayenge: wapasQueue,
     jawab_khali_is_liye_chhode: skipped,
     notes: notes.slice(0, 30),
   }
   console.log('[qna-import]', JSON.stringify(result))
   return NextResponse.json(result)
+}
+
+/**
+ * Excel mein dikhne wala sawaal database wale se thora alag ho sakta hai
+ * (export space/line-break ek kar deta hai). ilike ke liye har khali jagah
+ * ko % bana dete hain — "Hi 2no covers" database ke "Hi \n2no covers" se
+ * bhi mil jata hai. % aur _ ko escape karte hain taake wo wildcard na banein.
+ */
+function looseLike(text: string): string {
+  return text
+    .trim()
+    .replace(/[\\%_]/g, (c) => '\\' + c)
+    .split(/\s+/)
+    .join('%')
 }

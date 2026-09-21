@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendWhatsAppText, matchQna, getGreetingMessage, getTopicAnswer } from '@/lib/whatsapp'
+import { sendWhatsAppText, matchQna, matchQnaDetailed, getGreetingMessage, getTopicAnswer } from '@/lib/whatsapp'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
@@ -449,10 +449,21 @@ export async function POST(req: NextRequest) {
   // ── 3) Q&A — poora sawaal padh kar word-score matching ────────────────────
   // "No", "Ok", "Thanks" jaise jawab Q&A mein nahi jate — pehle akela "No"
   // number-change wala lamba jawab le aata tha.
-  const qnaAnswer = plan.noQuestion ? null : await matchQna(text)
-  if (qnaAnswer) {
+  const qna = plan.noQuestion ? null : await matchQnaDetailed(text)
+
+  // Jawab SIRF tracking page ka link ho ("Order Placed / Confirmed", "Order
+  // Number Bheja" jaise topics) aur customer ne order number nahi diya — to
+  // link bhejne ke bajaye pehle order number maangte hain, taake WhatsApp
+  // par hi LIVE tracking bhej sakein. Pehle "I have already ordered" par
+  // seedha link chala jata tha aur tracking ka mauqa hi nikal jata tha.
+  //
+  // Pehchan jawab ke link se hoti hai, topic ke naam se nahi — taake Excel
+  // mein topic ka naam badalne se ye na toote. Doosri dafa (number ek dafa
+  // maang chuke hon) link hi chala jata hai.
+  const sirfTrackingLink = qna !== null && /track-your-order/i.test(qna.answer)
+  if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
     if (state) await clearState()
-    await sendWhatsAppText(from, qnaAnswer)
+    await sendWhatsAppText(from, qna.answer)
     return NextResponse.json({ ok: true })
   }
 
