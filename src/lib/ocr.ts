@@ -15,25 +15,32 @@
  */
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
-// Tasveer par itne se zyada waqt nahi lagana — WhatsApp ka webhook jaldi
-// jawab maangta hai
-const TIMEOUT_MS = 12_000
+// Tasveer download aur parhne ki alag alag hadd. ocr.space ka muft hissa
+// sust hai (kabhi 10-15 second), is liye us ko zyada waqt diya hai. Function
+// ki apni hadd 30 second hai (route.ts mein maxDuration).
+const MEDIA_TIMEOUT_MS = 8_000
+const OCR_TIMEOUT_MS = 18_000
 
 export function ocrAvailable(): boolean {
   return Boolean(process.env.GOOGLE_VISION_API_KEY || process.env.OCR_SPACE_API_KEY)
 }
 
-async function withTimeout<T>(p: Promise<T>, ms = TIMEOUT_MS): Promise<T | null> {
+async function withTimeout<T>(p: Promise<T>, ms: number, kaam: string): Promise<T | null> {
   let timer: any
+  const shuru = Date.now()
   try {
-    return await Promise.race([
+    const natija = await Promise.race([
       p,
       new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), ms)
       }),
     ])
+    const laga = Date.now() - shuru
+    if (natija === null) console.warn(`[ocr] ${kaam}: waqt khatam (${laga}ms)`)
+    else console.log(`[ocr] ${kaam}: ho gaya (${laga}ms)`)
+    return natija
   } catch (e: any) {
-    console.warn('[ocr] nakaam:', e?.message || e)
+    console.warn(`[ocr] ${kaam} nakaam (${Date.now() - shuru}ms):`, e?.message || e)
     return null
   } finally {
     clearTimeout(timer)
@@ -68,7 +75,9 @@ export async function whatsappMedia(mediaId: string): Promise<{ base64: string; 
       }
       const buf = Buffer.from(await fileRes.arrayBuffer())
       return { base64: buf.toString('base64'), mime: String(info.mime_type || 'image/jpeg') }
-    })()
+    })(),
+    MEDIA_TIMEOUT_MS,
+    'tasveer download'
   )
 }
 
@@ -97,7 +106,9 @@ async function googleVision(base64: string): Promise<string | null> {
       const json = await res.json()
       const text = json?.responses?.[0]?.fullTextAnnotation?.text
       return text ? String(text) : null
-    })()
+    })(),
+    OCR_TIMEOUT_MS,
+    'google vision'
   )
 }
 
@@ -109,7 +120,8 @@ async function ocrSpace(base64: string, mime: string): Promise<string | null> {
       form.set('base64Image', `data:${mime};base64,${base64}`)
       form.set('language', 'eng')
       form.set('OCREngine', '2')
-      form.set('scale', 'true')
+      form.set('isOverlayRequired', 'false')
+      form.set('detectOrientation', 'false')
 
       const res = await fetch('https://api.ocr.space/parse/image', {
         method: 'POST',
@@ -127,6 +139,8 @@ async function ocrSpace(base64: string, mime: string): Promise<string | null> {
       }
       const text = json?.ParsedResults?.[0]?.ParsedText
       return text ? String(text) : null
-    })()
+    })(),
+    OCR_TIMEOUT_MS,
+    'ocr.space'
   )
 }
