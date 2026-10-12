@@ -18,6 +18,8 @@ import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
 export const dynamic = 'force-dynamic'
+// Tasveer download + parhne mein chand second lagte hain
+export const maxDuration = 30
 
 const trackingUrl = (id: string) => `https://postex.pk/tracking?cn=${id}`
 const WEBSITE_TRACKING_LINK = 'https://myzan.net/pages/track-your-order'
