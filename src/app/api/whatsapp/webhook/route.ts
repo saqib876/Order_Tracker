@@ -287,9 +287,24 @@ export async function POST(req: NextRequest) {
 
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
   // Parhne ko kuch nahi — order ka screenshot bhi ho sakta hai, design bhi.
-  // Pehle greeting chali jati thi; ab aam greeting band hai (Meta ab har
-  // message ka paisa leta hai), is liye bot khamosh rehta hai.
+  // Customer aksar Shopify ka "Thank you" wala screenshot bhej deta hai aur
+  // kuch likhta nahi. Us ka order aksar usi WhatsApp number par hota hai (ya
+  // hum use pehle tracking bhej chuke hote hain), is liye yahin dhoond kar
+  // SEEDHA tracking bhej dete hain — na sawaal, na "order number bhejein".
+  //
+  // Na mile (yani ye shakhs ne abhi kuch khareeda hi nahi, shayad design ki
+  // tasveer hai) to bot khamosh rehta hai.
   if (!text) {
+    if (incoming.isMedia) {
+      const order =
+        (await findOrder({ senderPhone: from })) ||
+        (await findOrder({ orderNumber: await pichhlaOrderNumber(from) }))
+      if (order && !(await trackingRecentlySent(from, order.order_number))) {
+        await sendWhatsAppText(from, await buildStatusReply(order))
+        await markTrackingSent(from, order.order_number)
+        console.log(`[wa] tasveer par tracking #${order.order_number} — ${from}`)
+      }
+    }
     return NextResponse.json({ ok: true })
   }
 
