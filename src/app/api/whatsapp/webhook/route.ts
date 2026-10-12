@@ -419,7 +419,7 @@ export async function POST(req: NextRequest) {
   // ── 2) Live tracking — teeno tareeqon se ──────────────────────────────────
   // Confirmation number, order number, ya mobile number — jo bhi mile, us se
   // order dhoond kar live status bhej dete hain.
-  const order = await findOrder({
+  const seedhaMila = await findOrder({
     confirmationNumber,
     orderNumber: plan.readNumbers ? orderNumber : null,
     phoneInText: plan.readNumbers ? phoneInText : null,
@@ -430,6 +430,15 @@ export async function POST(req: NextRequest) {
     // khud dhoond kar SEEDHA tracking jati hai, ek hi message mein.
     senderPhone: plan.orderish ? from : undefined,
   })
+
+  // Abhi bhi nahi mila? Us order ko dekho jo is customer ko pehle bheja gaya
+  // tha (yani jis ka order/cell/confirmation number wo pehle chat mein de
+  // chuka hai). Yehi "yaad" hai — taake bar bar number na maangna pare.
+  const yaadOrder =
+    !seedhaMila && plan.orderish
+      ? await findOrder({ orderNumber: await pichhlaOrderNumber(from) })
+      : null
+  const order = seedhaMila || yaadOrder
 
   if (order) {
     await clearState()
@@ -562,6 +571,30 @@ async function trackingRecentlySent(phone: string, orderNumber: string | number)
   return Date.now() - new Date(data.sent_at).getTime() < TRACKING_REPEAT_HOURS * 3600 * 1000
 }
 
+/**
+ * Is customer ko pehle jis order ki tracking bheji gayi thi, us ka number.
+ *
+ * Kaam kya aata hai: customer ne kabhi apna order number / cell number /
+ * confirmation number diya tha aur tracking le chuka hai. Ab wo sirf "mera
+ * order kahan hai?" likhta hai — ab bot dobara number nahi maangta, yehi
+ * purana order dekh kar seedha tracking bhej deta hai.
+ */
+async function pichhlaOrderNumber(phone: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('wa_tracking_sent')
+    .select('order_number, sent_at')
+    .eq('phone', phone)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[wa] pichhla order parh nahi saka:', error.message)
+    return null
+  }
+  return data && data.order_number ? String(data.order_number) : null
+}
+
 async function markTrackingSent(phone: string, orderNumber: string | number): Promise<void> {
   const { error } = await supabaseAdmin
     .from('wa_tracking_sent')
@@ -584,10 +617,10 @@ async function markGreeted(phone: string): Promise<void> {
  * ho sakta hai (92xxx / 0xxx / xxx), is liye teeno shaklon se dhoondte hain.
  */
 async function findOrder(opts: {
-  confirmationNumber: string | null
-  orderNumber: string | null
-  phoneInText: string | null
-  trackingCandidate: string | null
+  confirmationNumber?: string | null
+  orderNumber?: string | null
+  phoneInText?: string | null
+  trackingCandidate?: string | null
   senderPhone?: string
 }): Promise<any | null> {
   const { confirmationNumber, orderNumber, phoneInText, trackingCandidate, senderPhone } = opts
