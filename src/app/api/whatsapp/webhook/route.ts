@@ -14,6 +14,8 @@ import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
 import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
 import { planReply, TRACK_LINK } from '@/lib/replyPlan'
+import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
+import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
 export const dynamic = 'force-dynamic'
 
@@ -286,25 +288,17 @@ export async function POST(req: NextRequest) {
   const text = incoming.text.trim()
 
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
-  // Parhne ko kuch nahi — order ka screenshot bhi ho sakta hai, design bhi.
-  // Customer aksar Shopify ka "Thank you" wala screenshot bhej deta hai aur
-  // kuch likhta nahi. Us ka order aksar usi WhatsApp number par hota hai (ya
-  // hum use pehle tracking bhej chuke hote hain), is liye yahin dhoond kar
-  // SEEDHA tracking bhej dete hain — na sawaal, na "order number bhejein".
+  // Customer aksar sirf screenshot bhej deta hai, likhta kuch nahi. Teen
+  // tarah ke screenshot aate hain: Orders page ("Order #49086"), Thank You
+  // page ("Confirmation #8IVAKP0FY") aur Order details (email + number).
   //
-  // Na mile (yani ye shakhs ne abhi kuch khareeda hi nahi, shayad design ki
-  // tasveer hai) to bot khamosh rehta hai.
+  // Tareeqa:
+  //   1. Tasveer parho (OCR) — us mein order/confirmation/courier number,
+  //      phone ya email mil jaye to usi se order dhoond kar tracking
+  //   2. Tasveer order ki na ho (design, cover ki photo) — bot khamosh
+  //   3. OCR band ho ya na parh sake — bhejne wale ke apne number se dhoondo
   if (!text) {
-    if (incoming.isMedia) {
-      const order =
-        (await findOrder({ senderPhone: from })) ||
-        (await findOrder({ orderNumber: await pichhlaOrderNumber(from) }))
-      if (order && !(await trackingRecentlySent(from, order.order_number))) {
-        await sendWhatsAppText(from, await buildStatusReply(order))
-        await markTrackingSent(from, order.order_number)
-        console.log(`[wa] tasveer par tracking #${order.order_number} — ${from}`)
-      }
-    }
+    if (incoming.isMedia) await tasveerKaJawab(message, from)
     return NextResponse.json({ ok: true })
   }
 
@@ -584,6 +578,94 @@ async function trackingRecentlySent(phone: string, orderNumber: string | number)
   }
   if (!data || !data.sent_at) return false
   return Date.now() - new Date(data.sent_at).getTime() < TRACKING_REPEAT_HOURS * 3600 * 1000
+}
+
+/**
+ * Bina kisi likhai ke aayi tasveer ka jawab.
+ *
+ * Pehle tasveer parhi jati hai; order ka screenshot nikle to usi se order
+ * dhoond kar SEEDHA tracking jati hai (na sawaal, na "order number bhejein").
+ * Order ka screenshot na ho to kuch nahi hota — bot khamosh rehta hai.
+ */
+async function tasveerKaJawab(message: any, from: string): Promise<void> {
+  const mediaId = message?.image?.id || message?.document?.id
+  let mila: any = null
+
+  if (mediaId && ocrAvailable()) {
+    const file = await whatsappMedia(String(mediaId))
+    const text = file ? await readTextFromImage(file.base64, file.mime) : null
+    if (text) {
+      const parha = readOrderScreenshot(text)
+      console.log(
+        `[wa] tasveer parhi — order:${parha.isOrderScreenshot} #${parha.orderNumber || '-'} ` +
+          `conf:${parha.confirmation || '-'} cn:${parha.trackingId || '-'} — ${from}`
+      )
+      if (!parha.isOrderScreenshot) return // design/cover ki tasveer — kuch nahi
+
+      mila =
+        (await findOrder({
+          orderNumber: parha.orderNumber,
+          confirmationNumber: parha.confirmation,
+          phoneInText: parha.phone,
+          trackingCandidate: parha.trackingId,
+        })) ||
+        (parha.confirmation ? await findByConfirmationVariants(parha.confirmation) : null) ||
+        (parha.email ? await findByEmail(parha.email) : null)
+    }
+  }
+
+  // OCR band hai, ya tasveer parhi nahi ja saki — phir wahi purana sahara:
+  // bhejne wale ka apna number, ya wo order jo use pehle bheja gaya tha
+  if (!mila) {
+    mila =
+      (await findOrder({ senderPhone: from })) ||
+      (await findOrder({ orderNumber: await pichhlaOrderNumber(from) }))
+  }
+
+  if (!mila) return
+  if (await trackingRecentlySent(from, mila.order_number)) return
+
+  await sendWhatsAppText(from, await buildStatusReply(mila))
+  await markTrackingSent(from, mila.order_number)
+  console.log(`[wa] tasveer par tracking #${mila.order_number} — ${from}`)
+}
+
+/**
+ * Confirmation number OCR ne thora ghalat parha ho (O/0, I/1) — chand
+ * milti julti shaklon se bhi dhoond lete hain.
+ */
+async function findByConfirmationVariants(code: string): Promise<any | null> {
+  const list = confirmationVariants(code)
+  const { data } = await supabaseAdmin
+    .from('orders')
+    .select('*')
+    .in('confirmation_number', list)
+    .limit(1)
+  if (data && data.length) return data[0]
+
+  // Database mein chhote huroof ya '#' ke sath bhi ho sakta hai
+  for (const c of list.slice(0, 4)) {
+    const { data: row } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .ilike('confirmation_number', `%${c}%`)
+      .limit(1)
+      .maybeSingle()
+    if (row) return row
+  }
+  return null
+}
+
+/** Screenshot mein likhe hue email se order */
+async function findByEmail(email: string): Promise<any | null> {
+  const { data } = await supabaseAdmin
+    .from('orders')
+    .select('*')
+    .ilike('customer_email', email)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data || null
 }
 
 /**
