@@ -593,6 +593,12 @@ async function tasveerKaJawab(message: any, from: string): Promise<void> {
   const mediaId = message?.image?.id || message?.document?.id
   let mila: any = null
 
+  // Tashkhees: kis qism ki tasveer aayi aur OCR chalu hai ya nahi
+  console.log(
+    `[wa] tasveer aayi — qism:${message?.type} mediaId:${mediaId ? 'haan' : 'nahi'} ` +
+      `ocr:${ocrAvailable() ? 'chalu' : 'band'} — ${from}`
+  )
+
   if (mediaId && ocrAvailable()) {
     const file = await whatsappMedia(String(mediaId))
     const text = file ? await readTextFromImage(file.base64, file.mime) : null
