@@ -266,11 +266,11 @@ export default async function QnaPage({
               <b> “Hata dein? = Haan” </b> hai.
             </li>
             <li style={s.li}>
-              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Isi row ka jawab naye
-              kharidar ko (24 ghante mein ek dafa) jata hai, aur “Yes Available” ke neeche bhi yahi
-              matan jata hai. Jo customer order kar chuka ho (refund, order number, cancel,
-              address...) use ye nahi jata. Jis jawab mein pehle se how-to-place ka link ho
-              (Buy 1 Get 1, Name Design...) us ke sath bhi alag se nahi jata — do dafa nahi. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
+              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Aam greeting ab{' '}
+              <b>band</b> hai — har customer ko apne aap kuch nahi jata (Meta har message ka paisa
+              leta hai). Is row ka matan ab SIRF us waqt jata hai jab koi model ki availability
+              poochhe: tab <b>“Yes Available”</b> ke neeche isi row ka matan usi ek message mein
+              jata hai. Is liye row file mein rehni chahiye. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
               sirf <b>“Hata dein? = Haan”</b> se hi band hoti hai.
             </li>
             <li style={s.li}>

@@ -12,8 +12,8 @@ import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
 import type { CourierStage } from '@/lib/courierStatus'
-import { phoneVariants, extractIncomingText, isJunkMessage, normalizeExtractedPhone } from '@/lib/messageParse'
-import { planReply, greetingWithAnswer, TRACK_LINK } from '@/lib/replyPlan'
+import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
+import { planReply, TRACK_LINK } from '@/lib/replyPlan'
 
 export const dynamic = 'force-dynamic'
 
@@ -287,10 +287,9 @@ export async function POST(req: NextRequest) {
 
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
   // Parhne ko kuch nahi — order ka screenshot bhi ho sakta hai, design bhi.
-  // Pehle aise message bilkul nazarandaz ho jate the; ab kam se kam greeting
-  // chali jati hai (agar 24 ghante mein nahi gayi) taake customer ko jawab mile.
+  // Pehle greeting chali jati thi; ab aam greeting band hai (Meta ab har
+  // message ka paisa leta hai), is liye bot khamosh rehta hai.
   if (!text) {
-    await maybeSendGreeting(from)
     return NextResponse.json({ ok: true })
   }
 
@@ -307,27 +306,17 @@ export async function POST(req: NextRequest) {
   const plan = planReply(text, { alreadyAskedForNumber: askedBefore })
   const { confirmationNumber, orderNumber, phoneInText, trackingCandidate, manualReason } = plan
 
-  // ── Greeting — sirf naye kharidar ko, aur kabhi do dafa nahi ────────────
-  // Greeting "how to place your order" hai. Ab ye har raaste par ALAG se
-  // tay hota hai, jawab dekh kar (pehle sab se upar ek dafa bhej di jati thi):
-  //   - order ki baat (number, "I have ordered", cancel, address) → nahi
-  //   - Q&A ka jawab khud how-to-place samjhata ho (Buy 1 Get 1, Name
-  //     Design...) → nahi, warna wahi lamba matan do dafa jata tha
-  //   - order ke baad wala topic (refund, quality complaint...) → nahi
-  //   - "Parcel allow to open" → sirf agar is number par koi order na ho
-  //   - jawab greeting ke andar hi ho ("Price") → sirf greeting, ek message
-  // Wapas: true = jawab ab alag se NAHI bhejna (greeting mein aa gaya)
-  const greetBefore = async (qnaTopic?: string, qnaAnswer?: string): Promise<boolean> => {
-    if (plan.skipGreeting) return false
-    if (qnaAnswer !== undefined) {
-      const faisla = greetingWithAnswer(qnaTopic || '', qnaAnswer, await getGreetingMessage())
-      if (faisla === 'skip') return false
-      if (faisla === 'if-no-order' && (await phoneHasOrder(from))) return false
-      if (faisla === 'instead') return maybeSendGreeting(from)
-    }
-    await maybeSendGreeting(from)
-    return false
-  }
+  // ── Aam GREETING BAND hai ───────────────────────────────────────────────
+  // Pehle har naye (aur 24 ghante baad wapas aane wale) customer ko "how to
+  // place your order" wala message jata tha — pichhle 30 din mein 1096 dafa.
+  // Meta ab har message ka paisa leta hai, is liye ye band kar diya gaya.
+  //
+  // Wo matan ab SIRF ek jagah jata hai: jab customer kisi model ki
+  // availability poochhe ("Samsung A54 ka cover mil jayega?") — tab "Yes
+  // Available" ke sath usi ek message mein (neeche 0b).
+  //
+  // Matan phir bhi Excel ki "Salaam / Greeting" row se aata hai, is liye wo
+  // row file mein rehni chahiye.
 
   // ── 0a) "Apni picture wala cover bana dein" ──────────────────────────────
   // Customization ka sawaal. Jawab AAP ki Excel ki Customize wali row se
@@ -341,9 +330,8 @@ export async function POST(req: NextRequest) {
     const mila = await matchQnaDetailed(text)
     const jawab = mila ? mila.answer : await getTopicAnswer('custom')
     if (jawab) {
-      const greetingMeinAaGaya = await greetBefore(mila ? mila.topic : 'Customization', jawab)
       await clearState()
-      if (!greetingMeinAaGaya) await sendWhatsAppText(from, jawab)
+      await sendWhatsAppText(from, jawab)
       console.log(`[wa] customization — ${from}`)
       return NextResponse.json({ ok: true })
     }
@@ -436,6 +424,11 @@ export async function POST(req: NextRequest) {
     orderNumber: plan.readNumbers ? orderNumber : null,
     phoneInText: plan.readNumbers ? phoneInText : null,
     trackingCandidate: plan.readNumbers ? trackingCandidate : null,
+    // Customer jis WhatsApp number se likh raha hai, aksar order bhi usi
+    // number par hota hai. Pehle hum phir bhi "apna order number bhejein"
+    // bhejte the aur phir tracking — yani DO message ka kharcha. Ab order
+    // khud dhoond kar SEEDHA tracking jati hai, ek hi message mein.
+    senderPhone: plan.orderish ? from : undefined,
   })
 
   if (order) {
@@ -494,9 +487,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
   if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
-    const greetingMeinAaGaya = await greetBefore(qna.topic, qna.answer)
     if (state) await clearState()
-    if (!greetingMeinAaGaya) await sendWhatsAppText(from, qna.answer)
+    await sendWhatsAppText(from, qna.answer)
     return NextResponse.json({ ok: true })
   }
 
@@ -525,9 +517,6 @@ export async function POST(req: NextRequest) {
   // Jaan boojh kar koi reply nahi jata. Agar bot number maang chuka hai to
   // wo intezaar barqarar rehta hai (baad mein number aaye to pehchana jaye),
   // warna saaf kar dete hain.
-  // Naya customer "Hi" / "AoA" likhe to greeting yahin jati hai
-  await greetBefore()
-
   if (state && !askedBefore) await clearState()
 
   // "?", "Hi", "AoA", "Ok", "Thanks" rozana ki Excel mein faltu bheer banate
@@ -580,58 +569,7 @@ async function markTrackingSent(phone: string, orderNumber: string | number): Pr
   if (error) console.warn('[wa] wa_tracking_sent likh nahi saka:', error.message)
 }
 
-/**
- * Naye customer ko (ya 24 ghante baad wapas aane wale ko) aap ka greeting
- * message bhejta hai. Jo greeting Excel ki "Salaam / Greeting" row mein hai,
- * wahi jati hai — wo row khali ho to kuch nahi jata.
- */
-async function maybeSendGreeting(phone: string): Promise<boolean> {
-  const cooldownHours = Number(process.env.GREETING_COOLDOWN_HOURS) || 24
-  const cutoff = new Date(Date.now() - cooldownHours * 3600 * 1000).toISOString()
-
-  const { data: seen, error } = await supabaseAdmin
-    .from('wa_greeted')
-    .select('greeted_at')
-    .eq('phone', phone)
-    .maybeSingle()
-
-  if (error) {
-    // Table abhi banayi nahi gayi — greeting chhod kar aage badh jao
-    console.warn('[wa] wa_greeted parh nahi saka:', error.message)
-    return false
-  }
-
-  // Pehle hi bhej chuke hain (cooldown ke andar)
-  if (seen && seen.greeted_at && String(seen.greeted_at) > cutoff) return false
-
-  const greeting = await getGreetingMessage()
-  if (!greeting) return false // aap ne greeting likhi hi nahi
-
-  await sendWhatsAppText(phone, greeting)
-  await markGreeted(phone)
-  return true
-}
-
-/**
- * Is WhatsApp number par pehle se koi order hai? ("Parcel allow to open"
- * jaisa sawaal order se pehle bhi hota hai aur baad mein bhi — order ho
- * chuka ho to greeting / how-to-place nahi jati.)
- */
-async function phoneHasOrder(phone: string): Promise<boolean> {
-  const normalized = normalizeExtractedPhone(phone) || phone
-  const { data, error } = await supabaseAdmin
-    .from('orders')
-    .select('id')
-    .in('customer_phone', phoneVariants(normalized))
-    .limit(1)
-  if (error) {
-    console.warn('[wa] order dhoond nahi saka:', error.message)
-    return false
-  }
-  return Boolean(data && data.length)
-}
-
-/** Greeting ja chuki — chahe akeli, chahe kisi aur jawab ke andar. */
+/** "Yes Available" ke sath guide ja chuka — record ke liye. */
 async function markGreeted(phone: string): Promise<void> {
   await supabaseAdmin
     .from('wa_greeted')
