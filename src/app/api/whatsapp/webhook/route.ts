@@ -33,6 +33,15 @@ const AVAILABLE_LINE = '*Yes Available*'
 // Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
 const ASK_STATE_HOURS = 24
 
+// Jab order ka pata hi na chale — ye message customer ko jata hai
+const ORDER_INFO_MAANGO = [
+  'Please Apna ( Text Msg Ma Type Kr K Send Kr Dain )',
+  '',
+  'Order Number (Jaise 40981), ',
+  'Confirmation Number (Jaise #N8FNNZAKE) ',
+  'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Abhi Check Karti Hun.',
+].join('\n')
+
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
 // (website ka apna progress bar isi purane 6-step data pe chalta rahega,
@@ -449,7 +458,13 @@ export async function POST(req: NextRequest) {
     !seedhaMila && plan.orderish
       ? await findOrder({ orderNumber: await pichhlaOrderNumber(from) })
       : null
-  const order = seedhaMila || yaadOrder
+  // Tasveer ke SATH likha bhi hua hai (caption). Tarteeb aap ki batayi hui:
+  //   1. jo likha hai us mein order / confirmation / cell number — sab se pehle
+  //   2. purana record (isi number ka order, ya jo tracking pehle bheji gayi)
+  //   3. in dono se na mile — ab TASVEER parhi jati hai
+  const tasveerSe =
+    !seedhaMila && !yaadOrder && incoming.isMedia ? await orderTasveerSe(message, from) : null
+  const order = seedhaMila || yaadOrder || (tasveerSe ? tasveerSe.order : null)
 
   if (order) {
     await clearState()
@@ -516,20 +531,15 @@ export async function POST(req: NextRequest) {
   // Sirf EK dafa maangte hain. Pehle bot "intezaar" mein chala jata tha aur
   // us ke baad HAR message ("Hi", "camera protection...") par wahi maangta
   // rehta tha.
-  if (plan.mayAskForNumber) {
+  // Tasveer order ki thi (Thank You / Orders page) lekin us se bhi order nahi
+  // mila — aise mein bhi number maangna banta hai, chahe sath likhi hui baat
+  // order ka sawaal na lagti ho.
+  const tasveerOrderKiThi = tasveerSe !== null && tasveerSe.orderScreenshot
+  if (plan.mayAskForNumber || (tasveerOrderKiThi && !askedBefore)) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await sendWhatsAppText(
-      from,
-      [
-        'Please Apna ',
-        '',
-        'Order Number (Jaise 40981), ',
-        'Confirmation Number (Jaise #N8FNNZAKE) ',
-        'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Abhi Check Karti Hun.',
-      ].join('\n')
-    )
+    await sendWhatsAppText(from, ORDER_INFO_MAANGO)
     return NextResponse.json({ ok: true })
   }
 
@@ -590,52 +600,89 @@ async function trackingRecentlySent(phone: string, orderNumber: string | number)
  * Order ka screenshot na ho to kuch nahi hota — bot khamosh rehta hai.
  */
 async function tasveerKaJawab(message: any, from: string): Promise<void> {
-  const mediaId = message?.image?.id || message?.document?.id
-  let mila: any = null
+  const parha = await orderTasveerSe(message, from)
+  let mila = parha.order
 
-  // Tashkhees: kis qism ki tasveer aayi aur OCR chalu hai ya nahi
-  console.log(
-    `[wa] tasveer aayi — qism:${message?.type} mediaId:${mediaId ? 'haan' : 'nahi'} ` +
-      `ocr:${ocrAvailable() ? 'chalu' : 'band'} — ${from}`
-  )
-
-  if (mediaId && ocrAvailable()) {
-    const file = await whatsappMedia(String(mediaId))
-    const text = file ? await readTextFromImage(file.base64, file.mime) : null
-    if (text) {
-      const parha = readOrderScreenshot(text)
-      console.log(
-        `[wa] tasveer parhi — order:${parha.isOrderScreenshot} #${parha.orderNumber || '-'} ` +
-          `conf:${parha.confirmation || '-'} cn:${parha.trackingId || '-'} — ${from}`
-      )
-      if (!parha.isOrderScreenshot) return // design/cover ki tasveer — kuch nahi
-
-      mila =
-        (await findOrder({
-          orderNumber: parha.orderNumber,
-          confirmationNumber: parha.confirmation,
-          phoneInText: parha.phone,
-          trackingCandidate: parha.trackingId,
-        })) ||
-        (parha.confirmation ? await findByConfirmationVariants(parha.confirmation) : null) ||
-        (parha.email ? await findByEmail(parha.email) : null)
-    }
-  }
-
-  // OCR band hai, ya tasveer parhi nahi ja saki — phir wahi purana sahara:
-  // bhejne wale ka apna number, ya wo order jo use pehle bheja gaya tha
-  if (!mila) {
+  // Tasveer parhi hi nahi ja saki (OCR band, ya saaf nahi) — phir purana
+  // sahara: bhejne wale ka apna number, ya wo order jo use pehle bheja gaya.
+  // (Tasveer PARH li gayi aur wo order ki nahi thi — jaise design ya cover ki
+  // photo — to kuch nahi bhejte.)
+  if (!mila && !parha.parhiGayi) {
     mila =
       (await findOrder({ senderPhone: from })) ||
       (await findOrder({ orderNumber: await pichhlaOrderNumber(from) }))
   }
 
-  if (!mila) return
-  if (await trackingRecentlySent(from, mila.order_number)) return
+  if (mila) {
+    // Yahi order abhi abhi bheja ja chuka hai to dobara nahi (24 ghante).
+    // Kisi DOOSRE order ki tasveer ho to us ki tracking foran jati hai.
+    if (await trackingRecentlySent(from, mila.order_number)) {
+      console.log(`[wa] tasveer: tracking #${mila.order_number} pehle ja chuki — ${from}`)
+      return
+    }
+    await sendWhatsAppText(from, await buildStatusReply(mila))
+    await markTrackingSent(from, mila.order_number)
+    console.log(`[wa] tasveer par tracking #${mila.order_number} — ${from}`)
+    return
+  }
 
-  await sendWhatsAppText(from, await buildStatusReply(mila))
-  await markTrackingSent(from, mila.order_number)
-  console.log(`[wa] tasveer par tracking #${mila.order_number} — ${from}`)
+  // Tasveer order ki thi lekin order nahi mil saka — ab number maang lete hain
+  if (parha.orderScreenshot) {
+    await supabaseAdmin
+      .from('wa_conversation_state')
+      .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
+    await sendWhatsAppText(from, ORDER_INFO_MAANGO)
+  }
+}
+
+interface TasveerNatija {
+  /** Tasveer se mila hua order (na mile to null) */
+  order: any | null
+  /** Tasveer order ka screenshot thi? (design/cover ki photo nahi) */
+  orderScreenshot: boolean
+  /** Tasveer parhi ja saki? (OCR band ho ya nakaam ho to false) */
+  parhiGayi: boolean
+}
+
+/**
+ * Tasveer parh kar us mein se order dhoondta hai — khud kuch bhejta nahi.
+ *
+ * Teen tarah ke screenshot aate hain: Orders page ("Order #49086" aur
+ * CallCourier ka number), Thank You page ("Confirmation #8IVAKP0FY") aur
+ * Order details (email + mobile number).
+ */
+async function orderTasveerSe(message: any, from: string): Promise<TasveerNatija> {
+  const khali: TasveerNatija = { order: null, orderScreenshot: false, parhiGayi: false }
+  const mediaId = message?.image?.id || message?.document?.id
+
+  console.log(
+    `[wa] tasveer aayi — qism:${message?.type} mediaId:${mediaId ? 'haan' : 'nahi'} ` +
+      `ocr:${ocrAvailable() ? 'chalu' : 'band'} — ${from}`
+  )
+  if (!mediaId || !ocrAvailable()) return khali
+
+  const file = await whatsappMedia(String(mediaId))
+  const text = file ? await readTextFromImage(file.base64, file.mime) : null
+  if (!text) return khali
+
+  const parha = readOrderScreenshot(text)
+  console.log(
+    `[wa] tasveer parhi — order:${parha.isOrderScreenshot} #${parha.orderNumber || '-'} ` +
+      `conf:${parha.confirmation || '-'} cn:${parha.trackingId || '-'} — ${from}`
+  )
+  if (!parha.isOrderScreenshot) return { order: null, orderScreenshot: false, parhiGayi: true }
+
+  const order =
+    (await findOrder({
+      orderNumber: parha.orderNumber,
+      confirmationNumber: parha.confirmation,
+      phoneInText: parha.phone,
+      trackingCandidate: parha.trackingId,
+    })) ||
+    (parha.confirmation ? await findByConfirmationVariants(parha.confirmation) : null) ||
+    (parha.email ? await findByEmail(parha.email) : null)
+
+  return { order, orderScreenshot: true, parhiGayi: true }
 }
 
 /**
