@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase'
-import { buildIndex, matchAgainstIndex, explainMatches } from '@/lib/qnaMatch'
+import { buildIndex, matchAgainstIndex, explainMatches, tokenize } from '@/lib/qnaMatch'
 import type { QnaEntry, QnaIndex, MatchResult } from '@/lib/qnaMatch'
 
 /**
@@ -133,6 +133,15 @@ export async function matchQnaDetailed(text: string): Promise<MatchResult | null
 
   // Greeting alag se bheja jata hai — yahan se nahi
   if (result.topic === GREETING_TOPIC) return null
+
+  // Ek lafz ka mubham message ("Total?", "Case", "Size") — is par jawab sirf
+  // tab jata hai jab Excel mein bhi bilkul wahi sawaal likha ho.
+  //
+  // Customer ne sirf "Total?" likha tha aur Quality Complaint wale topic ke
+  // "Totally Disappointed" se 0.67 par milan ho gaya — 7 Days Replacement
+  // Policy wala lamba message chala gaya. Ek lafz se poori baat samajhna
+  // mumkin nahi, is liye andaza lagane ke bajaye bot khamosh rehta hai.
+  if (tokenize(text).length <= 1 && result.score < 0.85) return null
 
   return result
 }
