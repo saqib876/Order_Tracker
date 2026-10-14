@@ -129,10 +129,11 @@ const GENERIC_ASK = [
   /\b(pics?|pictures?|photos?)\s+(send|bhej|bhij|dikha)/,
   /\bsend\s+(me\s+)?(the\s+)?(pics?|pictures?|photos?)\b/,
   /\b(designs?)\s+(dikha|show)/,
-  // "Nhi mujhe covered Hi chahiyye" — ye naya kharidar hai, apne order ka
-  // sawaal nahi. Pehle bot is par "apna order number bhejein" bhej deta tha.
-  /\b(cover|covers|covered|case|cases|kor)\s*(hi\s*)?(chahi|chahy|chaiy|chahe|chaye|chyi)/,
-  /\b(mujhe|mjhy|mujy|mjhe|mein|me)\b.{0,20}\b(cover|covers|case|cases)\b.{0,15}\b(chahi|chahy|chaiy|chahe|chaye)/,
+  // NOTE: "cover chahiye" jaan boojh kar yahan NAHI hai. "Mujhe covered
+  // chahiye" ka matlab camera-covered wala cover hota hai — us ka jawab Excel
+  // ke apne topic (Camera Open-Close / Covers) se jana chahiye, "Yes
+  // Available" se nahi. Aise jumle Q&A mein na milen to "Naye Sawaal" wali
+  // Excel mein aa jate hain, jahan aap unhe sahi topic mein daal dete hain.
 ]
 
 function hasAny(t: string, list: string[]): boolean {
