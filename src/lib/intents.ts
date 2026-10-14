@@ -26,6 +26,7 @@ export type ManualReason =
   | 'wrong_design_received'
   | 'missing_items'
   | 'quality_issue'
+  | 'return_refund'
 
 /** Baayen column: order raaste mein hai, customer kuch badalna chahta hai. */
 export const CHANGE_REASONS: ManualReason[] = [
@@ -42,6 +43,7 @@ export const ISSUE_REASONS: ManualReason[] = [
   'wrong_design_received',
   'missing_items',
   'quality_issue',
+  'return_refund',
 ]
 
 export const MANUAL_REASON_LABEL: Record<ManualReason, string> = {
@@ -54,6 +56,7 @@ export const MANUAL_REASON_LABEL: Record<ManualReason, string> = {
   wrong_design_received: 'Wrong Design Receive',
   missing_items: 'Kam Cases Receive',
   quality_issue: 'Quality Issue',
+  return_refund: 'Return / Refund',
 }
 
 /** Default holding replies — Q&A table mein isi topic ka jawab ho to wo jeetega. */
@@ -76,6 +79,8 @@ export const MANUAL_REASON_REPLY: Record<ManualReason, string> = {
     'Maazrat ke sath — aap ki shikayat mil gayi hai. Humari team aap ka order check kar rahi hai aur thori dair mein aap se raabta karegi.',
   quality_issue:
     'Maazrat ke sath — aap ki shikayat mil gayi hai. Humari team aap ka order check kar rahi hai aur thori dair mein aap se raabta karegi.',
+  return_refund:
+    'Aap ki return / refund ki request mil gayi hai. Humari team ise check kar ke thori dair mein aap se raabta karegi.',
 }
 
 const CHANGE_WORDS = [
@@ -140,6 +145,22 @@ export function detectManualReason(rawText: string): ManualReason | null {
   if (full.includes('mansookh') || full.includes('wapas le lo')) return 'order_cancel'
   // Urdu mein likhne wale
   if (full.includes('منسوخ') || full.includes('کینسل')) return 'order_cancel'
+
+  // ── 1b. Return / Refund ──────────────────────────────────────────────────
+  // "Mjhy return krna ha", "I want to return", "refund chahiye" — ye team ka
+  // kaam hai. Pehle aise message par bot tracking bhej deta tha, kyunki un
+  // mein "order" ka zikr hota hai.
+  //
+  // Sirf 'return' lafz kaafi nahi ("return policy kya hai" sawaal hai,
+  // darkhwast nahi) — sath mein karne ka irada bhi hona chahiye.
+  const wapasKarna = [
+    /\breturn\b[^.]{0,20}\b(krna|karna|karni|krni|krdo|kardo|kr do|kar do|chahta|chahti|chahiye|chahie|chaiye|karwana|krwana)\b/,
+    /\b(want|need|like)\b[^.]{0,12}\b(to\s+)?(return|refund|exchange)\b/,
+    /\brefund\b[^.]{0,20}\b(krna|karna|chahiye|chahie|chaiye|chahta|chahti|do|dein|den|de do)\b/,
+    /\b(wapas|wapis|wpas)\b[^.]{0,15}\b(krna|karna|karni|krni|lena|le lo|le lein|bhejna|bhejni)\b/,
+    /\bexchange\b[^.]{0,20}\b(krna|karna|chahiye|chahie|chaiye|kardo|krdo)\b/,
+  ]
+  if (wapasKarna.some((re) => re.test(full))) return 'return_refund'
 
   // Ghalti se do (ya us se zyada) order lag gaye aur ek hatwana hai — lafz
   // 'cancel' na bhi likha ho to ye bhi cancel hi ke khane mein jayega.

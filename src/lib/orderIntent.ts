@@ -26,6 +26,7 @@
  * Naya andaz dikhe to bas is list mein ek line add kar dein.
  */
 
+import { normalizeForMatch } from '@/lib/textNormalize'
 import { buildIndex, matchAgainstIndex } from '@/lib/qnaMatch'
 import type { QnaIndex } from '@/lib/qnaMatch'
 
@@ -237,6 +238,34 @@ function getIndex(): QnaIndex {
  * Kya customer apne order/delivery ke baare mein poochh raha hai?
  * Ye sirf haan/nahi batata hai — jawab Q&A ya order-lookup deta hai.
  */
+/**
+ * "Langar" lafz — in mein se ek bhi ho to baat waqai kisi order ki hai.
+ * Ghalat spelling bhi (dilver, delevery, odar) isi liye tukron se milate hain.
+ *
+ * "cover" / "case" jaan boojh kar shamil NAHI — "mujhe cover chahiye" naya
+ * kharidar hai, order ka sawaal nahi.
+ */
+const LANGAR = [
+  'order', 'odar', 'oder', 'ordr', 'parcel', 'parsal', 'deliver', 'dilver',
+  'diliver', 'delever', 'delivry', 'dispatch', 'despatch', 'courier', 'curier',
+  'tracking', 'track', 'shipment', 'shipping', 'consignment', 'booking',
+  'package', 'packet', 'آرڈر', 'پارسل', 'ڈلیوری',
+]
+
+/**
+ * Ye message kisi MAUJOODA order ke baare mein hai?
+ *
+ * Sirf word-score kaafi nahi tha: chhote jumle ("I know that", "Aslam
+ * alikum", "Alright I'm waiting") bhi 0.45 se upar chale jate the aur bot
+ * khud se tracking bhej deta tha. Ab do mein se ek shart aur zaruri hai:
+ *   - koi "langar" lafz (order, parcel, delivery, tracking...) mojood ho, YA
+ *   - jumla ba-qaida aap ki list ke kisi jumle jaisa ho (0.70 se upar)
+ */
 export function looksLikeOrderIntent(text: string): boolean {
-  return matchAgainstIndex(getIndex(), text, ORDER_INTENT_THRESHOLD) !== null
+  const mila = matchAgainstIndex(getIndex(), text, ORDER_INTENT_THRESHOLD)
+  if (!mila) return false
+
+  const t = normalizeForMatch(text)
+  if (LANGAR.some((w) => t.includes(w))) return true
+  return mila.score >= 0.7
 }

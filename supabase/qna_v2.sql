@@ -99,3 +99,16 @@ create table if not exists wa_tracking_sent (
 
 -- Sirf service role (bot) parhta/likhta hai — anon key ke liye band
 alter table wa_tracking_sent enable row level security;
+
+-- ── Ek hi jawab dobara na jaye ───────────────────────────────────────────
+-- Customer aksar ek hi baat do message mein likhta hai, ya ek hi order ki do
+-- tasveerein bhejta hai. Pehle har message ka alag jawab jata tha (do dafa
+-- paisa). Ab bilkul wohi matan isi number ko 15 minute tak dobara nahi jata.
+create table if not exists wa_recent_reply (
+  phone      text        not null,
+  reply_hash text        not null,
+  sent_at    timestamptz not null default now(),
+  primary key (phone, reply_hash)
+);
+alter table wa_recent_reply enable row level security;
+create index if not exists wa_recent_reply_sent_at_idx on wa_recent_reply (sent_at);

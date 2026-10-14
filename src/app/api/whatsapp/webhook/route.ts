@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import {
@@ -32,6 +33,10 @@ const TRACKING_REPEAT_HOURS = Number(process.env.TRACKING_REPEAT_HOURS) || 24
 const AVAILABLE_LINE = '*Yes Available*'
 // Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
 const ASK_STATE_HOURS = 24
+// Bilkul wohi message isi number ko itni dair tak dobara nahi jata. Customer
+// aksar ek hi baat do message mein likhta hai ("order status?" phir "kab
+// milega?") — pehle dono ka alag alag jawab jata tha, yani do dafa paisa.
+const SAME_REPLY_MINUTES = Number(process.env.SAME_REPLY_MINUTES) || 15
 
 // Jab order ka pata hi na chale — ye message customer ko jata hai
 const ORDER_INFO_MAANGO = [
@@ -308,8 +313,12 @@ export async function POST(req: NextRequest) {
   //      phone ya email mil jaye to usi se order dhoond kar tracking
   //   2. Tasveer order ki na ho (design, cover ki photo) — bot khamosh
   //   3. OCR band ho ya na parh sake — bhejne wale ke apne number se dhoondo
+  // Sirf TASVEER / document parhe jate hain. Voice note, video aur sticker
+  // par bot kuch nahi karta — pehle voice note par bhi tracking chali jati thi.
+  const tasveerHai = message?.type === 'image' || message?.type === 'document'
+
   if (!text) {
-    if (incoming.isMedia) await tasveerKaJawab(message, from)
+    if (tasveerHai) await tasveerKaJawab(message, from)
     return NextResponse.json({ ok: true })
   }
 
@@ -351,7 +360,7 @@ export async function POST(req: NextRequest) {
     const jawab = mila ? mila.answer : await getTopicAnswer('custom')
     if (jawab) {
       await clearState()
-      await sendWhatsAppText(from, jawab)
+      await bhejo(from, jawab)
       console.log(`[wa] customization — ${from}`)
       return NextResponse.json({ ok: true })
     }
@@ -368,7 +377,7 @@ export async function POST(req: NextRequest) {
   if (plan.modelAvailability) {
     const orderGuide = await getGreetingMessage()
     await clearState()
-    await sendWhatsAppText(from, orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
+    await bhejo(from, orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
     // Greeting isi message mein ja chuki — alag se dobara na jaye
     await markGreeted(from)
     console.log(`[wa] model availability — ${from}`)
@@ -427,7 +436,7 @@ export async function POST(req: NextRequest) {
     // Q&A mein is topic ka apna jawab ho to wo behtar hai
     const qnaAnswer = await matchQna(text)
     await clearState()
-    await sendWhatsAppText(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+    await bhejo(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
 
     console.log(
       `[wa] manual review: ${MANUAL_REASON_LABEL[manualReason]} — ${from}` +
@@ -463,7 +472,7 @@ export async function POST(req: NextRequest) {
   //   2. purana record (isi number ka order, ya jo tracking pehle bheji gayi)
   //   3. in dono se na mile — ab TASVEER parhi jati hai
   const tasveerSe =
-    !seedhaMila && !yaadOrder && incoming.isMedia ? await orderTasveerSe(message, from) : null
+    !seedhaMila && !yaadOrder && tasveerHai ? await orderTasveerSe(message, from) : null
   const order = seedhaMila || yaadOrder || (tasveerSe ? tasveerSe.order : null)
 
   if (order) {
@@ -471,13 +480,12 @@ export async function POST(req: NextRequest) {
 
     // Yahi order isi customer ko abhi abhi bheja ja chuka hai — wahi lamba
     // message dobara nahi. Doosra order number bheje to jawab jata hai.
-    if (await trackingRecentlySent(from, order.order_number)) {
+    if (!(await trackingClaim(from, order.order_number))) {
       console.log(`[wa] tracking #${order.order_number} pehle ja chuki — ${from} ko dobara nahi`)
       return NextResponse.json({ ok: true })
     }
 
-    await sendWhatsAppText(from, await buildStatusReply(order))
-    await markTrackingSent(from, order.order_number)
+    await bhejo(from, await buildStatusReply(order))
     return NextResponse.json({ ok: true })
   }
 
@@ -488,7 +496,7 @@ export async function POST(req: NextRequest) {
   if (confirmationNumber || (plan.readNumbers && (orderNumber || phoneInText))) {
     await clearState()
     const webTrack = await getTrackLinkAnswer()
-    await sendWhatsAppText(
+    await bhejo(
       from,
       webTrack ||
         [
@@ -523,7 +531,7 @@ export async function POST(req: NextRequest) {
   }
   if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
     if (state) await clearState()
-    await sendWhatsAppText(from, qna.answer)
+    await bhejo(from, qna.answer)
     return NextResponse.json({ ok: true })
   }
 
@@ -539,7 +547,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await sendWhatsAppText(from, ORDER_INFO_MAANGO)
+    await bhejo(from, ORDER_INFO_MAANGO)
     return NextResponse.json({ ok: true })
   }
 
@@ -570,26 +578,60 @@ function isFreshAskState(state: any): boolean {
 }
 
 /**
- * Isi customer ko yahi order haal hi mein (TRACKING_REPEAT_HOURS ke andar)
- * bheja ja chuka hai?
+ * "Pehli dafa" ka faisla — aur wo bhi aisa jise do request ek sath mil kar
+ * tor na sakein.
  *
- * Table na bani ho to false — yani purana rawaiya (har dafa bhejo) chalta
- * rehta hai, bot tootta nahi.
+ * Customer ke do message ek hi lamhe mein aayen to dono alag alag chalte hain
+ * aur dono ko lagta hai "abhi tak kuch nahi bheja" — is tarah ek hi cheez do
+ * dafa chali jati thi (aap ne tracking do dafa jate dekhi).
+ *
+ * Pehle UPDATE chalta hai (sirf tab kaamyab jab pichhli dafa ko kaafi waqt ho
+ * chuka ho), warna INSERT. Database ki apni pehredari (primary key) ki wajah
+ * se do mein se sirf EK insert kaamyab hota hai, doosra 23505 le kar hat jata
+ * hai. Table hi na ho to "haan" keh dete hain taake bot ruke nahi.
  */
-async function trackingRecentlySent(phone: string, orderNumber: string | number): Promise<boolean> {
-  const { data, error } = await supabaseAdmin
-    .from('wa_tracking_sent')
-    .select('sent_at')
-    .eq('phone', phone)
-    .eq('order_number', String(orderNumber))
-    .maybeSingle()
+async function claim(table: string, keys: Record<string, string>, windowMs: number): Promise<boolean> {
+  const ab = new Date().toISOString()
+  const cutoff = new Date(Date.now() - windowMs).toISOString()
+
+  let q = supabaseAdmin.from(table).update({ sent_at: ab })
+  for (const [k, v] of Object.entries(keys)) q = q.eq(k, v)
+  const { data, error } = await q.lt('sent_at', cutoff).select('sent_at')
 
   if (error) {
-    console.warn('[wa] wa_tracking_sent parh nahi saka:', error.message)
+    console.warn(`[wa] ${table} parh nahi saka:`, error.message)
+    return true
+  }
+  if (data && data.length) return true // purani entry thi aur waqt guzar chuka
+
+  const { error: insErr } = await supabaseAdmin.from(table).insert({ ...keys, sent_at: ab })
+  if (!insErr) return true
+  if (insErr.code === '23505') return false // abhi abhi ja chuka hai
+  console.warn(`[wa] ${table} mein likh nahi saka:`, insErr.message)
+  return true
+}
+
+/** Isi customer ko yahi order bhejna banta hai? (24 ghante mein ek dafa) */
+async function trackingClaim(phone: string, orderNumber: string | number): Promise<boolean> {
+  return claim(
+    'wa_tracking_sent',
+    { phone, order_number: String(orderNumber) },
+    TRACKING_REPEAT_HOURS * 3600 * 1000
+  )
+}
+
+/**
+ * Message bhejta hai — lekin bilkul wohi matan isi number ko abhi abhi ja
+ * chuka ho to nahi bhejta.
+ */
+async function bhejo(phone: string, text: string): Promise<boolean> {
+  const hash = createHash('sha1').update(text).digest('hex').slice(0, 32)
+  if (!(await claim('wa_recent_reply', { phone, reply_hash: hash }, SAME_REPLY_MINUTES * 60 * 1000))) {
+    console.log(`[wa] wahi jawab abhi ja chuka — ${phone} ko dobara nahi`)
     return false
   }
-  if (!data || !data.sent_at) return false
-  return Date.now() - new Date(data.sent_at).getTime() < TRACKING_REPEAT_HOURS * 3600 * 1000
+  await sendWhatsAppText(phone, text)
+  return true
 }
 
 /**
@@ -616,12 +658,11 @@ async function tasveerKaJawab(message: any, from: string): Promise<void> {
   if (mila) {
     // Yahi order abhi abhi bheja ja chuka hai to dobara nahi (24 ghante).
     // Kisi DOOSRE order ki tasveer ho to us ki tracking foran jati hai.
-    if (await trackingRecentlySent(from, mila.order_number)) {
+    if (!(await trackingClaim(from, mila.order_number))) {
       console.log(`[wa] tasveer: tracking #${mila.order_number} pehle ja chuki — ${from}`)
       return
     }
-    await sendWhatsAppText(from, await buildStatusReply(mila))
-    await markTrackingSent(from, mila.order_number)
+    await bhejo(from, await buildStatusReply(mila))
     console.log(`[wa] tasveer par tracking #${mila.order_number} — ${from}`)
     return
   }
@@ -631,7 +672,7 @@ async function tasveerKaJawab(message: any, from: string): Promise<void> {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await sendWhatsAppText(from, ORDER_INFO_MAANGO)
+    await bhejo(from, ORDER_INFO_MAANGO)
   }
 }
 

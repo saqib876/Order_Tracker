@@ -15,6 +15,7 @@ import {
   isNumericOnlyMessage,
   extractTrackingCandidate,
   isAcknowledgementOnly,
+  isGreetingOnly,
   stripContacts,
   isContactOnly,
   saysNotOrderedYet,
@@ -80,7 +81,10 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
   const numbersText = stripContacts(text)
 
   // Sirf email bheja ho to bot chup — ye sawaal hi nahi hai
-  const noQuestion = isAcknowledgementOnly(text) || isContactOnly(text)
+  // Sirf salam ("Aslam alikum", "Hi") par bot kuch nahi bhejta. Pehle ye
+  // "How To Place Order" wale topic se mil jata tha aur wahi lamba message
+  // chala jata tha — halanke aam greeting band ki ja chuki hai.
+  const noQuestion = isAcknowledgementOnly(text) || isContactOnly(text) || isGreetingOnly(text)
   const notOrderedYet = !noQuestion && saysNotOrderedYet(text)
 
   const confirmationNumber = extractConfirmationNumber(numbersText)
