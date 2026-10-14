@@ -60,7 +60,7 @@ export const ORDER_KEYWORDS = [
   ...NOUN_BASED_KEYWORDS,
   ...URDU_NOUN_KEYWORDS,
   // Noun-agnostic (koi bhi cheez ho, ye phrases apne aap match ho jate hain)
-  'track', 'mila', 'mla', 'status', 'tracking', 'kb mlyga', 'kab milega',
+  'kb mlyga', 'kab milega',
   // English - delivery timing (noun-agnostic)
   'when can i expect my delivery', 'expected delivery date',
   'how long will it take', 'delivery date',
@@ -71,7 +71,6 @@ export const ORDER_KEYWORDS = [
   // Roman Urdu - delivery timing (noun-agnostic)
   'kab tak milega', 'kab deliver', 'delivery kab tak milegi', 'kitna time',
   'kab tak aayega', 'kab tak punchay', 'kab tak pohnchega', 'kitne din lagenge',
-  'milega', 'aayega', 'lagega', 'pohoncha', // normalize hone ke baad canonical safety-net
   // Roman Urdu - status/location (noun-agnostic)
   'dispatch hua', 'tracking update', 'kab ship', 'tracking id mil',
   // Roman Urdu - delay (noun-agnostic)
@@ -88,11 +87,45 @@ export const ORDER_KEYWORDS = [
 // runtime par har message ke liye baar baar normalize na karna pade
 export const ORDER_KEYWORDS_NORMALIZED = ORDER_KEYWORDS.map((k) => normalizeForMatch(k)).filter(Boolean)
 
+/**
+ * Akele lafz jo order ki taraf ishara karte hain.
+ *
+ * Ye POORE lafz ke tor par milne chahiyein. Pehle ye bhi tukre ki tarah
+ * dhoonde jate the aur "delivery charges ko MILA k?" bhi order ka sawaal ban
+ * jata tha — customer sirf charges poochh raha tha.
+ */
+const AKELE_ORDER_LAFZ = [
+  'track', 'tracking', 'status', 'mila', 'mla', 'milega', 'milegi', 'milay',
+  'aayega', 'ayega', 'pohoncha', 'pohncha', 'puncha',
+]
+const AKELA_RE = new RegExp(
+  '(^|[^a-z0-9])(' + AKELE_ORDER_LAFZ.join('|') + ')([^a-z0-9]|$)',
+  'i'
+)
+
+/**
+ * Baat qeemat / charges ki ho to ye order ka sawaal nahi — us ka apna topic
+ * hai ("Delivery Charges", "Price").
+ */
+const QEEMAT_LAFZ = [
+  'charge', 'charges', 'chrg', 'price', 'rate', 'kimat', 'qeemat', 'cost',
+  'discount', 'kitne ka', 'kitny ka', 'kitne ki', 'kitny ki', 'paisay', 'paise',
+  ' dc ', 'dc ?', 'free delivery', 'delivery free',
+]
+function qeematKaSawaal(t: string): boolean {
+  return QEEMAT_LAFZ.some((w) => t.includes(w)) || /(^|[^a-z])dc([^a-z]|$)/i.test(t)
+}
+
 export function looksLikeOrderQuery(text: string) {
   // 1. Purani keyword list — tez hai aur asli data par is ki jhooti pehchan
   //    bilkul zero thi (0/239), is liye ise rakha hai.
   const t = normalizeForMatch(text)
+
+  // Qeemat / delivery charges ka sawaal — ye order ki tracking nahi
+  if (qeematKaSawaal(t)) return false
+
   if (ORDER_KEYWORDS_NORMALIZED.some((k) => t.includes(k))) return true
+  if (AKELA_RE.test(t)) return true
 
   // 2. Naya word-score — jo keywords se nikal jate hain unhe ye pakadta hai.
   //    Held-out test: keywords ne 51 mein se 1 pakda, ye 25 pakadta hai,

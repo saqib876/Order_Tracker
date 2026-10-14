@@ -141,6 +141,13 @@ const WORD_NORMALIZE: Record<string, string> = {
   addres: 'address',
   chnge: 'change',
   chng: 'change',
+  // "Delievery charges ko mila k?" — delivery ki aam ghalat spellingein
+  delievery: 'delivery',
+  delievry: 'delivery',
+  dilevery: 'delivery',
+  delvery: 'delivery',
+  delievary: 'delivery',
+  dilivery: 'delivery',
   // "Camera proction k Sath cover bna dyn gy"
   proction: 'protection',
   protction: 'protection',
