@@ -132,3 +132,40 @@ create table if not exists wa_human_pause (
   updated_at timestamptz not null default now()
 );
 alter table wa_human_pause enable row level security;
+
+-- ══ AI: message ko samajhna (keyword ke bajaye matlab) ══════════════════════
+--
+-- Do tables, dono sirf PAISA aur QUOTA bachane ke liye hain. AI ka jawab
+-- (sirf topic ka naam) yahan mehfooz hota hai, taake bilkul wohi jumla
+-- dobara aaye to AI se puchna hi na pade.
+
+-- Ek jumle ka faisla. message_hash mein topics ki list ka version bhi shamil
+-- hai — Excel mein naya topic add karein to purane faisle khud hi bekaar ho
+-- jate hain aur AI dobara, nayi list dekh kar faisla karta hai.
+create table if not exists ai_topic_cache (
+  message_hash text primary key,
+  topic        text,
+  insaan       boolean     not null default false,
+  sample       text,
+  created_at   timestamptz not null default now()
+);
+alter table ai_topic_cache enable row level security;
+create index if not exists ai_topic_cache_created_idx on ai_topic_cache (created_at desc);
+
+-- Har AI call ka hisaab. Isi se roz ki hadd (AI_MAX_PER_DAY) ginti jati hai,
+-- aur aap dekh sakte hain ke AI ne kis topic ka faisla kitni dafa kiya.
+create table if not exists ai_call_log (
+  id         bigserial   primary key,
+  provider   text        not null,
+  model      text,
+  topic      text,
+  insaan     boolean     not null default false,
+  ms         integer,
+  created_at timestamptz not null default now()
+);
+alter table ai_call_log enable row level security;
+create index if not exists ai_call_log_created_idx on ai_call_log (created_at desc);
+
+-- Purana cache aur log khud saaf karne ke liye (kabhi kabhi chala dein):
+--   delete from ai_topic_cache where created_at < now() - interval '90 days';
+--   delete from ai_call_log   where created_at < now() - interval '60 days';

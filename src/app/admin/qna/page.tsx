@@ -8,6 +8,7 @@
 
 import type { CSSProperties } from 'react'
 import { supabaseAdmin } from '@/lib/supabase'
+import { aiProvider, aiMode, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,14 @@ export default async function QnaPage({
     .select('*', { count: 'exact', head: true })
     .is('exported_at', null)
 
+  // ── AI ka hisaab ────────────────────────────────────────────────────────
+  const aiOn = aiAvailable()
+  const aiAaj = aiOn ? await aajKiGinti() : 0
+  const aiHadd = Number(process.env.AI_MAX_PER_DAY) || 300
+  const { count: cacheCount } = await supabaseAdmin
+    .from('ai_topic_cache')
+    .select('*', { count: 'exact', head: true })
+
   const rows = (topics || []).map((t) => ({
     topic: String(t.topic),
     n: String(t.questions || '').split(/\r?\n/).filter((x) => x.trim()).length,
@@ -62,6 +71,35 @@ export default async function QnaPage({
       <p style={s.sub}>
         {rows.length} topics · {totalQuestions} sawaal · {pendingCount ?? 0} naye sawaal jinka jawab nahi mila
       </p>
+
+      {/* AI ka haal */}
+      <section style={s.aiCard}>
+        <div style={{ flex: 1 }}>
+          <h2 style={s.h2}>Message samajhne wala AI</h2>
+          {aiOn ? (
+            <p style={s.aiText}>
+              <strong>Chalu</strong> — {aiProvider()} · andaz: {aiMode()}
+              <br />
+              Aaj {aiAaj} dafa pucha gaya (roz ki hadd {aiHadd}) ·{' '}
+              {cacheCount ?? 0} jumle yaad hain, un par dobara kabhi nahi pucha jayega
+              <br />
+              <span style={s.aiHint}>
+                AI khud jawab nahi likhta — wo sirf batata hai ke baat kis topic ki hai,
+                aur jawab aap ki Excel se lafz ba lafz jata hai.
+              </span>
+            </p>
+          ) : (
+            <p style={s.aiText}>
+              <strong>Band</strong> — bot sirf lafz gin kar jawab dhoondta hai.
+              <br />
+              <span style={s.aiHint}>
+                Chalu karne ke liye Vercel mein <code>GEMINI_API_KEY</code> (ya{' '}
+                <code>GROQ_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>) daalein.
+              </span>
+            </p>
+          )}
+        </div>
+      </section>
 
       {/* 1. Download */}
       <section style={s.card}>
@@ -387,6 +425,25 @@ const s: Record<string, CSSProperties> = {
   },
   h1: { fontSize: 27, fontWeight: 700, margin: '0 0 4px' },
   sub: { color: '#64748b', fontSize: 14, margin: '0 0 26px', fontVariantNumeric: 'tabular-nums' },
+  aiCard: {
+    display: 'flex',
+    gap: 16,
+    border: '1px solid #c7d2fe',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 14,
+    background: '#eef2ff',
+  },
+  aiText: {
+    margin: '6px 0 0',
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: '#1e293b',
+  },
+  aiHint: {
+    color: '#475569',
+    fontSize: 13,
+  },
   card: {
     display: 'flex',
     gap: 16,

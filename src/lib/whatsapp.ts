@@ -208,6 +208,34 @@ export async function getTopicAnswer(topicPrefix: string): Promise<string | null
 }
 
 /**
+ * Topic ke POORE naam se us ka jawab (AI classifier ke liye).
+ *
+ * getTopicAnswer() shuru ka tukda milata hai — wo code ke andar likhe hue
+ * naamon ke liye theek hai. Lekin AI jo naam chunta hai wo seedha Excel ki
+ * list se aata hai, is liye yahan poora naam milana zyada mehfooz hai:
+ * "Camera" aur "Camera Open-Close" do alag rows hon to ghalat jawab na jaye.
+ *
+ * Greeting ka topic yahan se bhi nahi milta — wo apni jagah se jata hai.
+ */
+export async function answerForTopic(topic: string): Promise<string | null> {
+  if (!topic || topic === GREETING_TOPIC) return null
+
+  const { data, error } = await supabaseAdmin
+    .from('qna_topics')
+    .select('answer')
+    .eq('topic', topic)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[qna] poore naam se topic nahi mila:', error.message)
+    return null
+  }
+  return data && data.answer ? String(data.answer) : null
+}
+
+/**
  * Aap ki Excel ka "web tracking" wala jawab (jis mein track-your-order ka
  * link hai — "Order Number Bheja" / "Order Placed" row).
  *

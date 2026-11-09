@@ -8,7 +8,9 @@ import {
   getGreetingMessage,
   getTopicAnswer,
   getTrackLinkAnswer,
+  answerForTopic,
 } from '@/lib/whatsapp'
+import { samjho, aiAvailable, aiMode } from '@/lib/aiTopic'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
@@ -576,6 +578,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
   if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
+    // ── AI ka PEHRA ───────────────────────────────────────────────────────
+    // Lafzon se jawab to mil gaya, lekin score kam hai — yani milan kamzor
+    // hai. Yahi wo jagah hai jahan ghalat jawab jate the ("Total?" par
+    // Replacement Policy). AI se poochte hain ke baat waqai isi topic ki
+    // hai ya nahi. AI mana kare to bot khamosh — ek message bacha.
+    const shakWaliHadd = Number(process.env.AI_CHECK_BELOW) || 0.6
+    if (qna.score < shakWaliHadd && aiAvailable()) {
+      const raye = await samjho(text)
+      if (raye) {
+        if (raye.insaan) {
+          console.log(`[wa] AI: ye baat insaan ke liye hai — ${from} se bot khamosh`)
+          await naySawaalLikho(from, text)
+          return NextResponse.json({ ok: true })
+        }
+        if (!raye.topic) {
+          console.log(`[wa] AI: "${qna.topic}" se baat nahi banti — bot khamosh`)
+          await naySawaalLikho(from, text)
+          return NextResponse.json({ ok: true })
+        }
+        if (raye.topic !== qna.topic) {
+          const behtar = await answerForTopic(raye.topic)
+          if (behtar) {
+            console.log(`[wa] AI ne topic badla: "${qna.topic}" → "${raye.topic}"`)
+            if (state) await clearState()
+            await bhejo(from, behtar)
+            await naySawaalLikho(from, text)
+            return NextResponse.json({ ok: true })
+          }
+        }
+      }
+    }
     if (state) await clearState()
     await bhejo(from, qna.answer)
     return NextResponse.json({ ok: true })
@@ -597,7 +630,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── 5) Kuch match nahi hua — BOT KHAMOSH RAHEGA ───────────────────────────
+  // ── 5) Lafzon se kuch na mila — AI se poochte hain ────────────────────────
+  // Yahan tak baat aa gayi to purana bot bilkul khamosh ho jata tha. Customer
+  // ka sawaal asli hota tha, bas us ne apne andaz mein likha hota tha
+  // ("Nhi mujhe covered Hi chahiyye"). Ab ek chhota AI model us jumle ka
+  // MATLAB samajh kar batata hai ke ye aap ke kis topic ka sawaal hai, aur
+  // jawab AAP KI EXCEL se lafz ba lafz jata hai — AI khud kuch nahi likhta.
+  //
+  // AI band ho, hadd paar ho gayi ho, ya wo bhi na samjhe — to purani tarah
+  // bot khamosh, aur jumla Excel ki "Naye Sawaal" list mein chala jata hai.
+  const asalSawaal = !plan.noQuestion && !plan.orderish && !isJunkMessage(text)
+
+  if (asalSawaal && aiMode() === 'full' && aiAvailable()) {
+    const raye = await samjho(text)
+    if (raye && !raye.insaan && raye.topic) {
+      const jawab = await answerForTopic(raye.topic)
+      if (jawab) {
+        console.log(`[wa] AI ne samjha — topic "${raye.topic}" ka jawab bheja`)
+        if (state && !askedBefore) await clearState()
+        // Jumla Excel mein bhi jata hai: aap wahan us ka sawaal add kar dein
+        // to agli dafa AI ki zaroorat hi nahi padegi (muft aur foran).
+        await naySawaalLikho(from, text)
+        await bhejo(from, jawab)
+        return NextResponse.json({ ok: true })
+      }
+    }
+    if (raye?.insaan) {
+      console.log(`[wa] AI: ye baat insaan ke liye hai — ${from} se bot khamosh`)
+    }
+  }
+
+  // ── 6) Kuch match nahi hua — BOT KHAMOSH RAHEGA ───────────────────────────
   // Jaan boojh kar koi reply nahi jata. Agar bot number maang chuka hai to
   // wo intezaar barqarar rehta hai (baad mein number aaye to pehchana jaye),
   // warna saaf kar dete hain.
@@ -606,11 +669,22 @@ export async function POST(req: NextRequest) {
   // "?", "Hi", "AoA", "Ok", "Thanks" rozana ki Excel mein faltu bheer banate
   // — sirf asal sawaal log hote hain. Order ki baat (jis par number pehle hi
   // maang chuke) bhi sawaal nahi, bot use pehchan chuka hai.
-  if (!plan.noQuestion && !plan.orderish && !isJunkMessage(text)) {
-    await supabaseAdmin.from('unmatched_messages').insert({ phone: from, message_text: text })
+  if (asalSawaal) {
+    await naySawaalLikho(from, text)
   }
 
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * Customer ka jumla Excel ki "Naye Sawaal" list mein daalta hai.
+ *
+ * Ye list aap ke liye sab se qeemti cheez hai: jo jumla yahan aata hai aur
+ * aap use sahi topic mein add kar dete hain, wo agli dafa LAFZON se hi
+ * pehchana jata hai — AI ki zaroorat nahi, yani muft aur foran.
+ */
+async function naySawaalLikho(phone: string, text: string) {
+  await supabaseAdmin.from('unmatched_messages').insert({ phone, message_text: text })
 }
 
 /**
