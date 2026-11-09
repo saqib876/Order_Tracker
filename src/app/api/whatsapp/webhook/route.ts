@@ -37,6 +37,10 @@ const ASK_STATE_HOURS = 24
 // aksar ek hi baat do message mein likhta hai ("order status?" phir "kab
 // milega?") — pehle dono ka alag alag jawab jata tha, yani do dafa paisa.
 const SAME_REPLY_MINUTES = Number(process.env.SAME_REPLY_MINUTES) || 15
+// Aap (ya team) ne khud customer ko jawab de diya ho to bot itni dair us
+// customer se bilkul khamosh rehta hai. Aap baat kar rahe hon aur beech mein
+// bot ka taiyar shuda message chala jaye — ye sab se buri baat hai.
+const HUMAN_PAUSE_HOURS = Number(process.env.HUMAN_PAUSE_HOURS) || 24
 
 // Jab order ka pata hi na chale — ye message customer ko jata hai
 const ORDER_INFO_MAANGO = [
@@ -292,8 +296,12 @@ export async function GET(req: NextRequest) {
 // Incoming messages
 export async function POST(req: NextRequest) {
   const payload = await req.json()
+  const value = payload.entry?.[0]?.changes?.[0]?.value
 
-  const message = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+  // Aap ne khud customer ko message bheja? — to bot ko chup kar do
+  await insaniJawabDekho(value)
+
+  const message = value?.messages?.[0]
   const incoming = extractIncomingText(message)
   if (!incoming) {
     // delivery/read receipts, reactions waghera — in par kuch nahi karna
@@ -302,6 +310,15 @@ export async function POST(req: NextRequest) {
 
   const from: string = message.from // already "923001234567" format
   const text = incoming.text.trim()
+
+  // ── Aap khud is customer se baat kar rahe hain ──────────────────────────
+  // Aise mein bot ka koi bhi taiyar shuda jawab bemaani hai (customer ne
+  // "Okay cancel kr dain" likha aur aap cancel kar chuke the, phir bhi bot
+  // ne cancellation policy bhej di thi).
+  if (await insaanBaatKarRahaHai(from)) {
+    console.log(`[wa] aap khud baat kar rahe hain — ${from} ko bot kuch nahi bhejega`)
+    return NextResponse.json({ ok: true })
+  }
 
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
   // Customer aksar sirf screenshot bhej deta hai, likhta kuch nahi. Teen
@@ -433,10 +450,18 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Q&A mein is topic ka apna jawab ho to wo behtar hai
-    const qnaAnswer = await matchQna(text)
+    // Q&A mein is topic ka apna jawab ho to wo behtar hai.
+    //
+    // Lekin agar isi baat ki pending request pehle se queue mein hai (yani
+    // aap ko pata hai aur aap kaam kar chuke/rahe hain), to wahi lamba jawab
+    // dobara nahi jata — customer ko ek hi baat teen dafa nahi milni chahiye.
     await clearState()
-    await bhejo(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+    if (pehleSeMojood) {
+      console.log(`[wa] ${MANUAL_REASON_LABEL[manualReason]} pehle se queue mein — ${from} ko dobara jawab nahi`)
+    } else {
+      const qnaAnswer = await matchQna(text)
+      await bhejo(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+    }
 
     console.log(
       `[wa] manual review: ${MANUAL_REASON_LABEL[manualReason]} — ${from}` +
@@ -611,6 +636,70 @@ async function claim(table: string, keys: Record<string, string>, windowMs: numb
   return true
 }
 
+/**
+ * Webhook mein aaya "status" ya "echo" — kya ye message AAP ne (ya team ne)
+ * apne haath se bheja hai?
+ *
+ * Bot jo bhi bhejta hai us ka message id hum mehfooz kar lete hain. Jo id
+ * hamari list mein nahi, wo kisi insaan ne bheja hai — aise mein bot us
+ * customer se kuch dair bilkul khamosh ho jata hai.
+ */
+async function insaniJawabDekho(value: any): Promise<void> {
+  const qatarein = [...(value?.statuses || []), ...(value?.message_echoes || [])]
+  if (!qatarein.length) return
+
+  console.log(
+    `[wa] bahar jane wale message ki khabar: ${qatarein.length} ` +
+      `(statuses:${(value?.statuses || []).length} echoes:${(value?.message_echoes || []).length})`
+  )
+
+  for (const row of qatarein) {
+    const id = String(row?.id || '')
+    const phone = String(row?.recipient_id || row?.to || row?.from || '')
+    if (!id || !phone) continue
+
+    // Hamara apna bheja hua message?
+    const { data: hamara } = await supabaseAdmin
+      .from('wa_bot_message')
+      .select('message_id')
+      .eq('message_id', id)
+      .maybeSingle()
+    if (hamara) continue
+
+    // Ho sakta hai bot ne abhi abhi bheja ho aur id likhi na gayi ho — is
+    // liye pichhle ek minute mein hamara koi message gaya ho to chhor dete hain
+    const abhiBheja = new Date(Date.now() - 60 * 1000).toISOString()
+    const { data: taza } = await supabaseAdmin
+      .from('wa_bot_message')
+      .select('message_id')
+      .eq('phone', phone)
+      .gt('sent_at', abhiBheja)
+      .limit(1)
+    if (taza && taza.length) continue
+
+    await supabaseAdmin.from('wa_human_pause').upsert({
+      phone,
+      until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    console.log(`[wa] aap ne khud jawab diya — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`)
+  }
+}
+
+/** Is customer se abhi koi insaan baat kar raha hai? */
+async function insaanBaatKarRahaHai(phone: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('wa_human_pause')
+    .select('until')
+    .eq('phone', phone)
+    .maybeSingle()
+  if (error) {
+    console.warn('[wa] wa_human_pause parh nahi saka:', error.message)
+    return false
+  }
+  return Boolean(data?.until && new Date(String(data.until)).getTime() > Date.now())
+}
+
 /** Isi customer ko yahi order bhejna banta hai? (24 ghante mein ek dafa) */
 async function trackingClaim(phone: string, orderNumber: string | number): Promise<boolean> {
   return claim(
@@ -630,7 +719,18 @@ async function bhejo(phone: string, text: string): Promise<boolean> {
     console.log(`[wa] wahi jawab abhi ja chuka — ${phone} ko dobara nahi`)
     return false
   }
-  await sendWhatsAppText(phone, text)
+  const natija: any = await sendWhatsAppText(phone, text)
+  const id = natija?.messages?.[0]?.id
+  if (id) {
+    // Apne bheje hue message ki pehchan — taake baad mein pata rahe ke ye
+    // bot ka tha, aap ka nahi
+    const { error } = await supabaseAdmin
+      .from('wa_bot_message')
+      .insert({ message_id: String(id), phone })
+    if (error && error.code !== '23505') {
+      console.warn('[wa] wa_bot_message mein likh nahi saka:', error.message)
+    }
+  }
   return true
 }
 

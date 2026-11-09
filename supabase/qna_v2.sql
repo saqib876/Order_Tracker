@@ -112,3 +112,23 @@ create table if not exists wa_recent_reply (
 );
 alter table wa_recent_reply enable row level security;
 create index if not exists wa_recent_reply_sent_at_idx on wa_recent_reply (sent_at);
+
+-- ── Jab aap khud customer se baat kar rahe hon ───────────────────────────
+-- Bot jo message bhejta hai us ka id yahan mehfooz hota hai. Webhook mein
+-- kisi aise message ki khabar aaye jo is list mein nahi, matlab wo aap ne
+-- (ya team ne) apne haath se bheja — phir bot us customer se kuch ghante
+-- bilkul khamosh ho jata hai.
+create table if not exists wa_bot_message (
+  message_id text primary key,
+  phone      text not null,
+  sent_at    timestamptz not null default now()
+);
+create index if not exists wa_bot_message_phone_idx on wa_bot_message (phone, sent_at desc);
+alter table wa_bot_message enable row level security;
+
+create table if not exists wa_human_pause (
+  phone      text primary key,
+  until      timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+alter table wa_human_pause enable row level security;
