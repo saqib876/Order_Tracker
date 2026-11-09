@@ -41,6 +41,10 @@ const SAME_REPLY_MINUTES = Number(process.env.SAME_REPLY_MINUTES) || 15
 // customer se bilkul khamosh rehta hai. Aap baat kar rahe hon aur beech mein
 // bot ka taiyar shuda message chala jaye — ye sab se buri baat hai.
 const HUMAN_PAUSE_HOURS = Number(process.env.HUMAN_PAUSE_HOURS) || 24
+// Ek customer ko bot din bhar mein itne se zyada jawab nahi dega. Is ke baad
+// baat aap ke haath mein — bot khamosh. (Jab aap khud customer se baat kar
+// rahe hon to bot ka beech mein bolna sab se bura lagta hai.)
+const MAX_REPLIES_PER_DAY = Number(process.env.MAX_REPLIES_PER_DAY) || 4
 
 // Jab order ka pata hi na chale — ye message customer ko jata hai
 const ORDER_INFO_MAANGO = [
@@ -320,6 +324,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // Bot aaj is customer ko kitni dafa jawab de chuka? Had se zyada ho to
+  // aage baat insaan ki hai — bot khamosh ho jata hai.
+  if (await hadSeZyadaJawab(from)) {
+    console.log(`[wa] aaj ${MAX_REPLIES_PER_DAY} jawab ja chuke — ${from} se bot khamosh`)
+    return NextResponse.json({ ok: true })
+  }
+
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
   // Customer aksar sirf screenshot bhej deta hai, likhta kuch nahi. Teen
   // tarah ke screenshot aate hain: Orders page ("Order #49086"), Thank You
@@ -455,6 +466,16 @@ export async function POST(req: NextRequest) {
     // Lekin agar isi baat ki pending request pehle se queue mein hai (yani
     // aap ko pata hai aur aap kaam kar chuke/rahe hain), to wahi lamba jawab
     // dobara nahi jata — customer ko ek hi baat teen dafa nahi milni chahiye.
+    // Ye kaam ab TEAM ka hai (cancel, return, address badalna...). Aap khud
+    // customer se baat karenge, is liye bot is number se kuch dair ke liye
+    // bilkul khamosh ho jata hai — warna aap ke jawab ke beech mein us ka
+    // taiyar shuda message chala jata tha.
+    await supabaseAdmin.from('wa_human_pause').upsert({
+      phone: from,
+      until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
     await clearState()
     if (pehleSeMojood) {
       console.log(`[wa] ${MANUAL_REASON_LABEL[manualReason]} pehle se queue mein — ${from} ko dobara jawab nahi`)
@@ -684,6 +705,27 @@ async function insaniJawabDekho(value: any): Promise<void> {
     })
     console.log(`[wa] aap ne khud jawab diya — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`)
   }
+}
+
+/**
+ * Bot aaj is customer ko kitne jawab de chuka hai? Had se zyada to khamosh.
+ *
+ * wa_recent_reply mein har alag jawab ki ek row hoti hai, is liye ginti
+ * wahin se mil jati hai.
+ */
+async function hadSeZyadaJawab(phone: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+  const { count, error } = await supabaseAdmin
+    .from('wa_recent_reply')
+    .select('phone', { count: 'exact', head: true })
+    .eq('phone', phone)
+    .gt('sent_at', cutoff)
+
+  if (error) {
+    console.warn('[wa] jawabon ki ginti nahi ho saki:', error.message)
+    return false
+  }
+  return (count || 0) >= MAX_REPLIES_PER_DAY
 }
 
 /** Is customer se abhi koi insaan baat kar raha hai? */

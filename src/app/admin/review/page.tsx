@@ -150,6 +150,16 @@ export default async function ReviewPage({
             WhatsApp mein kholein
           </a>
 
+          {/* Aap khud baat kar rahe hain — bot ko is number par chup kara dein */}
+          <form action="/api/admin/bot-pause" method="POST" style={{ margin: 0 }}>
+            <input type="hidden" name="phone" value={row.phone} />
+            <input type="hidden" name="key" value={adminKey} />
+            <input type="hidden" name="hours" value="24" />
+            <button type="submit" style={styles.pauseButton} title="Is number par bot 24 ghante kuch nahi bhejega">
+              Bot band karein (24 ghante)
+            </button>
+          </form>
+
           {!showDone && (
             <form action="/api/admin/review" method="POST" style={{ margin: 0 }}>
               <input type="hidden" name="id" value={row.id} />
@@ -356,6 +366,16 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
     whiteSpace: 'nowrap',
+  },
+  pauseButton: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: '1px solid #b45309',
+    background: '#fffbeb',
+    color: '#92400e',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   doneButton: {
     background: '#f1f5f9',
