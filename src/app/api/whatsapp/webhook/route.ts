@@ -36,10 +36,22 @@ const TRACKING_REPEAT_HOURS = Number(process.env.TRACKING_REPEAT_HOURS) || 24
 const AVAILABLE_LINE = '*Yes Available*'
 // Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
 const ASK_STATE_HOURS = 24
-// Bilkul wohi message isi number ko itni dair tak dobara nahi jata. Customer
-// aksar ek hi baat do message mein likhta hai ("order status?" phir "kab
-// milega?") — pehle dono ka alag alag jawab jata tha, yani do dafa paisa.
-const SAME_REPLY_MINUTES = Number(process.env.SAME_REPLY_MINUTES) || 15
+// Bilkul wohi jawab isi number ko itne ghante tak DOBARA NAHI jata.
+//
+// Customer ek hi baat kai andaz mein poochta hai — "delivery kitne din mein",
+// phir "kab tak mil jayega", phir "kitna time lagta hai". Jawab teenon ka
+// ek hi hai, aur us jawab ko ek hi dafa jana chahiye. Pehle ye hadd sirf 15
+// minute ki thi, to thori der baad wahi matan dobara chala jata tha — har
+// dafa Meta ka paisa, aur customer ke liye bhi be-sood.
+//
+// Pehchan jawab ke MATAN se hoti hai, topic ke naam se nahi — is liye ye
+// khud ba khud har raste par chalti hai: lafz wala milan ho, AI ka faisla
+// ho, ya order number wala message.
+const SAME_REPLY_HOURS =
+  Number(process.env.SAME_REPLY_HOURS) ||
+  (Number(process.env.SAME_REPLY_MINUTES)
+    ? Number(process.env.SAME_REPLY_MINUTES) / 60
+    : 24)
 // Aap (ya team) ne khud customer ko jawab de diya ho to bot itni dair us
 // customer se bilkul khamosh rehta hai. Aap baat kar rahe hon aur beech mein
 // bot ka taiyar shuda message chala jaye — ye sab se buri baat hai.
@@ -841,8 +853,8 @@ async function trackingClaim(phone: string, orderNumber: string | number): Promi
  */
 async function bhejo(phone: string, text: string): Promise<boolean> {
   const hash = createHash('sha1').update(text).digest('hex').slice(0, 32)
-  if (!(await claim('wa_recent_reply', { phone, reply_hash: hash }, SAME_REPLY_MINUTES * 60 * 1000))) {
-    console.log(`[wa] wahi jawab abhi ja chuka — ${phone} ko dobara nahi`)
+  if (!(await claim('wa_recent_reply', { phone, reply_hash: hash }, SAME_REPLY_HOURS * 3600 * 1000))) {
+    console.log(`[wa] yehi jawab pehle ja chuka — ${phone} ko dobara nahi bheja`)
     return false
   }
   const natija: any = await sendWhatsAppText(phone, text)
