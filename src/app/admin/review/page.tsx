@@ -5,11 +5,20 @@
  *   1. Tabdeeli ki darkhwast — order abhi raaste mein hai
  *   2. Order ki shikayat    — order mil chuka hai
  *
+ * Chhantai (filter)
+ * -----------------
+ * Oopar ke tiles aur har qism ke tags — sab clickable hain:
+ *   ?sec=change|issue   sirf ek section
+ *   ?r=order_cancel     sirf ek qism
+ * Wohi cheez dobara dabayein to chhantai hat jati hai. Har tag par us ki
+ * apni ginti bhi likhi hai, is liye ek nazar mein pata chal jata hai ke
+ * kaun si baat sab se zyada aa rahi hai.
+ *
+ * Ginti poori list par hoti hai (safha-dar-safha), sirf dikhne wale 300
+ * par nahi — warna "488 ho gaye" wali soorat mein adhoora hisaab milta.
+ *
  * Har row par teen raste: customer ki chat kholna, us number par bot ko
  * 24 ghante chup karana, aur "Ho gaya" kar dena.
- *
- * Look dono doosre admin safhon jaisa hi hai (admin.css) — wohi rang, wohi
- * dark/light switch, wohi chipki hui patti.
  */
 
 import Link from 'next/link'
@@ -49,10 +58,22 @@ const REASON_COLOR: Record<string, string> = {
   quality_issue: '#c084fc',
 }
 
-const SECTIONS: { title: string; note: string; reasons: ManualReason[] }[] = [
-  { title: 'Tabdeeli ki darkhwast', note: 'Order abhi raaste mein hai', reasons: CHANGE_REASONS },
-  { title: 'Order ki shikayat', note: 'Order mil chuka hai', reasons: ISSUE_REASONS },
+const SECTIONS: { id: string; title: string; note: string; reasons: ManualReason[] }[] = [
+  {
+    id: 'change',
+    title: 'Tabdeeli ki darkhwast',
+    note: 'Order abhi raaste mein hai',
+    reasons: CHANGE_REASONS,
+  },
+  {
+    id: 'issue',
+    title: 'Order ki shikayat',
+    note: 'Order mil chuka hai',
+    reasons: ISSUE_REASONS,
+  },
 ]
+
+const PAGE = 1000
 
 function kab(iso: string): string {
   return new Date(iso).toLocaleString('en-PK', {
@@ -81,8 +102,9 @@ export default async function ReviewPage({
     )
   }
 
-  const providedKey = typeof searchParams.key === 'string' ? searchParams.key : ''
-  if (providedKey !== adminKey) {
+  const one = (k: string) => (typeof searchParams[k] === 'string' ? (searchParams[k] as string) : '')
+
+  if (one('key') !== adminKey) {
     return (
       <main className="adm">
         <div className="adm-wrap">
@@ -96,35 +118,80 @@ export default async function ReviewPage({
     )
   }
 
-  const hoGaye = searchParams.show === 'done'
+  const hoGaye = one('show') === 'done'
+  const halat = hoGaye ? 'done' : 'pending'
+
+  // Chhantai — ek qism, ya ek poora section
+  const qism = one('r')
+  const secId = one('sec')
+  const section = SECTIONS.find((s) => s.id === secId)
 
   // Har dafa database se taza data — "Ho gaya" ke foran baad list purani
   // na dikhe.
   noStore()
 
-  const { data, error } = await supabaseAdmin
-    .from('manual_review_queue')
-    .select('*')
-    .eq('status', hoGaye ? 'done' : 'pending')
-    .order('created_at', { ascending: false })
-    .limit(300)
+  // ── Ginti: poori list par, safha-dar-safha ──────────────────────────────
+  const ginti: Record<string, number> = {}
+  let kulHalat = 0
+  for (let from = 0; from < 20000; from += PAGE) {
+    const { data, error } = await supabaseAdmin
+      .from('manual_review_queue')
+      .select('reason')
+      .eq('status', halat)
+      .range(from, from + PAGE - 1)
+    if (error) break
+    const rows = data || []
+    for (const r of rows) {
+      const k = String(r.reason)
+      ginti[k] = (ginti[k] || 0) + 1
+      kulHalat++
+    }
+    if (rows.length < PAGE) break
+  }
 
-  const rows = (data || []) as ReviewRow[]
-
-  // Doosri taraf ki ginti bhi dikhti rahe
   const { count: doosriGinti } = await supabaseAdmin
     .from('manual_review_queue')
     .select('*', { count: 'exact', head: true })
     .eq('status', hoGaye ? 'pending' : 'done')
 
+  const secGinti = (s: (typeof SECTIONS)[number]) =>
+    s.reasons.reduce((a, r) => a + (ginti[r] || 0), 0)
+
+  // ── Dikhane wali list ───────────────────────────────────────────────────
+  let q = supabaseAdmin
+    .from('manual_review_queue')
+    .select('*')
+    .eq('status', halat)
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  if (qism) q = q.eq('reason', qism)
+  else if (section) q = q.in('reason', section.reasons as string[])
+
+  const { data, error } = await q
+  const rows = (data || []) as ReviewRow[]
+
+  // ── Raste ───────────────────────────────────────────────────────────────
   const qs = (extra: Record<string, string>) => {
-    const p = new URLSearchParams({ key: adminKey, ...extra })
+    const p = new URLSearchParams({ key: adminKey })
+    if (hoGaye) p.set('show', 'done')
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) p.set(k, v)
+      else p.delete(k)
+    }
     return `/admin/review?${p.toString()}`
   }
+  // Wohi cheez dobara dabayein to chhantai hat jaye
+  const secHref = (id: string) => qs({ sec: secId === id && !qism ? '' : id, r: '' })
+  const qismHref = (r: string) => qs({ r: qism === r ? '' : r, sec: '' })
+  const koiChhantai = Boolean(qism || secId)
 
-  const sectionGinti = SECTIONS.map(
-    (sec) => rows.filter((r) => sec.reasons.includes(r.reason as ManualReason)).length
-  )
+  // Chhantai ke mutabiq kaun se section dikhein
+  const dikhaneWale = qism
+    ? SECTIONS.filter((s) => s.reasons.includes(qism as ManualReason))
+    : section
+    ? [section]
+    : SECTIONS
 
   const card = (row: ReviewRow) => {
     const label = MANUAL_REASON_LABEL[row.reason as ManualReason] || row.reason
@@ -154,12 +221,7 @@ export default async function ReviewPage({
         </div>
 
         <div className="adm-acts">
-          <a
-            href={`https://wa.me/${row.phone}`}
-            target="_blank"
-            rel="noreferrer"
-            className="adm-wa"
-          >
+          <a href={`https://wa.me/${row.phone}`} target="_blank" rel="noreferrer" className="adm-wa">
             WhatsApp mein kholein
           </a>
 
@@ -205,7 +267,7 @@ export default async function ReviewPage({
           <span className="adm-nav">
             <Link href={`/admin/qna?key=${encodeURIComponent(adminKey)}`}>Dashboard</Link>
             <Link href={`/admin/topics?key=${encodeURIComponent(adminKey)}`}>Topics</Link>
-            <Link href={qs({})} data-on="1">
+            <Link href={qs({ sec: '', r: '' })} data-on="1">
               Review
             </Link>
             <ThemeToggle />
@@ -215,31 +277,52 @@ export default async function ReviewPage({
         <h1 className="adm-title">Manually Check</h1>
         <p className="adm-sub">
           Jin baaton ka jawab bot nahi de sakta — cancel, address, shikayat — wo yahan aati hain.
-          Jab tak koi row yahan hai, us number par bot khamosh rehta hai.
+          Kisi bhi tile ya tag par click kar ke sirf wohi dekh sakte hain.
         </p>
 
+        {/* Tiles — teeno clickable */}
         <div className="adm-stats">
-          <div className="adm-stat">
-            <b>{rows.length}</b>
-            <span>{hoGaye ? 'HO GAYE' : 'PENDING'}</span>
-          </div>
-          {SECTIONS.map((sec, i) => (
-            <div className="adm-stat" key={sec.title}>
-              <b>{sectionGinti[i]}</b>
+          <a
+            href={qs({ sec: '', r: '' })}
+            className="adm-stat"
+            data-on={koiChhantai ? '0' : '1'}
+          >
+            <b>{kulHalat}</b>
+            <span>{hoGaye ? 'KUL HO GAYE' : 'KUL PENDING'}</span>
+          </a>
+          {SECTIONS.map((sec) => (
+            <a
+              key={sec.id}
+              href={secHref(sec.id)}
+              className="adm-stat"
+              data-on={secId === sec.id && !qism ? '1' : '0'}
+            >
+              <b>{secGinti(sec)}</b>
               <span>{sec.title.toUpperCase()}</span>
-            </div>
+            </a>
           ))}
-          <div className="adm-stat">
+          <a
+            href={`/admin/review?key=${encodeURIComponent(adminKey)}${hoGaye ? '' : '&show=done'}`}
+            className="adm-stat"
+          >
             <b>{doosriGinti ?? 0}</b>
             <span>{hoGaye ? 'ABHI PENDING' : 'AB TAK HO GAYE'}</span>
-          </div>
+          </a>
         </div>
 
         <div className="adm-tabs">
-          <a href={qs({})} className="adm-tab" data-on={hoGaye ? '0' : '1'}>
+          <a
+            href={`/admin/review?key=${encodeURIComponent(adminKey)}`}
+            className="adm-tab"
+            data-on={hoGaye ? '0' : '1'}
+          >
             Pending
           </a>
-          <a href={qs({ show: 'done' })} className="adm-tab" data-on={hoGaye ? '1' : '0'}>
+          <a
+            href={`/admin/review?key=${encodeURIComponent(adminKey)}&show=done`}
+            className="adm-tab"
+            data-on={hoGaye ? '1' : '0'}
+          >
             Ho gaye
           </a>
         </div>
@@ -247,36 +330,51 @@ export default async function ReviewPage({
         {error && <p className="adm-error">Database error: {error.message}</p>}
 
         {!error &&
-          SECTIONS.map((section, i) => {
-            const sectionRows = rows.filter((r) =>
-              section.reasons.includes(r.reason as ManualReason)
-            )
+          dikhaneWale.map((sec) => {
+            const secRows = rows.filter((r) => sec.reasons.includes(r.reason as ManualReason))
 
             return (
-              <section key={section.title} className="adm-sec">
+              <section key={sec.id} className="adm-sec">
                 <header className="adm-sec-head">
-                  <h2>{section.title}</h2>
-                  <span className="adm-sec-n">{sectionRows.length}</span>
-                  <p>{section.note}</p>
+                  <h2>{sec.title}</h2>
+                  <span className="adm-sec-n">{secGinti(sec)}</span>
+                  <p>{sec.note}</p>
                 </header>
 
+                {/* Qism ke tags — har ek clickable, sath apni ginti */}
                 <ul className="adm-tags">
-                  {section.reasons.map((r) => (
-                    <li key={r} className="adm-tag">
-                      <span className="adm-dot" style={{ ['--c' as any]: REASON_COLOR[r] }} />
-                      {MANUAL_REASON_LABEL[r]}
+                  {sec.reasons.map((r) => (
+                    <li key={r} style={{ display: 'contents' }}>
+                      <a
+                        href={qismHref(r)}
+                        className="adm-tag"
+                        style={{ ['--c' as any]: REASON_COLOR[r] }}
+                        data-on={qism === r ? '1' : '0'}
+                        data-zero={(ginti[r] || 0) === 0 ? '1' : '0'}
+                      >
+                        <span className="adm-dot" style={{ ['--c' as any]: REASON_COLOR[r] }} />
+                        {MANUAL_REASON_LABEL[r]}
+                        <i>{ginti[r] || 0}</i>
+                      </a>
                     </li>
                   ))}
+                  {koiChhantai && (
+                    <li style={{ display: 'contents' }}>
+                      <a href={qs({ sec: '', r: '' })} className="adm-clear">
+                        &#10005; chhantai hatayein
+                      </a>
+                    </li>
+                  )}
                 </ul>
 
-                {sectionRows.length === 0 ? (
+                {secRows.length === 0 ? (
                   <p className="adm-khali">
                     {hoGaye
-                      ? 'Is section mein abhi tak kuch mark nahi hua.'
-                      : 'Is section mein koi pending item nahi.'}
+                      ? 'Yahan abhi tak kuch mark nahi hua.'
+                      : 'Yahan koi pending item nahi.'}
                   </p>
                 ) : (
-                  sectionRows.map((row) => card(row))
+                  secRows.map((row) => card(row))
                 )}
               </section>
             )
