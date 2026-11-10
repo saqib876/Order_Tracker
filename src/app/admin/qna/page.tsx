@@ -14,7 +14,7 @@
 
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
-import { aiProvider, aiMode, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
+import { aiProvider, aiMode, aiModel, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
 import { ThemeBoot, ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
@@ -226,7 +226,7 @@ export default async function QnaPage({
               <span className="adm-badge" data-tone="on">
                 CHALU
               </span>{' '}
-              {aiProvider()} · andaz: {aiMode()}
+              {aiProvider()} · <code>{aiModel()}</code> · andaz: {aiMode()}
               <br />
               <span className="adm-hint">
                 AI khud jawab nahi likhta — wo sirf batata hai ke baat kis topic ki hai, aur jawab

@@ -80,7 +80,7 @@ function aiKey(p: AiProvider): string | undefined {
   return process.env.ANTHROPIC_API_KEY
 }
 
-function aiModel(p: AiProvider): string {
+export function aiModel(p: AiProvider = aiProvider()): string {
   if (process.env.AI_MODEL) return process.env.AI_MODEL
   // Har provider ka sab se sasta/tez model jo is kaam ke liye kaafi hai
   if (p === 'gemini') return 'gemini-3.5-flash-lite'

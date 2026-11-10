@@ -21,6 +21,7 @@ import {
   aiAvailable,
   aiMode,
   aiProvider,
+  aiModel,
   aajKiGinti,
   topicList,
   zaatiMaloomatHatao,
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
     {
       'AI chalu hai': keyMojood,
       provider,
+      model: aiModel(),
       andaz: aiMode(),
       'Excel ke topics': list.length,
       'topics ke naam': list.map((t) => t.topic),
