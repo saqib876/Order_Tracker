@@ -57,7 +57,10 @@ export interface AiFaisla {
   kahan: 'cache' | 'ai'
 }
 
-const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8_000
+// Gemini 3.x jawab dene se pehle thora "sochta" hai — asli jumlon par 3 se
+// 7 second lag jate hain. 8 second ki hadd us ke bohat kareeb thi, is liye
+// 12 kar di hai. (Function ki apni hadd 30 second hai — maxDuration.)
+const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 12_000
 const MAX_PER_DAY = Number(process.env.AI_MAX_PER_DAY) || 300
 // Topic ki list prompt mein jati hai — har topic ke itne namune
 const NAMUNE_PER_TOPIC = 3

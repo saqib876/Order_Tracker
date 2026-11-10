@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
       provider,
       andaz: aiMode(),
       'Excel ke topics': list.length,
+      'topics ke naam': list.map((t) => t.topic),
       'aaj ab tak AI calls': await aajKiGinti(),
       'roz ki hadd': Number(process.env.AI_MAX_PER_DAY) || 300,
       'Supabase tables': tables,
