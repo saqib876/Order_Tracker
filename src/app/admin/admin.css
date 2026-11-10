@@ -3,124 +3,116 @@
  *
  * RAFTAAR PEHLE
  * -------------
- * Pehle wala design hang kar raha tha. Do wajahein theen:
- *   1. do bohat bare `filter: blur(110px)` wale gole jo hamesha hilte rehte
- *      the — browser ko har frame par aadhi screen dobara banani parti thi
- *   2. har card par `backdrop-filter` — peeche ki har cheez ka dobara hisaab
+ * Yahan JAAN BOOJH KAR ye cheezein istemal nahi hoteen:
+ *   - filter / backdrop-filter  (blur browser ka dam nikal deta hai)
+ *   - koi bhi hamesha chalne wali animation
+ *   - box-shadow jo hover par badle (har frame par dobara banta hai)
  *
- * Ab dono cheezein nikal di hain. Peeche ki roshni ek SAAKIT (static)
- * gradient hai — us ki keemat sifar hai. Jo bhi harkat bachi hai wo sirf
- * `transform` aur `opacity` par hai, jo browser ka compositor GPU par
- * chalata hai — yani scroll aur typing bilkul smooth.
+ * Jo harkat hai wo sirf `transform` aur `opacity` par hai — ye GPU par
+ * chalti hain, CPU ko chhoti bhi nahin. Peeche ki roshni ek SAAKIT gradient
+ * hai: browser use ek dafa bana kar bhool jata hai.
  *
  * DO ROOP
  * -------
- * Dark aur Light — dono ek jaise dikhte hain, sirf rangon ka ghar badalta
- * hai. Pehli dafa system ki apni setting chalti hai; aap toggle dabayein to
- * aap ka faisla yaad rakha jata hai (localStorage).
+ * ThemeBits.tsx ki chhoti script <html> par hamesha data-theme="dark" ya
+ * "light" laga deti hai. Is liye rangon ka ghar yahan SIRF DO BLOCK mein
+ * hai — dohraane ki zarurat nahi, aur ghalti ki gunjaish bhi nahi.
  * ────────────────────────────────────────────────────────────────────────── */
 
-/* ── Rangon ka ghar — DARK (default) ──────────────────────────────────── */
+/* ── DARK ──────────────────────────────────────────────────────────────── */
 
-:root {
+:root,
+:root[data-theme='dark'] {
   --bg: #0a0e1a;
   --glow-1: rgba(79, 70, 229, 0.3);
   --glow-2: rgba(8, 145, 178, 0.26);
+
   --card: rgba(255, 255, 255, 0.045);
   --card-2: rgba(255, 255, 255, 0.075);
   --line: rgba(255, 255, 255, 0.1);
   --line-soft: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
   --ink: #e8edf7;
   --ink-2: #9aa7bd;
   --ink-3: #6b7a93;
+
   --brand: #818cf8;
   --brand-2: #22d3ee;
   --accent-bg: rgba(99, 102, 241, 0.14);
   --accent-line: rgba(99, 102, 241, 0.36);
+  --ring: rgba(99, 102, 241, 0.3);
+
   --new-bg: rgba(251, 191, 36, 0.1);
   --new-line: rgba(251, 191, 36, 0.3);
+
   --ok: #6ee7b7;
   --ok-bg: rgba(16, 185, 129, 0.13);
   --ok-line: rgba(52, 211, 153, 0.32);
   --bad: #fda4af;
   --bad-bg: rgba(244, 63, 94, 0.1);
   --bad-line: rgba(251, 113, 133, 0.32);
+
   --field: rgba(0, 0, 0, 0.3);
-  --field-2: rgba(0, 0, 0, 0.45);
+  --field-line: rgba(255, 255, 255, 0.12);
+
+  --go: linear-gradient(135deg, #34d399, #22d3ee);
   --go-ink: #06231a;
+  --primary: linear-gradient(135deg, #6366f1, #22d3ee);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 16px 36px -24px rgba(0, 0, 0, 0.95);
   --title: linear-gradient(100deg, #fff 18%, #a5b4fc 58%, #67e8f9 100%);
+  --rail: linear-gradient(90deg, #6366f1, #22d3ee);
 }
 
-/* ── LIGHT — wohi shakl, sirf roshan ──────────────────────────────────── */
+/* ── LIGHT ─────────────────────────────────────────────────────────────── */
 
 :root[data-theme='light'] {
-  --bg: #f6f7fb;
-  --glow-1: rgba(99, 102, 241, 0.16);
-  --glow-2: rgba(6, 182, 212, 0.14);
+  --bg: #f5f7fb;
+  --glow-1: rgba(99, 102, 241, 0.13);
+  --glow-2: rgba(14, 165, 233, 0.1);
+
   --card: #ffffff;
   --card-2: #ffffff;
-  --line: #e2e8f0;
-  --line-soft: #eef2f7;
-  --ink: #0f172a;
-  --ink-2: #475569;
-  --ink-3: #7c8aa0;
+  --line: #e4e8f0;
+  --line-soft: #edf0f6;
+  --line-strong: #d5dbe6;
+
+  --ink: #101828;
+  --ink-2: #4a5568;
+  --ink-3: #7d8899;
+
   --brand: #4f46e5;
   --brand-2: #0891b2;
-  --accent-bg: #eef2ff;
-  --accent-line: #c7d2fe;
-  --new-bg: #fffbeb;
-  --new-line: #fde68a;
-  --ok: #047857;
-  --ok-bg: #ecfdf5;
-  --ok-line: #a7f3d0;
-  --bad: #be123c;
-  --bad-bg: #fff1f2;
-  --bad-line: #fecdd3;
+  --accent-bg: #f0f2ff;
+  --accent-line: #ccd2fb;
+  --ring: rgba(79, 70, 229, 0.16);
+
+  --new-bg: #fffaeb;
+  --new-line: #f5d98a;
+
+  --ok: #067a56;
+  --ok-bg: #eefbf5;
+  --ok-line: #aee5cf;
+  --bad: #b42318;
+  --bad-bg: #fef4f3;
+  --bad-line: #f5c6c0;
+
   --field: #ffffff;
-  --field-2: #ffffff;
+  --field-line: #d5dbe6;
+
+  --go: linear-gradient(135deg, #0f9d74, #0891b2);
   --go-ink: #ffffff;
-  --shadow: 0 10px 28px -20px rgba(15, 23, 42, 0.4);
-  --title: linear-gradient(100deg, #0f172a 18%, #4f46e5 62%, #0891b2 100%);
+  --primary: linear-gradient(135deg, #4f46e5, #0891b2);
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 12px 28px -18px rgba(16, 24, 40, 0.3);
+  --title: linear-gradient(100deg, #101828 20%, #4338ca 70%, #0e7490 100%);
+  --rail: linear-gradient(90deg, #4f46e5, #0891b2);
 }
 
-/* System ki apni setting — jab tak aap khud na chunein */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --bg: #f6f7fb;
-    --glow-1: rgba(99, 102, 241, 0.16);
-    --glow-2: rgba(6, 182, 212, 0.14);
-    --card: #ffffff;
-    --card-2: #ffffff;
-    --line: #e2e8f0;
-    --line-soft: #eef2f7;
-    --ink: #0f172a;
-    --ink-2: #475569;
-    --ink-3: #7c8aa0;
-    --brand: #4f46e5;
-    --brand-2: #0891b2;
-    --accent-bg: #eef2ff;
-    --accent-line: #c7d2fe;
-    --new-bg: #fffbeb;
-    --new-line: #fde68a;
-    --ok: #047857;
-    --ok-bg: #ecfdf5;
-    --ok-line: #a7f3d0;
-    --bad: #be123c;
-    --bad-bg: #fff1f2;
-    --bad-line: #fecdd3;
-    --field: #ffffff;
-    --field-2: #ffffff;
-    --go-ink: #ffffff;
-    --shadow: 0 10px 28px -20px rgba(15, 23, 42, 0.4);
-    --title: linear-gradient(100deg, #0f172a 18%, #4f46e5 62%, #0891b2 100%);
-  }
-}
-
-/* ── Safha ──────────────────────────────────────────────────────────────
- * Peeche ki roshni: ek SAAKIT gradient. Na blur filter, na animation —
- * is liye scroll bilkul muft hai.
- * ──────────────────────────────────────────────────────────────────────── */
+/* ── Safha ─────────────────────────────────────────────────────────────── */
 
 .adm {
   min-height: 100vh;
@@ -137,21 +129,28 @@
 .adm-wrap {
   max-width: 1040px;
   margin: 0 auto;
-  padding: 26px 18px 90px;
+  padding: 24px 18px 90px;
 }
 
-/* ── Oopar ki patti ─────────────────────────────────────────────────────── */
+/* ── Oopar ki patti — chipki rehti hai, is liye wapas jana hamesha haath
+ *    bhar hai ──────────────────────────────────────────────────────────── */
 
 .adm-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  padding: 12px 16px;
-  border-radius: 16px;
+  padding: 11px 16px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--card-2);
   box-shadow: var(--shadow);
+}
+:root[data-theme='dark'] .adm-bar {
+  background: #121829;
 }
 
 .adm-brand {
@@ -164,8 +163,6 @@
   margin-right: auto;
 }
 
-/* Chhota sa nishaan. Hamesha ghoomta nahi — sirf chhoone par palatta hai,
-   taake be-wajah har waqt kaam na chalta rahe. */
 .adm-cube {
   width: 30px;
   height: 30px;
@@ -177,8 +174,8 @@
   width: 100%;
   height: 100%;
   border-radius: 9px;
-  background: linear-gradient(135deg, var(--brand), var(--brand-2));
-  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+  background: var(--primary);
+  transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 .adm-brand:hover .adm-cube i {
   transform: rotateY(180deg) rotateX(12deg);
@@ -187,7 +184,7 @@
 .adm-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
   align-items: center;
 }
 .adm-nav a {
@@ -196,21 +193,20 @@
   color: var(--ink-2);
   text-decoration: none;
   padding: 7px 13px;
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid transparent;
-  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+  transition: color 0.14s, background-color 0.14s, border-color 0.14s;
 }
 .adm-nav a:hover {
   color: var(--ink);
-  background: var(--card);
+  background: var(--accent-bg);
 }
 .adm-nav a[data-on='1'] {
-  color: var(--ink);
+  color: var(--brand);
   background: var(--accent-bg);
   border-color: var(--accent-line);
 }
 
-/* Roop badalne ka button */
 .adm-theme {
   display: inline-flex;
   align-items: center;
@@ -221,17 +217,17 @@
   font-size: 15px;
   line-height: 1;
   color: var(--ink-2);
-  background: var(--card);
+  background: transparent;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 9px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.14s, border-color 0.14s, background-color 0.14s;
 }
 .adm-theme:hover {
   color: var(--ink);
   border-color: var(--accent-line);
+  background: var(--accent-bg);
 }
-/* Dark mein chaand, light mein sooraj */
 .adm-theme .sun {
   display: none;
 }
@@ -241,22 +237,14 @@
 :root[data-theme='light'] .adm-theme .moon {
   display: none;
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) .adm-theme .sun {
-    display: inline;
-  }
-  :root:not([data-theme='dark']) .adm-theme .moon {
-    display: none;
-  }
-}
 
 /* ── Unwan ─────────────────────────────────────────────────────────────── */
 
 .adm-title {
   font-size: clamp(26px, 4vw, 34px);
   font-weight: 800;
-  letter-spacing: -0.025em;
-  margin: 30px 0 6px;
+  letter-spacing: -0.028em;
+  margin: 28px 0 6px;
   background: var(--title);
   -webkit-background-clip: text;
   background-clip: text;
@@ -280,37 +268,50 @@
 }
 
 .adm-stat {
-  padding: 16px 17px;
-  border-radius: 14px;
+  position: relative;
+  padding: 17px 17px 16px;
+  border-radius: 13px;
   border: 1px solid var(--line);
   background: var(--card);
-  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.25s;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.22s;
+}
+/* Oopar ek baareek rangeen lakeer — card ko shakl deti hai */
+.adm-stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--rail);
+  opacity: 0.85;
 }
 .adm-stat:hover {
-  transform: translateY(-3px) rotateX(6deg) rotateY(-3deg);
+  transform: translateY(-3px) rotateX(5deg) rotateY(-3deg);
   border-color: var(--accent-line);
 }
 .adm-stat b {
   display: block;
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
-  line-height: 1.15;
+  line-height: 1.12;
 }
 .adm-stat span {
   display: block;
-  font-size: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--ink-3);
-  margin-top: 4px;
-  letter-spacing: 0.02em;
+  margin-top: 5px;
+  letter-spacing: 0.045em;
 }
 
 /* ── Card ──────────────────────────────────────────────────────────────── */
 
 .adm-card {
   padding: 20px;
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--card);
   box-shadow: var(--shadow);
@@ -319,14 +320,32 @@
 .adm-card[data-tone='ai'] {
   border-color: var(--accent-line);
   background: var(--accent-bg);
+  box-shadow: var(--shadow-sm);
 }
 .adm-card[data-tone='new'] {
   border-color: var(--new-line);
   background: var(--new-bg);
+  box-shadow: var(--shadow-sm);
 }
 .adm-card[data-tone='quiet'] {
   border-style: dashed;
   box-shadow: none;
+  background: transparent;
+}
+
+/* Card ka sira — unwan aur "band karein" ka rasta ek hi line par */
+.adm-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.adm-card-top .adm-h2 {
+  margin: 0;
+  margin-right: auto;
 }
 
 .adm-h2 {
@@ -355,7 +374,7 @@
 }
 .adm-p code,
 .adm-hint code {
-  background: var(--card-2);
+  background: var(--accent-bg);
   border: 1px solid var(--line-soft);
   padding: 1px 6px;
   border-radius: 5px;
@@ -368,7 +387,7 @@
 .adm-error {
   font-size: 13.8px;
   line-height: 1.7;
-  border-radius: 12px;
+  border-radius: 11px;
   padding: 13px 16px;
   margin-bottom: 16px;
   border: 1px solid;
@@ -392,19 +411,23 @@
   align-items: center;
   gap: 5px 12px;
   padding: 13px 16px;
-  border-radius: 13px;
-  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  border: 1px solid var(--line);
   background: var(--card);
+  box-shadow: var(--shadow-sm);
   text-decoration: none;
   color: var(--ink);
-  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.18s;
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.16s,
+    background-color 0.16s;
 }
 .adm-item:hover {
   transform: translateX(4px);
   border-color: var(--accent-line);
+  background: var(--accent-bg);
 }
 .adm-item[data-off='1'] {
   border-style: dashed;
+  box-shadow: none;
 }
 .adm-item-name {
   font-size: 14px;
@@ -434,23 +457,26 @@
 .adm-badge {
   display: inline-block;
   border-radius: 999px;
-  padding: 2px 11px;
-  font-size: 12px;
+  padding: 2px 10px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   vertical-align: middle;
+  border: 1px solid transparent;
 }
 .adm-badge[data-tone='on'] {
   color: var(--ok);
   background: var(--ok-bg);
+  border-color: var(--ok-line);
 }
 .adm-badge[data-tone='off'] {
   color: var(--bad);
   background: var(--bad-bg);
+  border-color: var(--bad-line);
 }
 .adm-badge[data-tone='count'] {
   color: #fff;
-  background: linear-gradient(135deg, #6366f1, #22d3ee);
+  background: var(--primary);
 }
 
 /* ── Button ────────────────────────────────────────────────────────────── */
@@ -458,18 +484,19 @@
 .adm-btn,
 .adm-btn-ghost,
 .adm-btn-go,
-.adm-btn-bad {
+.adm-btn-bad,
+.adm-back {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   font-family: inherit;
   font-weight: 650;
-  border-radius: 11px;
+  border-radius: 10px;
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.15s cubic-bezier(0.2, 0.7, 0.3, 1), background-color 0.15s,
-    border-color 0.15s;
+  transition: transform 0.14s cubic-bezier(0.2, 0.7, 0.3, 1), background-color 0.14s,
+    border-color 0.14s, color 0.14s;
 }
 .adm-btn:hover,
 .adm-btn-go:hover,
@@ -485,31 +512,27 @@
 }
 .adm-btn {
   font-size: 14px;
-  padding: 11px 19px;
+  padding: 10px 18px;
   color: var(--ink);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--card-2);
+  box-shadow: var(--shadow-sm);
+}
+.adm-btn:hover {
+  border-color: var(--accent-line);
 }
 .adm-btn-go {
   font-size: 15px;
-  padding: 13px 26px;
+  padding: 12px 24px;
   color: var(--go-ink);
   border: none;
-  background: linear-gradient(135deg, #34d399, #22d3ee);
-}
-:root[data-theme='light'] .adm-btn-go {
-  background: linear-gradient(135deg, #0d9488, #0891b2);
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) .adm-btn-go {
-    background: linear-gradient(135deg, #0d9488, #0891b2);
-  }
+  background: var(--go);
 }
 .adm-btn-ghost {
   font-size: 14px;
-  padding: 12px 20px;
+  padding: 11px 19px;
   color: var(--ink-2);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: transparent;
 }
 .adm-btn-ghost:hover {
@@ -517,7 +540,7 @@
 }
 .adm-btn-bad {
   font-size: 13.5px;
-  padding: 10px 17px;
+  padding: 10px 16px;
   color: var(--bad);
   border: 1px solid var(--bad-line);
   background: var(--bad-bg);
@@ -531,13 +554,46 @@
   align-items: center;
 }
 
+/* Wapas jane ka chhota rasta — card ke sire par aur safhe ke oopar */
+.adm-back {
+  font-size: 13.5px;
+  padding: 7px 13px;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  background: var(--card-2);
+}
+.adm-back:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+  background: var(--accent-bg);
+}
+
+/* Lambe form ke neeche chipki hui patti — scroll kahin bhi ho, "Mehfooz"
+   aur "Band karein" hamesha saamne rehte hain */
+.adm-stick {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 18px -20px 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--card-2);
+}
+:root[data-theme='dark'] .adm-stick {
+  background: #121829;
+}
+
 /* ── Form ──────────────────────────────────────────────────────────────── */
 
 .adm-label {
   display: block;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-3);
   margin-top: 16px;
@@ -553,10 +609,11 @@
   font-family: inherit;
   color: var(--ink);
   background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  border: 1px solid var(--field-line);
+  border-radius: 10px;
   box-sizing: border-box;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.14s, box-shadow 0.14s;
 }
 .adm-area {
   resize: vertical;
@@ -565,8 +622,7 @@
 .adm-area:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--accent-bg);
-  background: var(--field-2);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 .adm-input::placeholder,
 .adm-area::placeholder {
@@ -596,7 +652,7 @@
   align-items: center;
   gap: 8px 18px;
   padding: 11px 16px;
-  border-radius: 12px;
+  border-radius: 11px;
   border: 1px solid var(--line);
   background: var(--card);
   margin: 12px 0 6px;
@@ -618,12 +674,12 @@
   border-left: 2px solid var(--accent-line);
 }
 
-/* ── Entrance — sirf ek dafa, sirf transform aur opacity ───────────────── */
+/* ── Entrance — sirf ek dafa ───────────────────────────────────────────── */
 
 @keyframes utho {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(9px);
   }
   to {
     opacity: 1;
@@ -631,7 +687,7 @@
   }
 }
 .adm-in {
-  animation: utho 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation: utho 0.35s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
 .adm-foot {

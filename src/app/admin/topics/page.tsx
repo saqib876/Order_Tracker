@@ -256,12 +256,17 @@ export default async function TopicsPage({
         {/* ── Chuna hua topic ──────────────────────────────────────────── */}
         {chuna && (
           <section className="adm-card adm-in" id="edit" style={{ marginTop: 16 }}>
-            <h2 className="adm-h2">
-              Topic badlein{' '}
-              <span className="adm-badge" data-tone={chuna.is_active ? 'on' : 'off'}>
-                {chuna.is_active ? 'ON' : 'OFF'}
-              </span>
-            </h2>
+            <div className="adm-card-top">
+              <h2 className="adm-h2">
+                {chuna.topic}{' '}
+                <span className="adm-badge" data-tone={chuna.is_active ? 'on' : 'off'}>
+                  {chuna.is_active ? 'ON' : 'OFF'}
+                </span>
+              </h2>
+              <Link href={href('')} className="adm-back">
+                &#8592; Topics ki list
+              </Link>
+            </div>
 
             <form action="/api/admin/topic-save" method="POST">
               <input type="hidden" name="key" value={adminKey} />
@@ -277,7 +282,7 @@ export default async function TopicsPage({
                 Sawaal ({chuna.n}) — har line par ek
                 <textarea
                   name="questions"
-                  rows={Math.min(20, Math.max(6, chuna.n + 2))}
+                  rows={Math.min(12, Math.max(6, chuna.n + 2))}
                   defaultValue={chuna.questions}
                   className="adm-area"
                 />
@@ -321,12 +326,12 @@ export default async function TopicsPage({
                 </span>
               </label>
 
-              <div className="adm-btn-row">
+              <div className="adm-stick">
                 <button type="submit" className="adm-btn-go">
                   Mehfooz karein
                 </button>
                 <Link href={href('')} className="adm-btn-ghost">
-                  Band karein
+                  Band karein — wapas list par
                 </Link>
               </div>
             </form>
