@@ -15,6 +15,7 @@
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { aiProvider, aiMode, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
+import { ThemeBoot, ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -111,6 +112,7 @@ export default async function QnaPage({
 
   return (
     <main className="adm">
+      <ThemeBoot />
       <div className="adm-wrap">
         {/* Oopar ki patti */}
         <nav className="adm-bar adm-in">
@@ -126,6 +128,7 @@ export default async function QnaPage({
             </Link>
             <Link href={topicsHref}>Topics</Link>
             <Link href={`/admin/review?key=${encodeURIComponent(adminKey)}`}>Review</Link>
+            <ThemeToggle />
           </span>
         </nav>
 

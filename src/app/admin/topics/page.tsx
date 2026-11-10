@@ -18,6 +18,7 @@ import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { ignoreKey } from '@/lib/qnaIgnore'
+import { ThemeBoot, ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -139,6 +140,7 @@ export default async function TopicsPage({
 
   return (
     <main className="adm">
+      <ThemeBoot />
       <div className="adm-wrap">
         {/* Oopar ki patti */}
         <nav className="adm-bar adm-in">
@@ -154,6 +156,7 @@ export default async function TopicsPage({
               Topics
             </Link>
             <Link href={`/admin/review?key=${encodeURIComponent(adminKey)}`}>Review</Link>
+            <ThemeToggle />
           </span>
         </nav>
 
