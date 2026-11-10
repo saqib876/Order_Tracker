@@ -169,3 +169,41 @@ create index if not exists ai_call_log_created_idx on ai_call_log (created_at de
 -- Purana cache aur log khud saaf karne ke liye (kabhi kabhi chala dein):
 --   delete from ai_topic_cache where created_at < now() - interval '90 days';
 --   delete from ai_call_log   where created_at < now() - interval '60 days';
+
+-- ══ AI khud Q&A bank behtar banata hai ═════════════════════════════════════
+--
+-- Hafte mein ek dafa AI un messages ko parhta hai jin ka bot jawab nahi de
+-- saka, aur TAJWEEZ deta hai: ye sawaal is topic mein daal dein, ya ye naya
+-- topic bana lein. Kuch bhi apne aap live NAHI hota — sab "pending" rehta
+-- hai jab tak aap /admin/qna par approve na karein.
+create table if not exists qna_suggestions (
+  id          uuid primary key default gen_random_uuid(),
+  -- naya_topic = poora naya topic bane | naya_sawaal = maujooda topic mein sawaal jurein
+  kind        text        not null,
+  topic       text        not null,
+  questions   text[]      not null default '{}',
+  samples     text[]      not null default '{}',
+  -- customers ne ye baat kitni dafa ki
+  ask_count   integer     not null default 0,
+  -- naye topic ka jawab aap khud likhte hain (approve karte waqt)
+  answer      text,
+  -- pending | approved | rejected
+  status      text        not null default 'pending',
+  batch_id    text,
+  created_at  timestamptz not null default now(),
+  decided_at  timestamptz
+);
+alter table qna_suggestions enable row level security;
+create index if not exists qna_suggestions_status_idx on qna_suggestions (status, created_at desc);
+
+-- Apne maujooda order ki khabar wale sawaal ("mera order kab aayega") Excel
+-- ki list mein nahi jate — un ka apna rasta hai (tracking). Phir bhi record
+-- rehta hai, taake dekha ja sake ke log kya poochh rahe hain.
+create table if not exists order_sawaal_log (
+  id           bigserial   primary key,
+  phone        text        not null,
+  message_text text        not null,
+  created_at   timestamptz not null default now()
+);
+alter table order_sawaal_log enable row level security;
+create index if not exists order_sawaal_log_created_idx on order_sawaal_log (created_at desc);

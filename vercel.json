@@ -3,6 +3,10 @@
     {
       "path": "/api/orders/cleanup",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/admin/qna-suggest",
+      "schedule": "0 3 * * 0"
     }
   ]
 }

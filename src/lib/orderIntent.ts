@@ -250,6 +250,9 @@ const LANGAR = [
   'diliver', 'delever', 'delivry', 'dispatch', 'despatch', 'courier', 'curier',
   'tracking', 'track', 'shipment', 'shipping', 'consignment', 'booking',
   'package', 'packet', 'آرڈر', 'پارسل', 'ڈلیوری',
+  // Asli jumlon se mile: "Muju kal tak receive hojaiga parce" — 'parce'
+  // adhoora likha tha, aur 'receive' apne order ke liye hi bola jata hai.
+  'parce', 'parcl', 'receive', 'recieve', 'pohoncha', 'pouncha',
 ]
 
 /**

@@ -17,6 +17,7 @@ import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
 import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
 import { planReply, TRACK_LINK } from '@/lib/replyPlan'
+import { looksLikeOrderIntent } from '@/lib/orderIntent'
 import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
@@ -684,6 +685,15 @@ export async function POST(req: NextRequest) {
  * pehchana jata hai — AI ki zaroorat nahi, yani muft aur foran.
  */
 async function naySawaalLikho(phone: string, text: string) {
+  // Apne maujooda order ki khabar ("mera order kab aayega", "abhi tak nahi
+  // mila", "parcel kahan hai") — ye Q&A ka sawaal hai hi nahi. Is ka apna
+  // rasta hai: order number poochna aur live tracking bhejna. Aise jumle
+  // pehle Excel ki list mein aa jate the aur aap ko har hafte unhein "Nahi"
+  // karna parta tha. Ab ye apni alag jagah par mehfooz hote hain.
+  if (looksLikeOrderIntent(text)) {
+    await supabaseAdmin.from('order_sawaal_log').insert({ phone, message_text: text })
+    return
+  }
   await supabaseAdmin.from('unmatched_messages').insert({ phone, message_text: text })
 }
 

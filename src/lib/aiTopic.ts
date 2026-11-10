@@ -257,6 +257,13 @@ function hidayat(list: TopicNamuna[]): string {
     'Customer Roman Urdu, Urdu aur English mila kar likhte hain, aur spelling aksar ghalat hoti hai.',
     'Aap ne khud jawab NAHI likhna. Sirf topic ka naam chunna hai.',
     '',
+    'SAB SE AHEM BAAT — HAR MESSAGE PAR PAISA LAGTA HAI:',
+    'Shop ko WhatsApp par bheje gaye HAR message ka paisa dena parta hai. Ek',
+    'faltu ya ghalat message sirf paisa zaya nahi karta, customer ko pareshan',
+    'bhi karta hai aur dukan ki sakh girata hai. Is liye aap ka pehla sawaal',
+    'khud se hamesha ye ho: "kya is message ka jawab bhejna WAQAI zaroori hai?"',
+    'Zara sa bhi shak ho to topic null — khamoshi muft hai, ghalti mehngi.',
+    '',
     'TOPICS:',
     rows,
     '',
@@ -267,6 +274,12 @@ function hidayat(list: TopicNamuna[]): string {
     '    * baat jari ho aur ye sirf haan/na, shukriya, "ok", "I know that", "I am waiting" jaisa jawab ho',
     '    * customer ko kisi insaan se baat karni ho, ya baat uljhi hui ho',
     '    * message ka matlab hi samajh na aaye',
+    '- Ye cheezein KABHI topic nahi banteen (topic null) — in par bot ka jawab sirf paisa zaya karta hai:',
+    '    * sirf salaam, shukriya, duaen, emoji, "ji", "acha", "theek hai"',
+    '    * customer ka apna faisla ya elaan ("ma soch kar batata hun", "baad mein lunga")',
+    '    * jo baat customer pehle hi poochh chuka ho aur jawab ja chuka ho',
+    '- Apne maujooda order ki khabar (kab milega, kahan hai, abhi tak nahi aaya) ka topic na chunein —',
+    '  ye baat bot khud tracking ke raste se sambhalta hai. Aise message par topic null.',
     '- Matlab saaf ho lekin list mein us ka koi topic na ho, to topic null aur human false.',
     '- Sirf wahi topic naam likhein jo list mein LAFZ BA LAFZ mojood hai.',
     '',
@@ -391,6 +404,38 @@ async function claudeCall(
     .map((b: any) => b.text)
     .join('')
   return text || null
+}
+
+/**
+ * Seedha AI se baat — jo bhi provider chalu hai usi se.
+ *
+ * `samjho()` ek message ka topic batata hai. Ye us se neeche ki seerhi hai:
+ * koi bhi hidayat aur koi bhi matan bhej kar kachcha jawab lena. Hafta-war
+ * tajweez wala hissa (aiSuggest.ts) isi se kaam leta hai.
+ *
+ * Yahan na cache hai na rozana ki hadd — bulane wala khud sambhale.
+ */
+export async function aiPoochho(system: string, user: string): Promise<string | null> {
+  const provider = aiProvider()
+  const key = aiKey(provider)
+  if (!key) return null
+
+  const model = aiModel(provider)
+  const shuru = Date.now()
+
+  let raw: string | null = null
+  if (provider === 'gemini') raw = await geminiCall(key, model, system, user)
+  else if (provider === 'groq') raw = await groqCall(key, model, system, user)
+  else raw = await claudeCall(key, model, system, user)
+
+  const laga = Date.now() - shuru
+  if (!raw) {
+    console.warn('[ai] ' + provider + ' se jawab nahi aaya (' + laga + 'ms)')
+    return null
+  }
+  console.log('[ai] ' + provider + '/' + model + ' — ' + laga + 'ms, ' + raw.length + ' harf')
+  await callLikho(provider, model, null, false, laga)
+  return raw
 }
 
 // ── JSON parhna ───────────────────────────────────────────────────────────

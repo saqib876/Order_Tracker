@@ -1,9 +1,15 @@
 /**
  * Q&A ka control panel — /admin/qna?key=ADMIN_KEY
  *
- * Do kaam yahan se hote hain:
- *   1. Rozana ki Excel download karna (naye sawaal + dropdowns)
- *   2. Bhari hui Excel wapas upload karna — SQL likhne ki zarurat nahi
+ * Pehle yahan Excel download/upload hota tha. Ab wo kaam AI karta hai:
+ * hafte mein ek dafa wo un messages ko parhta hai jin ka bot jawab nahi de
+ * saka, aur TAJWEEZ deta hai — "ye sawaal is topic mein daal dein", ya "ye
+ * naya topic bana lein".
+ *
+ * Aap ka kaam sirf itna: tick lagayein aur Approve. Naye topic ka jawab
+ * wahin likh dein. Kuch bhi apne aap live nahi hota.
+ *
+ * Excel ab sirf BACKUP ke liye hai — download ka button neeche hai.
  */
 
 import type { CSSProperties } from 'react'
@@ -11,6 +17,14 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { aiProvider, aiMode, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
 
 export const dynamic = 'force-dynamic'
+
+interface Suggestion {
+  id: string
+  kind: string
+  topic: string
+  questions: string[]
+  ask_count: number
+}
 
 export default async function QnaPage({
   searchParams,
@@ -39,6 +53,9 @@ export default async function QnaPage({
     )
   }
 
+  const one = (k: string) => (typeof searchParams[k] === 'string' ? (searchParams[k] as string) : '')
+
+  // ── Data ────────────────────────────────────────────────────────────────
   const { data: topics } = await supabaseAdmin
     .from('qna_topics')
     .select('topic, questions, answer, is_active')
@@ -49,28 +66,81 @@ export default async function QnaPage({
     .select('*', { count: 'exact', head: true })
     .is('exported_at', null)
 
-  // ── AI ka hisaab ────────────────────────────────────────────────────────
+  const { data: sugRows, error: sugError } = await supabaseAdmin
+    .from('qna_suggestions')
+    .select('id, kind, topic, questions, ask_count')
+    .eq('status', 'pending')
+    .order('ask_count', { ascending: false })
+
+  const suggestions: Suggestion[] = (sugRows || []).map((r) => ({
+    id: String(r.id),
+    kind: String(r.kind),
+    topic: String(r.topic),
+    questions: (r.questions as string[]) || [],
+    ask_count: Number(r.ask_count) || 0,
+  }))
+
+  const nayeTopics = suggestions.filter((x) => x.kind === 'naya_topic')
+  const nayeSawaal = suggestions.filter((x) => x.kind !== 'naya_topic')
+
+  const { count: approvedCount } = await supabaseAdmin
+    .from('qna_suggestions')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'approved')
+
   const aiOn = aiAvailable()
   const aiAaj = aiOn ? await aajKiGinti() : 0
   const aiHadd = Number(process.env.AI_MAX_PER_DAY) || 300
-  const { count: cacheCount } = await supabaseAdmin
-    .from('ai_topic_cache')
-    .select('*', { count: 'exact', head: true })
 
   const rows = (topics || []).map((t) => ({
     topic: String(t.topic),
-    n: String(t.questions || '').split(/\r?\n/).filter((x) => x.trim()).length,
+    n: String(t.questions || '')
+      .split(/\r?\n/)
+      .filter((x) => x.trim()).length,
     active: Boolean(t.is_active),
   }))
   const totalQuestions = rows.reduce((a, r) => a + r.n, 0)
-  const exportUrl = `/api/admin/qna-export?key=${encodeURIComponent(adminKey)}`
+  const exportUrl = `/api/admin/qna-export?key=${encodeURIComponent(adminKey)}&peek=1`
 
   return (
     <main style={s.page}>
       <h1 style={s.h1}>Q&amp;A Control</h1>
       <p style={s.sub}>
-        {rows.length} topics · {totalQuestions} sawaal · {pendingCount ?? 0} naye sawaal jinka jawab nahi mila
+        {rows.length} topics · {totalQuestions} sawaal · {pendingCount ?? 0} naye sawaal qatar mein
+        {approvedCount ? ` · ${approvedCount} tajweez ab tak manzoor` : ''}
       </p>
+
+      {/* Pichhle kaam ka natija */}
+      {(one('banay') || one('juray') || one('radd') || one('chala') || one('ruke') || one('kuch')) && (
+        <div style={s.flash}>
+          {one('chala') && (
+            <>
+              AI ne <b>{one('dekhe')}</b> sawaal dekhe aur <b>{one('chala')}</b> tajweez banayi.{' '}
+            </>
+          )}
+          {one('banay') && (
+            <>
+              <b>{one('banay')}</b> naye topic live ho gaye.{' '}
+            </>
+          )}
+          {one('juray') && (
+            <>
+              <b>{one('juray')}</b> naye sawaal purane topics mein jur gaye.{' '}
+            </>
+          )}
+          {one('radd') && (
+            <>
+              <b>{one('radd')}</b> tajweez radd — ye baatein aainda dobara nahi aayengi.{' '}
+            </>
+          )}
+          {one('ruke') && (
+            <>
+              <b>{one('ruke')}</b> ruk gayi — naye topic ka jawab likhna zaroori hai.{' '}
+            </>
+          )}
+          {one('kuch') && <>Kuch chuna hi nahi tha.</>}
+        </div>
+      )}
 
       {/* AI ka haal */}
       <section style={s.aiCard}>
@@ -78,14 +148,12 @@ export default async function QnaPage({
           <h2 style={s.h2}>Message samajhne wala AI</h2>
           {aiOn ? (
             <p style={s.aiText}>
-              <strong>Chalu</strong> — {aiProvider()} · andaz: {aiMode()}
-              <br />
-              Aaj {aiAaj} dafa pucha gaya (roz ki hadd {aiHadd}) ·{' '}
-              {cacheCount ?? 0} jumle yaad hain, un par dobara kabhi nahi pucha jayega
+              <strong>Chalu</strong> — {aiProvider()} · andaz: {aiMode()} · aaj {aiAaj} dafa pucha
+              gaya (roz ki hadd {aiHadd})
               <br />
               <span style={s.aiHint}>
-                AI khud jawab nahi likhta — wo sirf batata hai ke baat kis topic ki hai,
-                aur jawab aap ki Excel se lafz ba lafz jata hai.
+                AI khud jawab nahi likhta — wo sirf batata hai ke baat kis topic ki hai, aur jawab
+                aap ka likha hua lafz ba lafz jata hai.
               </span>
             </p>
           ) : (
@@ -93,234 +161,162 @@ export default async function QnaPage({
               <strong>Band</strong> — bot sirf lafz gin kar jawab dhoondta hai.
               <br />
               <span style={s.aiHint}>
-                Chalu karne ke liye Vercel mein <code>GEMINI_API_KEY</code> (ya{' '}
-                <code>GROQ_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>) daalein.
+                Chalu karne ke liye Vercel mein <code>GEMINI_API_KEY</code> daalein.
               </span>
             </p>
           )}
         </div>
       </section>
 
-      {/* 1. Download */}
-      <section style={s.card}>
-        <div style={s.step}>1</div>
-        <div style={{ flex: 1 }}>
-          <h2 style={s.h2}>Excel download karein</h2>
+      {/* ── AI ki tajweez — asal kaam yahan hota hai ───────────────────── */}
+      <h2 style={{ ...s.h2, marginTop: 30, fontSize: 19 }}>
+        AI ki tajweez {suggestions.length > 0 && <span style={s.badge}>{suggestions.length}</span>}
+      </h2>
+
+      {sugError && (
+        <p style={s.error}>
+          Tajweez wali table abhi nahi bani: {sugError.message}
+          <br />
+          Supabase mein <code>qna_suggestions</code> table banana baqi hai.
+        </p>
+      )}
+
+      {!sugError && suggestions.length === 0 && (
+        <div style={s.khaliBox}>
           <p style={s.p}>
-            Is mein woh naye sawaal aayenge jo bot samajh nahi paya. Har row par dropdown hai —
-            <b> Add karein? </b> aur <b> Kis Topic mein? </b>. Naya topic banana ho to
-            <b> “Mojooda Topics” </b> sheet ki neeche wali khali peeli row mein likhein.
+            Abhi koi tajweez nahi. AI har <b>Itwar ki subah</b> khud chalta hai aur jo naye sawaal
+            samajh mein aate hain un ki tajweez yahan rakh deta hai.
+          </p>
+          <form action="/api/admin/qna-suggest" method="POST">
+            <input type="hidden" name="key" value={adminKey} />
+            <input type="hidden" name="days" value="7" />
+            <button type="submit" style={s.btn}>
+              Abhi chalao
+            </button>
+          </form>
+          <p style={s.hint}>
+            Ek dafa chalane mein 1-2 minute lag sakte hain — safha khulne ka intezaar karein.
+          </p>
+        </div>
+      )}
+
+      {suggestions.length > 0 && (
+        <form action="/api/admin/qna-approve" method="POST">
+          <input type="hidden" name="key" value={adminKey} />
+
+          <div style={s.toolbar}>
+            <label style={s.selectAll}>
+              <input type="checkbox" id="sabSelect" style={s.cb} />
+              <span>Sab select karein</span>
+            </label>
+            <span style={s.toolbarHint}>
+              Tick lagayein, phir neeche <b>Approve</b> ya <b>Radd</b>
+            </span>
+          </div>
+
+          {/* Naye topics */}
+          {nayeTopics.length > 0 && (
+            <>
+              <h3 style={s.h3}>Naye topic ban sakte hain ({nayeTopics.length})</h3>
+              <p style={s.hint}>
+                In par customers ne baar baar sawaal kiya hai lekin aap ka koi topic nahi. Jawab
+                likh kar tick lagayein — topic foran live ho jayega.
+              </p>
+              {nayeTopics.map((x) => (
+                <div key={x.id} style={s.sugCardNew}>
+                  <label style={s.sugHead}>
+                    <input type="checkbox" name="pick" value={x.id} style={s.cb} className="pick" />
+                    <span style={s.sugTopic}>{x.topic}</span>
+                    <span style={s.sugCount}>{x.ask_count} dafa poocha gaya</span>
+                  </label>
+                  <div style={s.qList}>
+                    {x.questions.map((q, i) => (
+                      <div key={i} style={s.qLine}>
+                        {q}
+                      </div>
+                    ))}
+                  </div>
+                  <label style={s.ansLabel}>
+                    Is topic ka jawab (jo customer ko bheja jayega):
+                    <textarea
+                      name={`ans_${x.id}`}
+                      rows={4}
+                      style={s.textarea}
+                      placeholder="Yahan jawab likhein…"
+                    />
+                  </label>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Purane topics mein naye sawaal */}
+          {nayeSawaal.length > 0 && (
+            <>
+              <h3 style={s.h3}>Purane topics mein naye sawaal ({nayeSawaal.length})</h3>
+              <p style={s.hint}>
+                Ye jumle customers ne apne andaz mein likhe the. Topic mein jur gaye to agli dafa
+                bot inhein <b>lafzon se hi</b> pehchan lega — AI ki zaroorat nahi, yani muft aur
+                foran.
+              </p>
+              {nayeSawaal.map((x) => (
+                <div key={x.id} style={s.sugCard}>
+                  <label style={s.sugHead}>
+                    <input type="checkbox" name="pick" value={x.id} style={s.cb} className="pick" />
+                    <span style={s.sugTopic}>{x.topic}</span>
+                    <span style={s.sugCount}>
+                      +{x.questions.length} sawaal · {x.ask_count} dafa
+                    </span>
+                  </label>
+                  <div style={s.qList}>
+                    {x.questions.map((q, i) => (
+                      <div key={i} style={s.qLine}>
+                        {q}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          <div style={s.actionBar}>
+            <button type="submit" name="faisla" value="approve" style={s.btnBig}>
+              Chune hue Approve karein
+            </button>
+            <button type="submit" name="faisla" value="reject" style={s.btnGhost}>
+              Chune hue Radd karein
+            </button>
+          </div>
+          <p style={s.hint}>
+            <b>Radd</b> ka matlab hamesha ke liye — wo baatein aainda kabhi tajweez nahi hongi.
+          </p>
+        </form>
+      )}
+
+      {suggestions.length > 0 && (
+        <form action="/api/admin/qna-suggest" method="POST" style={{ marginTop: 18 }}>
+          <input type="hidden" name="key" value={adminKey} />
+          <input type="hidden" name="days" value="7" />
+          <button type="submit" style={s.btnGhost}>
+            AI ko dobara chalao
+          </button>
+        </form>
+      )}
+
+      {/* ── Backup ───────────────────────────────────────────────────────── */}
+      <section style={s.backupCard}>
+        <div style={{ flex: 1 }}>
+          <h2 style={s.h2}>Backup — Excel download</h2>
+          <p style={s.p}>
+            Poora Q&amp;A bank aur qatar wale sawaal ek Excel file mein. Kabhi data zaya ho jaye to
+            is file se wapas banaya ja sakta hai. <b>Download karne se kuch badalta nahi</b> — ye
+            sirf nakal hai.
           </p>
           <a href={exportUrl} style={s.btn}>
             Excel download karein
           </a>
-          <p style={s.hint}>
-            Download hote hi in sawaalon par nishaan lag jata hai — agli dafa sirf naye aayenge.
-            Is list mein ye <b>kabhi nahi</b> aate: jin par aap <b>Nahi</b> kar chuke, “?”, “Hi”,
-            “AoA”, “Hello”, “Ok” jaise message, aur woh sawaal jin ka jawab bot ab khud de deta hai.
-            Sirf dekhna ho to link ke aakhir mein <code>&amp;peek=1</code> laga dein.
-          </p>
-        </div>
-      </section>
-
-      {/* 2. Upload */}
-      <section style={s.card}>
-        <div style={s.step}>2</div>
-        <div style={{ flex: 1 }}>
-          <h2 style={s.h2}>Bhari hui Excel wapas upload karein</h2>
-          <p style={s.p}>
-            <b>File mein jo hai, wahi database mein ho jata hai.</b> Sawaal ka naam badlein,
-            sawaal hata dein, ya kisi doosre topic mein le jayein — upload ke baad bot bilkul
-            nayi file ke mutabiq chalega. Purani file ka data bacha nahi rehta.
-          </p>
-          <form action="/api/admin/qna-import" method="POST" encType="multipart/form-data" style={s.form}>
-            <input type="hidden" name="key" value={adminKey} />
-            <input type="file" name="file" accept=".xlsx" required style={s.file} />
-            <button type="submit" style={s.btn}>
-              Upload karein
-            </button>
-          </form>
-          <p style={s.hint}>
-            Upload ke baad natija JSON mein dikhega — kitne topics bane, kitne sawaal jure,
-            kitne hataye gaye, aur kaun se topics band hue.
-          </p>
-        </div>
-      </section>
-
-
-      {/* 3. Excel bharne ka tareeqa */}
-      <section style={s.card}>
-        <div style={s.step}>3</div>
-        <div style={{ flex: 1 }}>
-          <h2 style={s.h2}>Excel bharne ka tareeqa</h2>
-
-          {/* Nayi line — sab se zyada poocha jane wala sawaal */}
-          <div style={s.keyBox}>
-            <div style={s.keyTitle}>Ek hi khaane (cell) mein nayi line kaise banayein</div>
-            <ul style={s.keyList}>
-              <li style={s.keyItem}>
-                <span style={s.keyWhere}>Excel (Windows)</span>
-                <span><kbd style={s.kbd}>Alt</kbd> + <kbd style={s.kbd}>Enter</kbd></span>
-              </li>
-              <li style={s.keyItem}>
-                <span style={s.keyWhere}>Excel (Mac)</span>
-                <span><kbd style={s.kbd}>Option ⌥</kbd> + <kbd style={s.kbd}>Enter</kbd></span>
-              </li>
-              <li style={s.keyItem}>
-                <span style={s.keyWhere}>Google Sheets</span>
-                <span>
-                  <kbd style={s.kbd}>Alt</kbd> + <kbd style={s.kbd}>Enter</kbd>
-                  <span style={s.keyOr}> (Mac par <kbd style={s.kbd}>⌘</kbd> + <kbd style={s.kbd}>Enter</kbd>)</span>
-                </span>
-              </li>
-              <li style={s.keyItem}>
-                <span style={s.keyWhere}>Mobile par</span>
-                <span>Cell par tap karein, phir keyboard ka <b>return / ↵</b> — ya laptop use karein</span>
-              </li>
-            </ul>
-            <p style={s.keyNote}>
-              Sirf <kbd style={s.kbd}>Enter</kbd> dabane se aap cell se <b>bahar</b> nikal jate hain, nayi line nahi banti.
-              Har sawaal apni alag line par hona chahiye.
-            </p>
-          </div>
-
-          {/* Do sheets */}
-          <h3 style={s.h3}>File ki sheets</h3>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                <th style={{ ...s.th, width: '27%' }}>Sheet</th>
-                <th style={s.th}>Is mein kya karna hai</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={s.tdName}>Naye Sawaal</td>
-                <td style={s.td}>
-                  Customer ke woh sawaal jin ka jawab bot ke paas nahi tha. Jis sawaal ka jawab dena ho
-                  us row mein <b>Add karein? = Haan</b> chunein <i>aur</i> <b>Kis Topic mein?</b> se topic
-                  chunein. <b>Dropdown zinda hai</b> — “Mojooda Topics” mein jo naya topic likhenge ya
-                  jo naam badlenge, wo <b>foran</b> is dropdown mein aa jata hai.
-                  Jis par <b>Nahi</b> chuna wo upload ke baad <b>kabhi kisi Excel mein</b> nahi aayega. <b>Haan</b> kiya lekin topic na chuna
-                  ja saka — wo sawaal <b>agli Excel mein wapas</b> aa jayega, gum nahi hoga.
-                </td>
-              </tr>
-              <tr>
-                <td style={s.tdName}>Mojooda Topics</td>
-                <td style={s.td}>
-                  Purane topics — sawaal, jawab aur topic ka naam, sab yahan se <b>badle</b> ja
-                  sakte hain. Naya sawaal neeche nayi line par likh dein; hatana ho to line mita
-                  dein. Poora topic hatane ke liye <b>“Hata dein? = Haan”</b>. <b>Naya topic:</b> sab se
-                  neeche wali khali peeli rows mein naam, sawaal aur jawab likhein — wo foran “Kis
-                  Topic mein?” dropdown mein aa jata hai. Greeting (how to place order) ka matan bhi
-                  isi sheet ki <b>“Salaam / Greeting”</b> row mein hai.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Usool */}
-          <h3 style={s.h3}>Yaad rakhne wali baatein</h3>
-          <div style={s.syncBox}>
-            <div style={s.syncTitle}>Sab se ahem usool</div>
-            <p style={s.syncText}>
-              <b>“File mein jo hai, wahi database mein hoga.”</b> Upload ke baad bot sirf nayi
-              file ke mutabiq chalta hai — purana data bacha nahi rehta.
-            </p>
-            <table style={{ ...s.table, marginTop: 10 }}>
-              <tbody>
-                <tr>
-                  <td style={s.tdName}>Sawaal hatana</td>
-                  <td style={s.td}>Us ki line mita dein (poori line, cell khali kar dein)</td>
-                </tr>
-                <tr>
-                  <td style={s.tdName}>Topic ka naam badalna</td>
-                  <td style={s.td}>
-                    Topic wale khane mein naya naam likh dein. <b>Pehle naam badlein, phir</b> “Naye
-                    Sawaal” mein topic chunein — jo sawaal purane naam par chune gaye hon wo agli
-                    Excel mein wapas aa jate hain.
-                  </td>
-                </tr>
-                <tr>
-                  <td style={s.tdName}>Sawaal doosre topic mein</td>
-                  <td style={s.td}>Ek topic se line kaat kar doosre ke sawaalon mein paste kar dein</td>
-                </tr>
-                <tr>
-                  <td style={s.tdName}>Poora topic hatana</td>
-                  <td style={s.td}>
-                    Us row ke <b>“Hata dein?”</b> khane mein <b>Haan</b> chunein
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p style={s.syncNote}>
-              Hataya hua topic database se mitta nahi — bas <b>band</b> ho jata hai (neeche list
-              mein OFF dikhega) aur bot use istemal nahi karta. Ghalti ho jaye to bataiye, wapas
-              chalu ho sakta hai.
-            </p>
-          </div>
-
-          <ol style={s.ol}>
-            <li style={s.li}>
-              <b>Poori file upload karein.</b> Jo file download hui thi usi ko bhar kar bhejein.
-              Agar file mein <b>“Mojooda Topics”</b> sheet na ho to bot ehtiyatan kuch nahi
-              mitata — sirf naya jorta hai.
-            </li>
-            <li style={s.li}>
-              <b>Jawab poora likhein.</b> Excel wala jawab hi naya jawab ban jata hai.
-            </li>
-            <li style={s.li}>
-              <b>Jawab khali chhoda to wo row chhod di jayegi.</b> Us topic mein koi tabdeeli
-              nahi hogi (band bhi nahi hoga).
-            </li>
-            <li style={s.li}>
-              <b>Sheet aur column ke naam na badlein.</b> Column ki tarteeb badalna theek hai,
-              naam badalna nahi — warna wo sheet parhi nahi jayegi.
-            </li>
-            <li style={s.li}>
-              <b>Ek hi sawaal do topics mein na likhein.</b> Aisi soorat mein bot confuse ho kar
-              <b> chup </b> ho jata hai. Har sawaal sirf ek hi topic mein rakhein.
-            </li>
-            <li style={s.li}>
-              <b>Peele khaane bharne ke liye hain.</b> Jo khaane peele hain wahi aap ko bharne
-              hain; baqi sirf dekhne ke liye hain.
-            </li>
-            <li style={s.li}>
-              <b>Customize wali row ka naam “Custom…” se shuru rahe.</b> Bot picture/design wale
-              sawaalon ka jawab isi row se uthata hai.
-            </li>
-            <li style={s.li}>
-              <b>File .xlsx hi rahe.</b> CSV ya Google Sheet ka link kaam nahi karega — Google
-              Sheets se “File → Download → Microsoft Excel (.xlsx)” kar ke upload karein.
-            </li>
-            <li style={s.li}>
-              <b>Ek hi baar mein aadhe se zyada topics band nahi ho sakte.</b> Aisa upload
-              ehtiyatan rok diya jayega aur database mein kuch nahi badlega — taake ghalat file
-              se sab kuch zaya na ho.
-            </li>
-            <li style={s.li}>
-              <b>Sawaal ka khana khali chhod dein to purane sawaal jyun ke tyun rehte hain.</b>
-              Ye ghalti se saaf ho jaye to kuch zaya nahi hota. Waqai sab hatane hon to
-              <b> “Hata dein? = Haan” </b> hai.
-            </li>
-            <li style={s.li}>
-              <b>“Salaam / Greeting” wali row ka naam na badlein.</b> Aam greeting ab{' '}
-              <b>band</b> hai — har customer ko apne aap kuch nahi jata (Meta har message ka paisa
-              leta hai). Is row ka matan ab SIRF us waqt jata hai jab koi model ki availability
-              poochhe: tab <b>“Yes Available”</b> ke neeche isi row ka matan usi ek message mein
-              jata hai. Is liye row file mein rehni chahiye. Ghalti se ye row file mein na rahe to bhi band nahi hoti —
-              sirf <b>“Hata dein? = Haan”</b> se hi band hoti hai.
-            </li>
-            <li style={s.li}>
-              <b>Band topics file mein nahi aate.</b> Kisi band topic ko wapas chalu karna ho to
-              “Mojooda Topics” ki neeche wali khali row mein <b>bilkul wohi naam</b> jawab ke sath
-              likh dein — wo dobara chalu ho jayega.
-            </li>
-          </ol>
-
-          <p style={s.hint}>
-            Upload ke foran baad jawab chalu ho jate hain — bot ko dobara start karne ki zarurat nahi.
-          </p>
+          <p style={s.hint}>Mahine mein ek dafa download kar ke apne paas rakh lein.</p>
         </div>
       </section>
 
@@ -338,14 +334,16 @@ export default async function QnaPage({
           {rows.length === 0 && (
             <tr>
               <td style={s.td} colSpan={3}>
-                Abhi koi topic nahi — pehli Excel upload karein.
+                Abhi koi topic nahi.
               </td>
             </tr>
           )}
           {rows.map((r) => (
             <tr key={r.topic}>
               <td style={s.td}>{r.topic}</td>
-              <td style={{ ...s.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.n}</td>
+              <td style={{ ...s.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {r.n}
+              </td>
               <td style={{ ...s.td, textAlign: 'right' }}>
                 <span style={r.active ? s.on : s.off}>{r.active ? 'ON' : 'OFF'}</span>
               </td>
@@ -357,143 +355,201 @@ export default async function QnaPage({
       <p style={{ ...s.hint, marginTop: 26 }}>
         Manually Check ki list: <code>/admin/review?key=…</code>
       </p>
+
+      {/* "Sab select karein" — chhota sa kaam, chhota sa script */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "document.getElementById('sabSelect').addEventListener('change',function(e){" +
+            "var on=e.target.checked;" +
+            "var all=document.querySelectorAll('.pick');" +
+            "for(var i=0;i<all.length;i++){all[i].checked=on}});",
+        }}
+      />
     </main>
   )
 }
 
 const s: Record<string, CSSProperties> = {
-  h3: { fontSize: 15, fontWeight: 700, margin: '22px 0 10px', color: '#0f172a' },
-  keyBox: {
-    background: '#f0f9ff',
-    border: '1px solid #bae6fd',
-    borderRadius: 12,
-    padding: '14px 16px',
-    margin: '4px 0 6px',
-  },
-  keyTitle: { fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#0c4a6e' },
-  keyList: { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 },
-  keyItem: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'baseline',
-    gap: '4px 10px',
-    fontSize: 13.5,
-    color: '#0f172a',
-  },
-  keyWhere: { minWidth: 132, color: '#475569', fontSize: 13 },
-  keyOr: { color: '#64748b' },
-  kbd: {
-    display: 'inline-block',
-    background: '#fff',
-    border: '1px solid #cbd5e1',
-    borderBottomWidth: 2,
-    borderRadius: 6,
-    padding: '1px 7px',
-    fontSize: 12.5,
-    fontWeight: 600,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    color: '#0f172a',
-    whiteSpace: 'nowrap',
-  },
-  keyNote: { fontSize: 12.5, color: '#475569', margin: '11px 0 0', lineHeight: 1.6 },
-  ol: { margin: '0 0 4px', paddingLeft: 20, display: 'grid', gap: 9 },
-  syncBox: {
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    borderRadius: 12,
-    padding: '14px 16px',
-    margin: '4px 0 18px',
-  },
-  syncTitle: { fontSize: 14, fontWeight: 700, marginBottom: 6, color: '#78350f' },
-  syncText: { fontSize: 13.5, lineHeight: 1.65, color: '#3f3f46', margin: 0 },
-  syncNote: { fontSize: 12.5, lineHeight: 1.6, color: '#57534e', margin: '10px 0 0' },
-  li: { fontSize: 13.5, lineHeight: 1.65, color: '#334155' },
-  tdName: {
-    padding: '10px 12px',
-    borderTop: '1px solid #e2e8f0',
-    fontSize: 13.5,
-    fontWeight: 600,
-    color: '#0f172a',
-    verticalAlign: 'top',
-  },
   page: {
-    maxWidth: 780,
+    maxWidth: 860,
     margin: '0 auto',
     padding: '30px 18px 80px',
-    fontFamily: 'system-ui, -apple-system, Segoe UI, Arial, sans-serif',
+    fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     color: '#0f172a',
+    background: '#fff',
   },
-  h1: { fontSize: 27, fontWeight: 700, margin: '0 0 4px' },
-  sub: { color: '#64748b', fontSize: 14, margin: '0 0 26px', fontVariantNumeric: 'tabular-nums' },
+  h1: { fontSize: 26, fontWeight: 800, margin: '0 0 6px' },
+  h2: { fontSize: 16.5, fontWeight: 700, margin: '0 0 6px' },
+  h3: { fontSize: 15, fontWeight: 700, margin: '24px 0 6px', color: '#0f172a' },
+  sub: { fontSize: 14, color: '#475569', margin: '0 0 20px' },
+  p: { fontSize: 14, lineHeight: 1.7, margin: '6px 0 12px', color: '#1e293b' },
+  hint: { fontSize: 12.8, lineHeight: 1.65, color: '#64748b', margin: '8px 0 0' },
+  error: {
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: '#991b1b',
+    background: '#fef2f2',
+    border: '1px solid #fecaca',
+    borderRadius: 10,
+    padding: '12px 14px',
+  },
+  flash: {
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: '#065f46',
+    background: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: 10,
+    padding: '12px 14px',
+    marginBottom: 16,
+  },
   aiCard: {
     display: 'flex',
     gap: 16,
     border: '1px solid #c7d2fe',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 14,
+    padding: 18,
+    marginBottom: 6,
     background: '#eef2ff',
   },
-  aiText: {
-    margin: '6px 0 0',
-    fontSize: 14,
-    lineHeight: 1.7,
-    color: '#1e293b',
-  },
-  aiHint: {
-    color: '#475569',
-    fontSize: 13,
-  },
-  card: {
+  aiText: { margin: '6px 0 0', fontSize: 14, lineHeight: 1.7, color: '#1e293b' },
+  aiHint: { color: '#475569', fontSize: 13 },
+  backupCard: {
     display: 'flex',
     gap: 16,
     border: '1px solid #e2e8f0',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 14,
-    background: '#fff',
+    padding: 18,
+    marginTop: 34,
+    background: '#f8fafc',
   },
-  step: {
-    flex: 'none',
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+  khaliBox: {
+    border: '1px dashed #cbd5e1',
+    borderRadius: 12,
+    padding: 18,
+    background: '#f8fafc',
+  },
+  badge: {
+    display: 'inline-block',
     background: '#0f172a',
     color: '#fff',
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: 15,
-    fontWeight: 600,
+    borderRadius: 999,
+    padding: '1px 10px',
+    fontSize: 13,
+    marginLeft: 6,
+    verticalAlign: 'middle',
   },
-  h2: { fontSize: 18, fontWeight: 600, margin: '2px 0 8px' },
-  p: { fontSize: 14.5, lineHeight: 1.6, color: '#475569', margin: '0 0 14px' },
-  hint: { fontSize: 13, color: '#94a3b8', margin: '10px 0 0', lineHeight: 1.55 },
+  toolbar: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '8px 16px',
+    background: '#f1f5f9',
+    border: '1px solid #e2e8f0',
+    borderRadius: 10,
+    padding: '10px 14px',
+    margin: '10px 0 4px',
+  },
+  selectAll: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  toolbarHint: { fontSize: 12.8, color: '#64748b' },
+  cb: { width: 18, height: 18, accentColor: '#0f172a', cursor: 'pointer', flex: 'none' },
+  sugCard: {
+    border: '1px solid #e2e8f0',
+    borderRadius: 12,
+    padding: '14px 16px',
+    marginTop: 10,
+    background: '#fff',
+  },
+  sugCardNew: {
+    border: '1px solid #fcd34d',
+    borderRadius: 12,
+    padding: '14px 16px',
+    marginTop: 10,
+    background: '#fffbeb',
+  },
+  sugHead: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '6px 10px',
+    cursor: 'pointer',
+  },
+  sugTopic: { fontSize: 15, fontWeight: 700, flex: 1, minWidth: 200 },
+  sugCount: { fontSize: 12.5, color: '#64748b', whiteSpace: 'nowrap' },
+  qList: { margin: '10px 0 0', paddingLeft: 28, display: 'grid', gap: 5 },
+  qLine: { fontSize: 13.5, lineHeight: 1.6, color: '#334155' },
+  ansLabel: {
+    display: 'block',
+    marginTop: 12,
+    paddingLeft: 28,
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#78350f',
+  },
+  textarea: {
+    display: 'block',
+    width: '100%',
+    marginTop: 6,
+    padding: '10px 12px',
+    fontSize: 14,
+    lineHeight: 1.6,
+    fontFamily: 'inherit',
+    border: '1px solid #cbd5e1',
+    borderRadius: 8,
+    resize: 'vertical',
+    boxSizing: 'border-box',
+  },
+  actionBar: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 20 },
   btn: {
     display: 'inline-block',
-    background: '#0e7c5a',
+    background: '#0f172a',
     color: '#fff',
-    padding: '9px 18px',
-    borderRadius: 8,
-    textDecoration: 'none',
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: 600,
+    padding: '10px 18px',
+    borderRadius: 9,
+    border: 'none',
+    textDecoration: 'none',
+    cursor: 'pointer',
+  },
+  btnBig: {
+    background: '#15803d',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 700,
+    padding: '13px 24px',
+    borderRadius: 10,
     border: 'none',
     cursor: 'pointer',
   },
-  form: { display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
-  file: { fontSize: 14 },
-  table: { width: '100%', borderCollapse: 'collapse', marginTop: 12 },
+  btnGhost: {
+    background: '#fff',
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: 600,
+    padding: '12px 20px',
+    borderRadius: 10,
+    border: '1px solid #cbd5e1',
+    cursor: 'pointer',
+  },
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: 10 },
   th: {
     textAlign: 'left',
-    fontSize: 12,
-    letterSpacing: '.04em',
-    textTransform: 'uppercase',
-    color: '#64748b',
+    fontSize: 12.5,
+    fontWeight: 700,
+    color: '#475569',
     borderBottom: '1px solid #e2e8f0',
     padding: '8px 6px',
   },
-  td: { fontSize: 14.5, borderBottom: '1px solid #f1f5f9', padding: '9px 6px' },
-  on: { color: '#0e7c5a', fontWeight: 600, fontSize: 12.5 },
-  off: { color: '#94a3b8', fontWeight: 600, fontSize: 12.5 },
-  error: { color: '#dc2626', fontSize: 15, lineHeight: 1.6 },
+  td: { fontSize: 13.5, borderBottom: '1px solid #f1f5f9', padding: '8px 6px' },
+  on: { color: '#15803d', fontWeight: 700, fontSize: 12 },
+  off: { color: '#b91c1c', fontWeight: 700, fontSize: 12 },
 }
