@@ -714,3 +714,228 @@
     transform: none;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Manually Check ka safha (/admin/review)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.adm-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  margin: 0 0 22px;
+}
+.adm-tab {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 7px 16px;
+  border-radius: 8px;
+  transition: color 0.14s, background-color 0.14s;
+}
+.adm-tab:hover {
+  color: var(--ink);
+}
+.adm-tab[data-on='1'] {
+  color: #fff;
+  background: var(--primary);
+}
+
+/* Section ka sira */
+.adm-sec {
+  margin-bottom: 30px;
+}
+.adm-sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+.adm-sec-head h2 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.adm-sec-head p {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin: 3px 0 0;
+  width: 100%;
+}
+.adm-sec-n {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 12px;
+}
+
+/* Qism ke tags */
+.adm-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.adm-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 4px 11px;
+}
+.adm-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c, var(--ink-3));
+  flex: none;
+}
+
+/* Ek message ka card */
+.adm-row {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--c, var(--ink-3));
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  border-radius: 12px;
+  padding: 15px 17px;
+  margin-bottom: 9px;
+  transition: border-color 0.16s, transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.adm-row:hover {
+  transform: translateY(-2px);
+}
+.adm-row-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 9px;
+}
+.adm-reason {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--c, var(--ink));
+  border: 1px solid var(--c, var(--line));
+  border-radius: 999px;
+  padding: 2px 11px;
+  background: transparent;
+}
+.adm-when {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.adm-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.adm-msg {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0 0 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.adm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.adm-meta b {
+  color: var(--ink-3);
+  font-weight: 600;
+  margin-right: 5px;
+}
+.adm-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+.adm-acts form {
+  margin: 0;
+}
+
+.adm-wa,
+.adm-quiet,
+.adm-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  padding: 9px 16px;
+  border-radius: 9px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.14s cubic-bezier(0.2, 0.7, 0.3, 1), background-color 0.14s,
+    border-color 0.14s, color 0.14s;
+}
+.adm-wa:hover,
+.adm-quiet:hover,
+.adm-done:hover {
+  transform: translateY(-2px);
+}
+.adm-wa {
+  color: #fff;
+  border: none;
+  background: #1fa855;
+}
+.adm-quiet {
+  color: var(--new-ink, #a16207);
+  border: 1px solid var(--new-line);
+  background: var(--new-bg);
+}
+:root[data-theme='dark'] .adm-quiet {
+  color: #fcd34d;
+}
+.adm-done {
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  background: var(--card-2);
+}
+.adm-done:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+}
+
+.adm-khali {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  border: 1px dashed var(--line);
+  border-radius: 11px;
+  padding: 16px 18px;
+  text-align: center;
+}
