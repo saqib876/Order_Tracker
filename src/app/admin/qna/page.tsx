@@ -13,6 +13,7 @@
  */
 
 import type { CSSProperties } from 'react'
+import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { aiProvider, aiMode, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
 
@@ -321,7 +322,16 @@ export default async function QnaPage({
       </section>
 
       {/* Mojooda topics */}
-      <h2 style={{ ...s.h2, marginTop: 34 }}>Abhi jo topics live hain</h2>
+      <div style={s.topicsHead}>
+        <h2 style={{ ...s.h2, marginTop: 34 }}>Abhi jo topics live hain</h2>
+        <Link href={`/admin/topics?key=${encodeURIComponent(adminKey)}`} style={s.link}>
+          Topics dekhein / badlein →
+        </Link>
+      </div>
+      <p style={s.hint}>
+        Kisi bhi topic par click kar ke dekh sakte hain ke us mein kaun se sawaal hain, jawab kya
+        hai, aur use badal ya ON/OFF kar sakte hain.
+      </p>
       <table style={s.table}>
         <thead>
           <tr>
@@ -340,7 +350,14 @@ export default async function QnaPage({
           )}
           {rows.map((r) => (
             <tr key={r.topic}>
-              <td style={s.td}>{r.topic}</td>
+              <td style={s.td}>
+                <Link
+                  href={`/admin/topics?key=${encodeURIComponent(adminKey)}`}
+                  style={s.rowLink}
+                >
+                  {r.topic}
+                </Link>
+              </td>
               <td style={{ ...s.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                 {r.n}
               </td>
@@ -550,6 +567,15 @@ const s: Record<string, CSSProperties> = {
     padding: '8px 6px',
   },
   td: { fontSize: 13.5, borderBottom: '1px solid #f1f5f9', padding: '8px 6px' },
+  topicsHead: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  link: { fontSize: 14, color: '#2563eb', textDecoration: 'none', whiteSpace: 'nowrap' },
+  rowLink: { color: '#0f172a', textDecoration: 'none' },
   on: { color: '#15803d', fontWeight: 700, fontSize: 12 },
   off: { color: '#b91c1c', fontWeight: 700, fontSize: 12 },
 }
