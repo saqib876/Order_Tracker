@@ -83,6 +83,27 @@ export async function POST(req: NextRequest) {
 
   if (!id) return wapas(req, adminKey, { khata: 'Topic nahi mila' })
 
+  // ── Kai purane naam ek sath hatana ─────────────────────────────────────
+  if (kaam === 'safai') {
+    const ids = form.getAll('pick').map((v) => String(v)).filter(Boolean)
+    if (!ids.length) return wapas(req, adminKey, { khata: 'Kuch chuna hi nahi' })
+
+    // Ehtiyat: sirf BAND topics hi hat sakte hain, chalu kabhi nahi
+    const { data: chunay } = await supabaseAdmin
+      .from('qna_topics')
+      .select('id, is_active')
+      .in('id', ids)
+
+    const hatane = (chunay || []).filter((r) => !r.is_active).map((r) => String(r.id))
+    if (!hatane.length) return wapas(req, adminKey, { khata: 'Chalu topic hataya nahi ja sakta' })
+
+    const { error } = await supabaseAdmin.from('qna_topics').delete().in('id', hatane)
+    if (error) return wapas(req, adminKey, { khata: error.message })
+    invalidateQnaCache()
+    console.log('[topics] safai — ' + hatane.length + ' purane naam hata diye')
+    return wapas(req, adminKey, { safai: String(hatane.length) })
+  }
+
   // ── ON / OFF ───────────────────────────────────────────────────────────
   if (kaam === 'toggle') {
     const chalu = String(form.get('chalu') || '') === '1'
@@ -117,9 +138,20 @@ export async function POST(req: NextRequest) {
   if (!topic) return wapas(req, adminKey, { khata: 'Topic ka naam khali nahi ho sakta' }, id)
   if (!answer) return wapas(req, adminKey, { khata: 'Jawab khali nahi ho sakta' }, id)
 
+  const wajah = String(form.get('wajah') || '').trim()
+
   const { error } = await supabaseAdmin
     .from('qna_topics')
-    .update({ topic, questions, answer, is_active: chalu, updated_at: ab })
+    .update({
+      topic,
+      questions,
+      answer,
+      is_active: chalu,
+      // Band kyun hai — sirf aap ki yaad-dasht ke liye. Chalu topic par
+      // wajah ka koi matlab nahi, is liye saaf kar dete hain.
+      off_reason: chalu ? null : wajah || null,
+      updated_at: ab,
+    })
     .eq('id', id)
 
   if (error) return wapas(req, adminKey, { khata: error.message }, id)

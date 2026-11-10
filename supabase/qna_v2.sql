@@ -207,3 +207,16 @@ create table if not exists order_sawaal_log (
 );
 alter table order_sawaal_log enable row level security;
 create index if not exists order_sawaal_log_created_idx on order_sawaal_log (created_at desc);
+
+-- ══ Topic band kyun hai ════════════════════════════════════════════════════
+-- Band topic ke saamne wajah likhi ja sakti hai — sirf aap ki yaad-dasht ke
+-- liye, bot is se koi faisla nahi karta.
+alter table qna_topics add column if not exists off_reason text;
+
+-- "Model / Design Availability" jaan boojh kar band hai — us ki wajah likh
+-- dete hain, taake baad mein ye sawaal na uthe ke ise kyun band kiya tha.
+update qna_topics
+   set off_reason = 'Jaan boojh kar band — model/availability wale sawaal ab "Yes Available" wale raste se jate hain (modelQuery.ts), is topic se nahi.'
+ where is_active = false
+   and off_reason is null
+   and topic ilike 'Model / Design Availability%';

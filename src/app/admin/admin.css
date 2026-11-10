@@ -1,0 +1,594 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Admin dashboard ka design — /admin/qna aur /admin/topics dono isi par.
+ *
+ * Soch ye hai: safha dekhne mein khoobsurat ho lekin kaam mein rukawat na
+ * dale. Rangon ka ek hi ghar (neeche :root), har card ek jaisa, aur
+ * animation sirf utni jitni aankh ko achhi lage — har cheez halki aur tez.
+ *
+ * Jin ko animation se takleef hoti hai (prefers-reduced-motion), un ke liye
+ * sab kuch apne aap band ho jata hai — file ke aakhir mein.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg: #080b14;
+  --bg-2: #0d1322;
+  --panel: rgba(255, 255, 255, 0.045);
+  --panel-solid: #111827;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.055);
+  --ink: #e8edf7;
+  --ink-2: #9aa7bd;
+  --ink-3: #6b7a93;
+  --brand: #6366f1;
+  --brand-2: #22d3ee;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --radius: 16px;
+  --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+}
+
+/* ── Safha ──────────────────────────────────────────────────────────────── */
+
+.adm {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Peeche halki si roshni — do dhundle gole jo bohat aahista hilte hain */
+.adm::before,
+.adm::after {
+  content: '';
+  position: fixed;
+  width: 46vw;
+  height: 46vw;
+  min-width: 380px;
+  min-height: 380px;
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+.adm::before {
+  background: radial-gradient(circle, #4f46e5 0%, transparent 68%);
+  top: -16vw;
+  left: -12vw;
+  animation: tairna 26s ease-in-out infinite;
+}
+.adm::after {
+  background: radial-gradient(circle, #0891b2 0%, transparent 68%);
+  bottom: -20vw;
+  right: -14vw;
+  animation: tairna 32s ease-in-out infinite reverse;
+}
+
+@keyframes tairna {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4vw, 3vw, 0) scale(1.12);
+  }
+}
+
+.adm-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 26px 18px 90px;
+}
+
+/* ── Oopar ki patti ─────────────────────────────────────────────────────── */
+
+.adm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+}
+
+.adm-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-right: auto;
+}
+
+/* Chhota sa 3D dabba jo aahista ghoomta hai */
+.adm-cube {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  perspective: 260px;
+}
+.adm-cube i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  box-shadow: 0 8px 22px -8px var(--brand);
+  transform-style: preserve-3d;
+  animation: ghoomna 7s ease-in-out infinite;
+}
+
+@keyframes ghoomna {
+  0%,
+  100% {
+    transform: rotateY(0deg) rotateX(0deg);
+  }
+  50% {
+    transform: rotateY(180deg) rotateX(14deg);
+  }
+}
+
+.adm-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.adm-nav a {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 7px 13px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: color 0.18s, background 0.18s, border-color 0.18s, transform 0.18s;
+}
+.adm-nav a:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+}
+.adm-nav a[data-on='1'] {
+  color: #fff;
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.42);
+}
+
+/* ── Unwan ─────────────────────────────────────────────────────────────── */
+
+.adm-title {
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 30px 0 6px;
+  background: linear-gradient(100deg, #fff 18%, #a5b4fc 58%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.adm-sub {
+  font-size: 14px;
+  color: var(--ink-2);
+  margin: 0 0 22px;
+  line-height: 1.6;
+}
+
+/* ── Ginti ke tiles ────────────────────────────────────────────────────── */
+
+.adm-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+  perspective: 1100px;
+}
+
+.adm-stat {
+  padding: 16px 17px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015));
+  backdrop-filter: blur(12px);
+  transform-style: preserve-3d;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.3s, box-shadow 0.3s;
+}
+.adm-stat:hover {
+  transform: translateY(-4px) rotateX(7deg) rotateY(-4deg);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 22px 44px -26px var(--brand);
+}
+.adm-stat b {
+  display: block;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.adm-stat span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+
+.adm-card {
+  position: relative;
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+}
+.adm-card[data-tone='ai'] {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: linear-gradient(160deg, rgba(99, 102, 241, 0.14), rgba(34, 211, 238, 0.04));
+}
+.adm-card[data-tone='new'] {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: linear-gradient(160deg, rgba(251, 191, 36, 0.11), rgba(255, 255, 255, 0.015));
+}
+.adm-card[data-tone='quiet'] {
+  background: rgba(255, 255, 255, 0.022);
+  border-style: dashed;
+}
+
+.adm-h2 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0 0 8px;
+}
+.adm-h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 26px 0 8px;
+}
+.adm-p {
+  font-size: 13.8px;
+  line-height: 1.75;
+  color: var(--ink-2);
+  margin: 6px 0 12px;
+}
+.adm-hint {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
+  margin: 8px 0 0;
+}
+.adm-p code,
+.adm-hint code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.92em;
+}
+
+/* ── Paighaam ──────────────────────────────────────────────────────────── */
+
+.adm-flash,
+.adm-error {
+  font-size: 13.8px;
+  line-height: 1.7;
+  border-radius: 12px;
+  padding: 13px 16px;
+  margin-bottom: 16px;
+  border: 1px solid;
+  animation: utho 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.adm-flash {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.11);
+  border-color: rgba(52, 211, 153, 0.34);
+}
+.adm-error {
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(251, 113, 133, 0.34);
+}
+
+/* ── Tajweez / fehrist ke item ─────────────────────────────────────────── */
+
+.adm-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+  padding: 13px 16px;
+  border-radius: 13px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.032);
+  text-decoration: none;
+  color: var(--ink);
+  transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.22s, background 0.22s;
+}
+.adm-item:hover {
+  transform: translateX(4px);
+  border-color: rgba(99, 102, 241, 0.46);
+  background: rgba(99, 102, 241, 0.1);
+}
+.adm-item[data-off='1'] {
+  border-style: dashed;
+  opacity: 0.78;
+}
+.adm-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 190px;
+}
+.adm-item-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+.adm-item-n {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.adm-list {
+  display: grid;
+  gap: 7px;
+}
+
+/* ── Badge ─────────────────────────────────────────────────────────────── */
+
+.adm-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.adm-badge[data-tone='on'] {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.14);
+}
+.adm-badge[data-tone='off'] {
+  color: #fda4af;
+  background: rgba(251, 113, 133, 0.14);
+}
+.adm-badge[data-tone='count'] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  box-shadow: 0 6px 16px -8px var(--brand);
+}
+
+/* ── Button ────────────────────────────────────────────────────────────── */
+
+.adm-btn,
+.adm-btn-ghost,
+.adm-btn-go,
+.adm-btn-bad {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: inherit;
+  font-weight: 650;
+  border-radius: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.18s, background 0.18s,
+    border-color 0.18s;
+}
+.adm-btn {
+  font-size: 14px;
+  padding: 11px 19px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+}
+.adm-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.14);
+}
+.adm-btn-go {
+  font-size: 15px;
+  padding: 13px 26px;
+  color: #06231a;
+  border: none;
+  background: linear-gradient(135deg, #34d399, #22d3ee);
+  box-shadow: 0 14px 30px -16px #34d399;
+}
+.adm-btn-go:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 38px -16px #34d399;
+}
+.adm-btn-ghost {
+  font-size: 14px;
+  padding: 12px 20px;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  background: transparent;
+}
+.adm-btn-ghost:hover {
+  transform: translateY(-2px);
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+.adm-btn-bad {
+  font-size: 13.5px;
+  padding: 10px 17px;
+  color: #fda4af;
+  border: 1px solid rgba(251, 113, 133, 0.34);
+  background: rgba(244, 63, 94, 0.07);
+  margin-top: 12px;
+}
+.adm-btn-bad:hover {
+  transform: translateY(-2px);
+  background: rgba(244, 63, 94, 0.14);
+}
+.adm-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  align-items: center;
+}
+
+/* ── Form ──────────────────────────────────────────────────────────────── */
+
+.adm-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 16px;
+}
+.adm-input,
+.adm-area {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 11px 13px;
+  font-size: 14px;
+  line-height: 1.65;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-sizing: border-box;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.adm-area {
+  resize: vertical;
+}
+.adm-input:focus,
+.adm-area:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  background: rgba(0, 0, 0, 0.5);
+}
+.adm-input::placeholder,
+.adm-area::placeholder {
+  color: var(--ink-3);
+}
+
+.adm-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin-top: 16px;
+  cursor: pointer;
+}
+.adm-cb {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.adm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.045);
+  margin: 12px 0 6px;
+}
+
+/* ── Sawaal ki fehrist ─────────────────────────────────────────────────── */
+
+.adm-q {
+  margin: 11px 0 0;
+  padding-left: 29px;
+  display: grid;
+  gap: 5px;
+}
+.adm-q div {
+  font-size: 13.3px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  padding-left: 13px;
+  border-left: 2px solid rgba(99, 102, 241, 0.34);
+}
+
+/* ── Entrance — thora thora kar ke aana ────────────────────────────────── */
+
+@keyframes utho {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.adm-in {
+  animation: utho 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.adm-in:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.adm-in:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.adm-in:nth-child(4) {
+  animation-delay: 0.15s;
+}
+.adm-in:nth-child(5) {
+  animation-delay: 0.2s;
+}
+
+.adm-foot {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-top: 34px;
+  text-align: center;
+}
+.adm-foot a {
+  color: var(--ink-2);
+}
+
+/* ── Jin ko harkat se takleef ho ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .adm *,
+  .adm::before,
+  .adm::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .adm-stat:hover,
+  .adm-item:hover,
+  .adm-btn:hover,
+  .adm-btn-go:hover,
+  .adm-btn-ghost:hover,
+  .adm-btn-bad:hover {
+    transform: none;
+  }
+}
