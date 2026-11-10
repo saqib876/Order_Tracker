@@ -1013,3 +1013,49 @@ a.adm-tag:hover {
   color: var(--ink);
   border-color: var(--accent-line);
 }
+
+/* ── Chhoti ginti ki qatar (AI ka istemal) ─────────────────────────────── */
+
+.adm-mini {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 1px;
+  margin: 14px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--line);
+}
+.adm-mini > div {
+  padding: 12px 13px;
+  background: var(--card-2);
+}
+.adm-mini b {
+  display: block;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.adm-mini span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+:root[data-theme='dark'] .adm-mini > div {
+  background: #121829;
+}
+
+.adm-a {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+}
+.adm-a:hover {
+  border-bottom-color: var(--brand);
+}

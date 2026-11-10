@@ -97,6 +97,34 @@ export default async function QnaPage({
   const aiAaj = aiOn ? await aajKiGinti() : 0
   const aiHadd = Number(process.env.AI_MAX_PER_DAY) || 300
 
+  // ── AI ka istemal: aaj, hafta, mahina ───────────────────────────────────
+  // Google ka apna safha kabhi der se update hota hai, is liye apna hisaab
+  // bhi rakhte hain — ye ai_call_log se seedha aata hai.
+  const kabSe = (din: number) =>
+    new Date(Date.now() - din * 24 * 3600 * 1000).toISOString()
+
+  const callGinti = async (din: number) => {
+    const { count } = await supabaseAdmin
+      .from('ai_call_log')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', kabSe(din))
+    return count || 0
+  }
+
+  const [aiHafta, aiMahina, cacheCount] = aiOn
+    ? await Promise.all([
+        callGinti(7),
+        callGinti(30),
+        supabaseAdmin
+          .from('ai_topic_cache')
+          .select('message_hash', { count: 'exact', head: true })
+          .then((r) => r.count || 0),
+      ])
+    : [0, 0, 0]
+
+  // Roz ka ausat — isi se andaza hota hai ke Google ki hadd ke kitne kareeb hain
+  const rozAusat = Math.round(aiMahina / 30)
+
   const chalu = (topics || []).filter((t) => t.is_active)
   const totalQuestions = chalu.reduce(
     (a, t) =>
@@ -193,17 +221,56 @@ export default async function QnaPage({
         <section className="adm-card adm-in" data-tone="ai">
           <h2 className="adm-h2">Message samajhne wala AI</h2>
           {aiOn ? (
+            <>
             <p className="adm-p" style={{ margin: 0 }}>
               <span className="adm-badge" data-tone="on">
                 CHALU
               </span>{' '}
-              {aiProvider()} · andaz: {aiMode()} · aaj {aiAaj} dafa pucha gaya (roz ki hadd {aiHadd})
+              {aiProvider()} · andaz: {aiMode()}
               <br />
               <span className="adm-hint">
                 AI khud jawab nahi likhta — wo sirf batata hai ke baat kis topic ki hai, aur jawab
                 aap ka likha hua lafz ba lafz jata hai.
               </span>
             </p>
+
+            <div className="adm-mini">
+              <div>
+                <b>{aiAaj}</b>
+                <span>AAJ · hadd {aiHadd}</span>
+              </div>
+              <div>
+                <b>{aiHafta}</b>
+                <span>PICHHLE 7 DIN</span>
+              </div>
+              <div>
+                <b>{aiMahina}</b>
+                <span>PICHHLE 30 DIN</span>
+              </div>
+              <div>
+                <b>{rozAusat}</b>
+                <span>ROZ KA AUSAT</span>
+              </div>
+              <div>
+                <b>{cacheCount}</b>
+                <span>JUMLE YAAD · dobara nahi pucha jata</span>
+              </div>
+            </div>
+
+            <p className="adm-hint">
+              Google ki apni ginti aur limits:{' '}
+              <a
+                href="https://aistudio.google.com/usage"
+                target="_blank"
+                rel="noreferrer"
+                className="adm-a"
+              >
+                aistudio.google.com/usage
+              </a>{' '}
+              — wahan “Rate limit” wale tab mein RPM / TPM / RPD dikhte hain. Limit project par
+              lagti hai, key par nahi.
+            </p>
+            </>
           ) : (
             <p className="adm-p" style={{ margin: 0 }}>
               <span className="adm-badge" data-tone="off">
