@@ -240,3 +240,11 @@ create table if not exists wa_human_message (
 );
 alter table wa_human_message enable row level security;
 create index if not exists wa_human_message_phone_idx on wa_human_message (phone, sent_at desc);
+
+-- smb_message_echoes chalu hone ke baad Meta aap ke bheje hue message ka
+-- MATAN bhi deta hai. Us se pakki pehchan mumkin hui: quick reply wo matan
+-- hai jo KAI ALAG customers ko jata hai, jabke aap ki apni likhai sirf ek
+-- customer ke liye hoti hai.
+alter table wa_human_message add column if not exists text_hash text;
+alter table wa_human_message add column if not exists sample text;
+create index if not exists wa_human_message_hash_idx on wa_human_message (text_hash);

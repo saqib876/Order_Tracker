@@ -80,6 +80,16 @@ const HUMAN_PAUSE_MIN_MSGS = Number(process.env.HUMAN_PAUSE_MIN_MSGS) || 2
 // Itni dair ke andar ke message ek hi guftagu ginay jate hain
 const HUMAN_WINDOW_MINUTES = Number(process.env.HUMAN_WINDOW_MINUTES) || 60
 
+// Ab Meta hamein aap ke bheje hue message ka MATAN bhi deta hai
+// (smb_message_echoes). Is se pakki pehchan mumkin ho gayi: quick reply wo
+// matan hai jo KAI ALAG customers ko jata hai; aap ki apni likhai sirf ek
+// customer ke liye hoti hai. Itne alag customers ko ja chuka matan quick
+// reply mana jata hai — us par bot kabhi khamosh nahi hota.
+//
+// Bot ye KHUD seekhta hai: aap ko kuch likhna ya batana nahi parta, bas
+// apne quick replies hameshaa ki tarah bhejte rahein.
+const QUICK_REPLY_MIN_CUSTOMERS = Number(process.env.QUICK_REPLY_MIN_CUSTOMERS) || 3
+
 // Jab baat TEAM ke khane mein jaye (cancel, return, address, shikayat) —
 // ye jaan boojh kar lamba hai. Aisi baat ka faisla insaan hi karta hai, aur
 // beech mein bot ka bolna theek nahi.
@@ -821,73 +831,116 @@ async function claim(table: string, keys: Record<string, string>, windowMs: numb
  * customer se kuch dair bilkul khamosh ho jata hai.
  */
 async function insaniJawabDekho(value: any): Promise<void> {
-  const qatarein = [...(value?.statuses || []), ...(value?.message_echoes || [])]
-  if (!qatarein.length) return
+  const echoes = value?.message_echoes || []
+  const statuses = value?.statuses || []
+  if (!echoes.length && !statuses.length) return
 
   console.log(
-    `[wa] bahar jane wale message ki khabar: ${qatarein.length} ` +
-      `(statuses:${(value?.statuses || []).length} echoes:${(value?.message_echoes || []).length})`
+    `[wa] bahar jane wale message ki khabar: ${echoes.length + statuses.length} ` +
+      `(statuses:${statuses.length} echoes:${echoes.length})`
   )
 
-  for (const row of qatarein) {
-    const id = String(row?.id || '')
-    const phone = String(row?.recipient_id || row?.to || row?.from || '')
+  // ── 1) ECHOES — matan ke sath. Yahi pakki pehchan hai. ─────────────────
+  for (const e of echoes) {
+    const id = String(e?.id || '')
+    const phone = String(e?.to || e?.recipient_id || '')
     if (!id || !phone) continue
+    if (await hamaraHai(id, phone)) continue
 
-    // Hamara apna bheja hua message?
-    const { data: hamara } = await supabaseAdmin
-      .from('wa_bot_message')
-      .select('message_id')
-      .eq('message_id', id)
-      .maybeSingle()
-    if (hamara) continue
+    const matan = String(e?.text?.body || e?.caption || '').trim()
+    const hash = matan ? createHash('sha1').update(matan.toLowerCase().replace(/\s+/g, ' ')).digest('hex').slice(0, 32) : null
 
-    // Ho sakta hai bot ne abhi abhi bheja ho aur id likhi na gayi ho — is
-    // liye pichhle ek minute mein hamara koi message gaya ho to chhor dete hain
-    const abhiBheja = new Date(Date.now() - 60 * 1000).toISOString()
-    const { data: taza } = await supabaseAdmin
-      .from('wa_bot_message')
-      .select('message_id')
-      .eq('phone', phone)
-      .gt('sent_at', abhiBheja)
-      .limit(1)
-    if (taza && taza.length) continue
-
-    // Aap ka bheja hua message mehfooz karte hain. message_id primary key
-    // hai, is liye ek hi message ke "sent / delivered / read" teen khabrein
-    // aayen to bhi wo EK hi gina jata hai.
-    const { error: insErr } = await supabaseAdmin
+    await supabaseAdmin
       .from('wa_human_message')
-      .insert({ message_id: id, phone })
-    if (insErr && insErr.code !== '23505') {
-      console.warn('[wa] wa_human_message mein likh nahi saka:', insErr.message)
-    }
-    if (insErr) continue // pehle hi gina ja chuka
+      .upsert({ message_id: id, phone, text_hash: hash, sample: matan.slice(0, 200) })
 
-    const kabSe = new Date(Date.now() - HUMAN_WINDOW_MINUTES * 60 * 1000).toISOString()
-    const { count } = await supabaseAdmin
-      .from('wa_human_message')
-      .select('message_id', { count: 'exact', head: true })
-      .eq('phone', phone)
-      .gte('sent_at', kabSe)
-
-    const kitne = count || 1
-    if (kitne < HUMAN_PAUSE_MIN_MSGS) {
-      // Ek akela message — qareeb qareeb hamesha quick reply hota hai.
-      // Bot apna kaam karta rahega.
-      console.log(`[wa] bahar ek message gaya (${phone}) — quick reply samjha, bot chalta rahega`)
+    // Matan hi na ho (tasveer waghera) to purane andaze par
+    if (!hash) {
+      await gintiSeFaisla(phone)
       continue
     }
 
-    await supabaseAdmin.from('wa_human_pause').upsert({
-      phone,
-      until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    console.log(
-      `[wa] aap ne khud jawab diya (${kitne} message) — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`
-    )
+    // Yehi matan kitne ALAG customers ko ja chuka hai? Quick reply sab ko
+    // jata hai; aap ki apni likhai sirf ek customer ko. Yehi farq hai.
+    const { data: kahanGaya } = await supabaseAdmin
+      .from('wa_human_message')
+      .select('phone')
+      .eq('text_hash', hash)
+      .limit(200)
+
+    const alagLog = new Set((kahanGaya || []).map((r) => String(r.phone))).size
+    if (alagLog >= QUICK_REPLY_MIN_CUSTOMERS) {
+      console.log(`[wa] ye matan ${alagLog} customers ko ja chuka — quick reply, bot chalta rahega`)
+      continue
+    }
+
+    await khamoshLagao(phone, `aap ne khud likha (ye matan ${alagLog} customer tak gaya)`)
   }
+
+  // ── 2) STATUSES — sirf khabar, matan nahi ──────────────────────────────
+  // Echo aa chuka ho to wahi faisla kaafi hai (message_id pehle se mehfooz).
+  for (const st of statuses) {
+    const id = String(st?.id || '')
+    const phone = String(st?.recipient_id || '')
+    if (!id || !phone) continue
+    if (await hamaraHai(id, phone)) continue
+
+    const { error: insErr } = await supabaseAdmin
+      .from('wa_human_message')
+      .insert({ message_id: id, phone })
+    if (insErr) continue // pehle se gina ja chuka (ya echo se aa chuka)
+
+    await gintiSeFaisla(phone)
+  }
+}
+
+/** Ye message bot ne khud bheja tha? */
+async function hamaraHai(id: string, phone: string): Promise<boolean> {
+  const { data: hamara } = await supabaseAdmin
+    .from('wa_bot_message')
+    .select('message_id')
+    .eq('message_id', id)
+    .maybeSingle()
+  if (hamara) return true
+
+  // Ho sakta hai bot ne abhi abhi bheja ho aur id likhi na gayi ho
+  const abhiBheja = new Date(Date.now() - 60 * 1000).toISOString()
+  const { data: taza } = await supabaseAdmin
+    .from('wa_bot_message')
+    .select('message_id')
+    .eq('phone', phone)
+    .gt('sent_at', abhiBheja)
+    .limit(1)
+  return Boolean(taza && taza.length)
+}
+
+/**
+ * Matan maloom na ho to purana andaza: quick reply ek hi message hota hai,
+ * waqai baat karne par aap ek se zyada likhte hain.
+ */
+async function gintiSeFaisla(phone: string): Promise<void> {
+  const kabSe = new Date(Date.now() - HUMAN_WINDOW_MINUTES * 60 * 1000).toISOString()
+  const { count } = await supabaseAdmin
+    .from('wa_human_message')
+    .select('message_id', { count: 'exact', head: true })
+    .eq('phone', phone)
+    .gte('sent_at', kabSe)
+
+  const kitne = count || 1
+  if (kitne < HUMAN_PAUSE_MIN_MSGS) {
+    console.log(`[wa] bahar ek message gaya (${phone}) — quick reply samjha, bot chalta rahega`)
+    return
+  }
+  await khamoshLagao(phone, `${kitne} message gaye`)
+}
+
+async function khamoshLagao(phone: string, wajah: string): Promise<void> {
+  await supabaseAdmin.from('wa_human_pause').upsert({
+    phone,
+    until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+  console.log(`[wa] aap khud baat kar rahe hain — ${wajah} — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`)
 }
 
 /**
