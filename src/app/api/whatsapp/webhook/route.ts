@@ -98,6 +98,14 @@ const MANUAL_PAUSE_HOURS = Number(process.env.MANUAL_PAUSE_HOURS) || 24
 // rahe hon to bot ka beech mein bolna sab se bura lagta hai.)
 const MAX_REPLIES_PER_DAY = Number(process.env.MAX_REPLIES_PER_DAY) || 4
 
+// Cancel / address change / return jaisa jawab ek customer ko ek hi dafa
+// jata hai. Wo dobara wohi baat likhe to bot khamosh rehta hai (aap ke paas
+// manual check mein us ki request pehle se mojood hoti hai).
+//
+// 0 = kabhi dobara nahi. Koi number dein (jaise 30) to utne din baad wo
+// jawab dobara ja sakega.
+const MANUAL_REPLY_REPEAT_DAYS = Number(process.env.MANUAL_REPLY_REPEAT_DAYS) || 0
+
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -553,11 +561,25 @@ export async function POST(req: NextRequest) {
     })
 
     await clearState()
+    const label = MANUAL_REASON_LABEL[manualReason]
+
+    // Is baat ka jawab HAMESHA aap ki Excel se jata hai. Pehle poora naam
+    // ("Order Cancel"), phir shuru ka tukra, phir alfaz milana — aur in mein
+    // se kuch na mile to hi code ka apna message.
+    const excelJawab =
+      (await answerForTopic(label)) || (await getTopicAnswer(label)) || (await matchQna(text))
+    const matan = excelJawab || MANUAL_REASON_REPLY[manualReason]
+
     if (pehleSeMojood) {
-      console.log(`[wa] ${MANUAL_REASON_LABEL[manualReason]} pehle se queue mein — ${from} ko dobara jawab nahi`)
-    } else {
-      const qnaAnswer = await matchQna(text)
-      await bhejoAam(qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+      console.log(`[wa] ${label} pehle se queue mein — ${from} ko dobara jawab nahi`)
+    } else if (await manualJawabPehleGaya(from, manualReason)) {
+      // Request manual check mein jur chuki hai (upar), sirf message nahi jata
+      console.log(`[wa] ${label} ka jawab ${from} ko pehle ja chuka — dobara nahi bheja`)
+    } else if (await bhejoAam(matan)) {
+      await manualJawabDarj(from, manualReason)
+      if (!excelJawab) {
+        console.warn(`[wa] Excel mein "${label}" ka topic nahi mila — code ka jawab gaya`)
+      }
     }
 
     console.log(
@@ -770,6 +792,39 @@ function isFreshAskState(state: any): boolean {
   if (!state || state.state !== 'awaiting_order_info') return false
   const at = state.updated_at ? new Date(state.updated_at).getTime() : 0
   return Date.now() - at < ASK_STATE_HOURS * 3600 * 1000
+}
+
+/**
+ * Cancel / return / address wala jawab is customer ko pehle ja chuka hai?
+ *
+ * Haan to dobara nahi jata — us ki request manual check mein pehle se darj
+ * ho chuki hai, aur ek hi baat do dafa bhejna customer ko pareshan karta
+ * hai. Table na bane to purana tareeqa chalta rehta hai (jawab chala jata
+ * hai) — kuch tootta nahi.
+ */
+async function manualJawabPehleGaya(phone: string, reason: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('wa_manual_jawab')
+    .select('sent_at')
+    .eq('phone', phone)
+    .eq('reason', reason)
+    .maybeSingle()
+
+  if (error || !data) return false
+
+  if (MANUAL_REPLY_REPEAT_DAYS > 0) {
+    const guzra = Date.now() - new Date(String(data.sent_at)).getTime()
+    if (guzra > MANUAL_REPLY_REPEAT_DAYS * 24 * 3600 * 1000) return false
+  }
+  return true
+}
+
+/** Jawab chala gaya — ab is customer ko isi baat par dobara nahi jayega */
+async function manualJawabDarj(phone: string, reason: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('wa_manual_jawab')
+    .upsert({ phone, reason, sent_at: new Date().toISOString() }, { onConflict: 'phone,reason' })
+  if (error) console.warn('[wa] wa_manual_jawab mein likh nahi saka:', error.message)
 }
 
 /**

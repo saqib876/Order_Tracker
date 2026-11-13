@@ -248,3 +248,23 @@ create index if not exists wa_human_message_phone_idx on wa_human_message (phone
 alter table wa_human_message add column if not exists text_hash text;
 alter table wa_human_message add column if not exists sample text;
 create index if not exists wa_human_message_hash_idx on wa_human_message (text_hash);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 13. wa_manual_jawab — cancel / return / address ka jawab EK HI DAFA
+--
+-- Customer ek hi baat kai dafa likhta hai ("cancel kar dein", phir "cancel?",
+-- phir "please cancel"). Jawab pehli dafa chala jata hai; us ke baad us ki
+-- request aap ke manual check mein darj hoti rehti hai lekin message dobara
+-- nahi jata.
+--
+-- Chaabi (phone + reason) hi pehredar hai: doosri dafa likhne ki koshish
+-- nakaam ho jati hai.
+-- ───────────────────────────────────────────────────────────────────────────
+create table if not exists wa_manual_jawab (
+  phone    text not null,
+  reason   text not null,
+  sent_at  timestamptz not null default now(),
+  primary key (phone, reason)
+);
+
+alter table wa_manual_jawab enable row level security;

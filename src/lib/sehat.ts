@@ -263,6 +263,7 @@ export async function sehatLo(): Promise<Sehat> {
   for (const t of [
     'wa_human_message',
     'wa_human_pause',
+    'wa_manual_jawab',
     'wa_bot_message',
     'wa_recent_reply',
     'wa_tracking_sent',
@@ -298,6 +299,13 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: `Meta se echo aa raha hai — ${matanWale.length} message matan ke sath mehfooz hue.`,
       theek: true,
+    })
+  }
+
+  if (!tables['wa_manual_jawab']?.thik) {
+    khulasa.push({
+      baat: 'wa_manual_jawab table nahi bani — cancel/return ka jawab abhi bhi dobara ja sakta hai.',
+      theek: false,
     })
   }
 
