@@ -55,7 +55,18 @@ const SAME_REPLY_HOURS =
 // Aap (ya team) ne khud customer ko jawab de diya ho to bot itni dair us
 // customer se bilkul khamosh rehta hai. Aap baat kar rahe hon aur beech mein
 // bot ka taiyar shuda message chala jaye — ye sab se buri baat hai.
-const HUMAN_PAUSE_HOURS = Number(process.env.HUMAN_PAUSE_HOURS) || 24
+//
+// AHEM: ye waqt CHHOTA hona chahiye. Har dafa jab aap khud jawab dete hain,
+// ginti phir se shuru ho jati hai (upsert `until` ko aage barha deta hai) —
+// yani jab tak aap baat kar rahe hain, bot chup hi rahega. Is liye bari
+// hadd rakhne ka koi faida nahi, nuqsan hai: 24 ghante rakhne se ek chhote
+// se jawab ke baad poora din us customer ko TRACKING tak nahi jati thi.
+const HUMAN_PAUSE_HOURS = Number(process.env.HUMAN_PAUSE_HOURS) || 2
+
+// Jab baat TEAM ke khane mein jaye (cancel, return, address, shikayat) —
+// ye jaan boojh kar lamba hai. Aisi baat ka faisla insaan hi karta hai, aur
+// beech mein bot ka bolna theek nahi.
+const MANUAL_PAUSE_HOURS = Number(process.env.MANUAL_PAUSE_HOURS) || 24
 // Ek customer ko bot din bhar mein itne se zyada jawab nahi dega. Is ke baad
 // baat aap ke haath mein — bot khamosh. (Jab aap khud customer se baat kar
 // rahe hon to bot ka beech mein bolna sab se bura lagta hai.)
@@ -487,7 +498,7 @@ export async function POST(req: NextRequest) {
     // taiyar shuda message chala jata tha.
     await supabaseAdmin.from('wa_human_pause').upsert({
       phone: from,
-      until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
+      until: new Date(Date.now() + MANUAL_PAUSE_HOURS * 3600 * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     })
 
