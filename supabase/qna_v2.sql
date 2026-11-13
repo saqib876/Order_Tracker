@@ -249,22 +249,33 @@ alter table wa_human_message add column if not exists text_hash text;
 alter table wa_human_message add column if not exists sample text;
 create index if not exists wa_human_message_hash_idx on wa_human_message (text_hash);
 
--- ───────────────────────────────────────────────────────────────────────────
--- 13. wa_manual_jawab — cancel / return / address ka jawab EK HI DAFA
+-- ────────────────────────────────────────────────────────────────────────
+-- 13. wa_manual_jawab — cancel / return / address ka jawab EK ORDER par
+--     sirf EK DAFA
 --
 -- Customer ek hi baat kai dafa likhta hai ("cancel kar dein", phir "cancel?",
 -- phir "please cancel"). Jawab pehli dafa chala jata hai; us ke baad us ki
--- request aap ke manual check mein darj hoti rehti hai lekin message dobara
--- nahi jata.
+-- request aap ke manual check mein jurti rehti hai lekin message dobara nahi
+-- jata.
 --
--- Chaabi (phone + reason) hi pehredar hai: doosri dafa likhne ki koshish
--- nakaam ho jati hai.
--- ───────────────────────────────────────────────────────────────────────────
-create table if not exists wa_manual_jawab (
-  phone    text not null,
-  reason   text not null,
-  sent_at  timestamptz not null default now(),
-  primary key (phone, reason)
+-- Chaabi mein ORDER bhi shamil hai: wohi customer NAYA order kare aur us ko
+-- cancel karwana chahe to us naye order ka jawab chala jayega.
+--
+-- order_number = '-' ka matlab bot ko pata hi nahi chala ke kis order ki baat
+-- hai. Aisi surat mein pabandi hamesha ke liye nahi lagti, sirf kuch ghante
+-- (MANUAL_UNKNOWN_REPEAT_HOURS, default 48).
+--
+-- Ye table pehle do khanon ki thi; agar aap ne wo bana li thi to ye SQL use
+-- gira kar nayi bana deta hai. Is mein koi aisa data nahi jo kaam ka ho.
+-- ────────────────────────────────────────────────────────────────────────
+drop table if exists wa_manual_jawab;
+
+create table wa_manual_jawab (
+  phone         text not null,
+  reason        text not null,
+  order_number  text not null default '-',
+  sent_at       timestamptz not null default now(),
+  primary key (phone, reason, order_number)
 );
 
 alter table wa_manual_jawab enable row level security;

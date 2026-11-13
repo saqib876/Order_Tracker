@@ -98,13 +98,24 @@ const MANUAL_PAUSE_HOURS = Number(process.env.MANUAL_PAUSE_HOURS) || 24
 // rahe hon to bot ka beech mein bolna sab se bura lagta hai.)
 const MAX_REPLIES_PER_DAY = Number(process.env.MAX_REPLIES_PER_DAY) || 4
 
-// Cancel / address change / return jaisa jawab ek customer ko ek hi dafa
-// jata hai. Wo dobara wohi baat likhe to bot khamosh rehta hai (aap ke paas
-// manual check mein us ki request pehle se mojood hoti hai).
+// Cancel / address change / return jaisa jawab EK ORDER par ek hi dafa jata
+// hai. Usi order ke liye customer dobara likhe to bot khamosh rehta hai
+// (us ki request aap ke manual check mein pehle se mojood hoti hai).
 //
-// 0 = kabhi dobara nahi. Koi number dein (jaise 30) to utne din baad wo
-// jawab dobara ja sakega.
+// NAYA order aaye to ye pabandi us par nahi lagti — naye order ka jawab
+// jayega, kyunki wo alag baat hai.
+//
+// 0 = usi order par kabhi dobara nahi. Koi number dein (jaise 30) to utne
+// din baad usi order par bhi dobara ja sakega.
 const MANUAL_REPLY_REPEAT_DAYS = Number(process.env.MANUAL_REPLY_REPEAT_DAYS) || 0
+
+// Kabhi bot ko pata hi nahi chalta ke baat kis order ki ho rahi hai. Aise
+// mein "hamesha" ki pabandi khatarnak hai — mahine baad wo naye order ki
+// baat kar raha ho sakta hai. Is liye sirf itne ghante ki khamoshi.
+const MANUAL_ANJAAN_ORDER_HOURS = Number(process.env.MANUAL_UNKNOWN_REPEAT_HOURS) || 48
+
+// Order ka pata na ho to is nishani se darj hota hai
+const ANJAAN_ORDER = '-'
 
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
@@ -563,6 +574,9 @@ export async function POST(req: NextRequest) {
     await clearState()
     const label = MANUAL_REASON_LABEL[manualReason]
 
+    // Pabandi poore number par nahi, US ORDER par lagti hai
+    const orderKey = contextOrder ? String(contextOrder.order_number) : ANJAAN_ORDER
+
     // Is baat ka jawab HAMESHA aap ki Excel se jata hai. Pehle poora naam
     // ("Order Cancel"), phir shuru ka tukra, phir alfaz milana — aur in mein
     // se kuch na mile to hi code ka apna message.
@@ -572,11 +586,11 @@ export async function POST(req: NextRequest) {
 
     if (pehleSeMojood) {
       console.log(`[wa] ${label} pehle se queue mein — ${from} ko dobara jawab nahi`)
-    } else if (await manualJawabPehleGaya(from, manualReason)) {
+    } else if (await manualJawabPehleGaya(from, manualReason, orderKey)) {
       // Request manual check mein jur chuki hai (upar), sirf message nahi jata
       console.log(`[wa] ${label} ka jawab ${from} ko pehle ja chuka — dobara nahi bheja`)
     } else if (await bhejoAam(matan)) {
-      await manualJawabDarj(from, manualReason)
+      await manualJawabDarj(from, manualReason, orderKey)
       if (!excelJawab) {
         console.warn(`[wa] Excel mein "${label}" ka topic nahi mila — code ka jawab gaya`)
       }
@@ -795,35 +809,49 @@ function isFreshAskState(state: any): boolean {
 }
 
 /**
- * Cancel / return / address wala jawab is customer ko pehle ja chuka hai?
+ * Cancel / return / address wala jawab IS ORDER par pehle ja chuka hai?
  *
  * Haan to dobara nahi jata — us ki request manual check mein pehle se darj
  * ho chuki hai, aur ek hi baat do dafa bhejna customer ko pareshan karta
- * hai. Table na bane to purana tareeqa chalta rehta hai (jawab chala jata
- * hai) — kuch tootta nahi.
+ * hai. Wohi customer NAYA order kare to ye pabandi us par nahi lagti.
+ *
+ * Table na bane to purana tareeqa chalta rehta hai (jawab chala jata hai)
+ * — kuch tootta nahi.
  */
-async function manualJawabPehleGaya(phone: string, reason: string): Promise<boolean> {
+async function manualJawabPehleGaya(
+  phone: string,
+  reason: string,
+  order: string
+): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from('wa_manual_jawab')
     .select('sent_at')
     .eq('phone', phone)
     .eq('reason', reason)
+    .eq('order_number', order)
     .maybeSingle()
 
   if (error || !data) return false
 
+  const guzra = Date.now() - new Date(String(data.sent_at)).getTime()
+
+  // Order ka pata hi nahi tha — thori dair ki khamoshi, hamesha ki nahi
+  if (order === ANJAAN_ORDER) return guzra < MANUAL_ANJAAN_ORDER_HOURS * 3600 * 1000
+
   if (MANUAL_REPLY_REPEAT_DAYS > 0) {
-    const guzra = Date.now() - new Date(String(data.sent_at)).getTime()
-    if (guzra > MANUAL_REPLY_REPEAT_DAYS * 24 * 3600 * 1000) return false
+    return guzra < MANUAL_REPLY_REPEAT_DAYS * 24 * 3600 * 1000
   }
   return true
 }
 
-/** Jawab chala gaya — ab is customer ko isi baat par dobara nahi jayega */
-async function manualJawabDarj(phone: string, reason: string): Promise<void> {
+/** Jawab chala gaya — ab isi order par dobara nahi jayega */
+async function manualJawabDarj(phone: string, reason: string, order: string): Promise<void> {
   const { error } = await supabaseAdmin
     .from('wa_manual_jawab')
-    .upsert({ phone, reason, sent_at: new Date().toISOString() }, { onConflict: 'phone,reason' })
+    .upsert(
+      { phone, reason, order_number: order, sent_at: new Date().toISOString() },
+      { onConflict: 'phone,reason,order_number' }
+    )
   if (error) console.warn('[wa] wa_manual_jawab mein likh nahi saka:', error.message)
 }
 
