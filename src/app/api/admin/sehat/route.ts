@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { looksLikeOrderIntent } from '@/lib/orderIntent'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -142,6 +143,25 @@ export async function GET(req: NextRequest) {
     'AI calls': await ginti('ai_call_log', 'created_at', 24),
   }
 
+  // ── 5b) Excel ki list saaf hai? ────────────────────────────────────────
+  // Order tracking wale sawaal yahan nahi aane chahiye — wo apni jagah
+  // (order_sawaal_log) jate hain. Chand taza sawaal khud parh kar dekhte hain.
+  const { data: tazaSawaal } = await supabaseAdmin
+    .from('unmatched_messages')
+    .select('message_text,created_at')
+    .gte('created_at', ghanteQabl(24 * 7))
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  const parkhe = tazaSawaal || []
+  const orderWale = parkhe.filter((r) => looksLikeOrderIntent(String(r.message_text || '')))
+
+  const excelKiSafai = {
+    'parkhe gaye sawaal (7 din)': parkhe.length,
+    'in mein order tracking wale': orderWale.length,
+    namune: orderWale.slice(0, 8).map((r) => String(r.message_text || '').slice(0, 90)),
+  }
+
   // ── 6) Settings (koi secret nahi) ──────────────────────────────────────
   const settings = {
     AI_MODE: process.env.AI_MODE || 'check (default)',
@@ -177,8 +197,17 @@ export async function GET(req: NextRequest) {
   )
   khulasa.push(`Is waqt ${(pauses || []).length} customers par bot khamosh hai (tracking phir bhi jati hai).`)
 
+  if (parkhe.length) {
+    khulasa.push(
+      orderWale.length
+        ? `Excel ki list mein ${orderWale.length} sawaal abhi bhi order tracking wale lag rahe hain (${parkhe.length} parkhe).`
+        : `Excel ki list saaf hai — ${parkhe.length} sawaalon mein ek bhi order tracking wala nahi.`
+    )
+  }
+
   return NextResponse.json({
     'ek nazar mein': khulasa,
+    'Excel ki list saaf hai?': excelKiSafai,
     'pichle 24 ghante': kaam,
     'aap ke bheje message (7 din)': {
       kul: rows.length,
