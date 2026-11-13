@@ -156,6 +156,9 @@ export default async function QnaPage({
             </Link>
             <Link href={topicsHref}>Topics</Link>
             <Link href={`/admin/review?key=${encodeURIComponent(adminKey)}`}>Review</Link>
+            <a href={`/api/admin/sehat?key=${encodeURIComponent(adminKey)}`} target="_blank" rel="noreferrer">
+              Sehat
+            </a>
             <ThemeToggle />
           </span>
         </nav>
