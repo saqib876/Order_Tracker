@@ -354,15 +354,26 @@ export async function POST(req: NextRequest) {
   // taiyar shuda jawab, greeting, Q&A aur AI sab ruke rehte hain — lekin
   // agar customer ka asli order mil jaye to us ki tracking phir bhi jati
   // hai. (Band karna ho to TRACKING_DURING_PAUSE=0)
-  const khamoshi = await insaanBaatKarRahaHai(from)
   const trackingBhiRoken = process.env.TRACKING_DURING_PAUSE === '0'
-  if (khamoshi) {
-    if (trackingBhiRoken) {
-      console.log(`[wa] aap khud baat kar rahe hain — ${from} ko bot kuch nahi bhejega`)
-      return NextResponse.json({ ok: true })
-    }
+  const insaanHai = await insaanBaatKarRahaHai(from)
+  if (insaanHai && trackingBhiRoken) {
+    console.log(`[wa] aap khud baat kar rahe hain — ${from} ko bot kuch nahi bhejega`)
+    return NextResponse.json({ ok: true })
+  }
+  if (insaanHai) {
     console.log(`[wa] aap khud baat kar rahe hain — ${from} ko sirf tracking ja sakti hai`)
   }
+
+  // Bot aaj is customer ko kitni dafa jawab de chuka? Had se zyada ho to
+  // aage baat insaan ki hai. Lekin yahan bhi tracking mustasna hai: wo khud
+  // apni hadd rakhti hai (ek order ki tracking 24 ghante mein ek dafa), is
+  // liye us se bakwaas nahi barhti.
+  const hadParHai = await hadSeZyadaJawab(from)
+  if (hadParHai) {
+    console.log(`[wa] aaj ${MAX_REPLIES_PER_DAY} jawab ja chuke — ${from} ko sirf tracking`)
+  }
+
+  const khamoshi = insaanHai || hadParHai
 
   /**
    * Aam jawab bhejne ka rasta — greeting, Q&A, AI, "order number bhejein".
@@ -377,12 +388,6 @@ export async function POST(req: NextRequest) {
     return bhejo(from, matan)
   }
 
-  // Bot aaj is customer ko kitni dafa jawab de chuka? Had se zyada ho to
-  // aage baat insaan ki hai — bot khamosh ho jata hai.
-  if (await hadSeZyadaJawab(from)) {
-    console.log(`[wa] aaj ${MAX_REPLIES_PER_DAY} jawab ja chuke — ${from} se bot khamosh`)
-    return NextResponse.json({ ok: true })
-  }
 
   // ── Tasveer / video bina caption ke ─────────────────────────────────────
   // Customer aksar sirf screenshot bhej deta hai, likhta kuch nahi. Teen
