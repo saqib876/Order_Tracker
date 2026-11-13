@@ -49,6 +49,8 @@ export interface Sehat {
     khamoshAbhi: number
   }
   jawabBreakdown: JawabQism[]
+  zyadaJawab: { phone: string; kitne: number }[]
+  hadParLog: number
   matanList: Matan[]
   echo: { kul: number; matanWale: number; sirfKhabar: number }
   khamoshi: { phone: string; kabTak: string }[]
@@ -140,6 +142,20 @@ export async function sehatLo(): Promise<Sehat> {
     s.add(String(r.phone))
     perHash.set(h, s)
   }
+
+  // Kis customer ko kitne jawab gaye — "extra jawab" yahin pakra jata hai
+  const perLog = new Map<string, number>()
+  for (const r of jawab) {
+    const ph = String(r.phone)
+    perLog.set(ph, (perLog.get(ph) || 0) + 1)
+  }
+  const zyadaJawab = Array.from(perLog.entries())
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([phone, kitne]) => ({ phone, kitne }))
+  const hadPar = Number(process.env.MAX_REPLIES_PER_DAY) || 4
+  const hadParLog = Array.from(perLog.values()).filter((n) => n >= hadPar).length
 
   const tracking24 = await ginti('wa_tracking_sent', 'sent_at', 24)
 
@@ -309,6 +325,13 @@ export async function sehatLo(): Promise<Sehat> {
     })
   }
 
+  if (hadParLog > 0) {
+    khulasa.push({
+      baat: `${hadParLog} customers ko aaj ${hadPar} ya us se zyada jawab gaye — had par pohonch gaye.`,
+      theek: false,
+    })
+  }
+
   const anjaanKul = jane.find((j) => j.qism === 'anjaan')?.kitne || 0
   if (anjaanKul > 0) {
     khulasa.push({
@@ -329,6 +352,8 @@ export async function sehatLo(): Promise<Sehat> {
       khamoshAbhi: (pauses || []).length,
     },
     jawabBreakdown: jane,
+    zyadaJawab,
+    hadParLog,
     matanList,
     echo: {
       kul: rows.length,

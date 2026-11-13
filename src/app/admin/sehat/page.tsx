@@ -191,6 +191,48 @@ export default async function SehatPage({
           )}
         </div>
 
+        {/* Kis customer ko kitne jawab */}
+        <div className="adm-sec">
+          <div className="adm-sec-head">
+            <h2>Kis customer ko kitne jawab gaye</h2>
+            <p>
+              Aam tor par ek customer ko ek ya do jawab jate hain. Kisi ko{' '}
+              <b>{s.settings.MAX_REPLIES_PER_DAY}</b> ya us se zyada chale jayein to bot khud ruk
+              jata hai. Yahan sirf wo customers hain jin ko ek se zyada jawab gaye.
+            </p>
+            <span className="adm-sec-n">{s.zyadaJawab.length}</span>
+          </div>
+
+          {s.zyadaJawab.length === 0 ? (
+            <p className="adm-khali">
+              Har customer ko sirf ek jawab gaya - koi message dohraya nahi gaya.
+            </p>
+          ) : (
+            <div className="adm-list">
+              {s.zyadaJawab.map((c, i) => (
+                <div className="adm-item" key={i} data-off={c.kitne >= 4 ? '1' : undefined}>
+                  <span
+                    className="adm-dot"
+                    style={{ background: c.kitne >= 4 ? '#f43f5e' : c.kitne >= 3 ? '#f59e0b' : '#10b981' }}
+                    aria-hidden
+                  />
+                  <span className="adm-item-name">
+                    {c.phone}
+                    <span className="adm-item-sub">
+                      {c.kitne >= 4
+                        ? 'rozana ki had par - bot is se aage khamosh ho jata hai'
+                        : c.kitne >= 3
+                        ? 'thore zyada - ek dafa chat dekh lein'
+                        : 'aam baat'}
+                    </span>
+                  </span>
+                  <span className="adm-num">{c.kitne}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* ── Aap ke apne bheje message ────────────────────────────────── */}
         <div className="adm-sec">
           <div className="adm-sec-head">
