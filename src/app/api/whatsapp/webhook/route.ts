@@ -63,6 +63,23 @@ const SAME_REPLY_HOURS =
 // se jawab ke baad poora din us customer ko TRACKING tak nahi jati thi.
 const HUMAN_PAUSE_HOURS = Number(process.env.HUMAN_PAUSE_HOURS) || 2
 
+// Aap ka QUICK REPLY har customer ko jata hai — wo "aap baat kar rahe hain"
+// ka saboot nahi.
+//
+// Masla ye hai ke Meta hamein sirf itna batata hai ke "ek message bahar
+// gaya" — MATAN nahi batata. Is liye bot apni aankh se quick reply aur aap
+// ki apni likhai mein farq nahi kar sakta. (Matan tab milta jab Meta ke
+// developer dashboard se `smb_message_echoes` chalu hota, lekin wo account
+// abhi khulta hi nahi.)
+//
+// Is liye GINTI se faisla karte hain, jo aap ki apni baat par bana hai:
+// quick reply EK message hota hai aur bas. Aap waqai kisi customer se baat
+// karen to ek se zyada message likhte hain. Chunanche pehla message
+// nazarandaz, doosre par bot khamosh.
+const HUMAN_PAUSE_MIN_MSGS = Number(process.env.HUMAN_PAUSE_MIN_MSGS) || 2
+// Itni dair ke andar ke message ek hi guftagu ginay jate hain
+const HUMAN_WINDOW_MINUTES = Number(process.env.HUMAN_WINDOW_MINUTES) || 60
+
 // Jab baat TEAM ke khane mein jaye (cancel, return, address, shikayat) —
 // ye jaan boojh kar lamba hai. Aisi baat ka faisla insaan hi karta hai, aur
 // beech mein bot ka bolna theek nahi.
@@ -836,12 +853,40 @@ async function insaniJawabDekho(value: any): Promise<void> {
       .limit(1)
     if (taza && taza.length) continue
 
+    // Aap ka bheja hua message mehfooz karte hain. message_id primary key
+    // hai, is liye ek hi message ke "sent / delivered / read" teen khabrein
+    // aayen to bhi wo EK hi gina jata hai.
+    const { error: insErr } = await supabaseAdmin
+      .from('wa_human_message')
+      .insert({ message_id: id, phone })
+    if (insErr && insErr.code !== '23505') {
+      console.warn('[wa] wa_human_message mein likh nahi saka:', insErr.message)
+    }
+    if (insErr) continue // pehle hi gina ja chuka
+
+    const kabSe = new Date(Date.now() - HUMAN_WINDOW_MINUTES * 60 * 1000).toISOString()
+    const { count } = await supabaseAdmin
+      .from('wa_human_message')
+      .select('message_id', { count: 'exact', head: true })
+      .eq('phone', phone)
+      .gte('sent_at', kabSe)
+
+    const kitne = count || 1
+    if (kitne < HUMAN_PAUSE_MIN_MSGS) {
+      // Ek akela message — qareeb qareeb hamesha quick reply hota hai.
+      // Bot apna kaam karta rahega.
+      console.log(`[wa] bahar ek message gaya (${phone}) — quick reply samjha, bot chalta rahega`)
+      continue
+    }
+
     await supabaseAdmin.from('wa_human_pause').upsert({
       phone,
       until: new Date(Date.now() + HUMAN_PAUSE_HOURS * 3600 * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     })
-    console.log(`[wa] aap ne khud jawab diya — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`)
+    console.log(
+      `[wa] aap ne khud jawab diya (${kitne} message) — ${phone} se bot ${HUMAN_PAUSE_HOURS} ghante khamosh`
+    )
   }
 }
 

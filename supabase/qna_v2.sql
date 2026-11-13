@@ -220,3 +220,23 @@ update qna_topics
  where is_active = false
    and off_reason is null
    and topic ilike 'Model / Design Availability%';
+
+-- ══ Aap ke apne (bot ke nahi) bheje hue message ════════════════════════════
+--
+-- Meta hamein sirf itna batata hai ke "ek message bahar gaya" — MATAN nahi.
+-- Is liye bot apni aankh se aap ka QUICK REPLY (jo har customer ko jata hai)
+-- aur aap ki apni likhai mein farq nahi kar sakta.
+--
+-- Chunanche ginti se faisla hota hai: quick reply ek hi message hota hai,
+-- jabke waqai baat karne par aap ek se zyada message likhte hain. Ye table
+-- wohi ginti rakhti hai.
+--
+-- message_id primary key hai, is liye ek hi message ki "sent / delivered /
+-- read" teen khabrein aayen to bhi wo EK hi gina jata hai.
+create table if not exists wa_human_message (
+  message_id text        primary key,
+  phone      text        not null,
+  sent_at    timestamptz not null default now()
+);
+alter table wa_human_message enable row level security;
+create index if not exists wa_human_message_phone_idx on wa_human_message (phone, sent_at desc);
