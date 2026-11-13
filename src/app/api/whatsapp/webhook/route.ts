@@ -345,9 +345,36 @@ export async function POST(req: NextRequest) {
   // Aise mein bot ka koi bhi taiyar shuda jawab bemaani hai (customer ne
   // "Okay cancel kr dain" likha aur aap cancel kar chuke the, phir bhi bot
   // ne cancellation policy bhej di thi).
-  if (await insaanBaatKarRahaHai(from)) {
-    console.log(`[wa] aap khud baat kar rahe hain — ${from} ko bot kuch nahi bhejega`)
-    return NextResponse.json({ ok: true })
+  //
+  // EK ISTISNA: TRACKING.
+  // Asli maamla jo ye sabaq de gaya — aap ne customer ko likha "order place
+  // kar ke order no bata dain", customer ne agle hi minute order number
+  // bhej diya, aur bot chup raha. Halanke jo kuch us waqt bhejna chahiye
+  // tha wo bilkul wohi tha jo bot bhejta hai. Is liye khamoshi ke dauran
+  // taiyar shuda jawab, greeting, Q&A aur AI sab ruke rehte hain — lekin
+  // agar customer ka asli order mil jaye to us ki tracking phir bhi jati
+  // hai. (Band karna ho to TRACKING_DURING_PAUSE=0)
+  const khamoshi = await insaanBaatKarRahaHai(from)
+  const trackingBhiRoken = process.env.TRACKING_DURING_PAUSE === '0'
+  if (khamoshi) {
+    if (trackingBhiRoken) {
+      console.log(`[wa] aap khud baat kar rahe hain — ${from} ko bot kuch nahi bhejega`)
+      return NextResponse.json({ ok: true })
+    }
+    console.log(`[wa] aap khud baat kar rahe hain — ${from} ko sirf tracking ja sakti hai`)
+  }
+
+  /**
+   * Aam jawab bhejne ka rasta — greeting, Q&A, AI, "order number bhejein".
+   * Khamoshi chal rahi ho to ye sab ruk jate hain. Tracking is ke bajaye
+   * seedha bhejo() istemal karti hai, is liye wo guzar jati hai.
+   */
+  const bhejoAam = async (matan: string): Promise<boolean> => {
+    if (khamoshi) {
+      console.log(`[wa] khamoshi — ${from} ko aam jawab nahi bheja`)
+      return false
+    }
+    return bhejo(from, matan)
   }
 
   // Bot aaj is customer ko kitni dafa jawab de chuka? Had se zyada ho to
@@ -372,7 +399,7 @@ export async function POST(req: NextRequest) {
   const tasveerHai = message?.type === 'image' || message?.type === 'document'
 
   if (!text) {
-    if (tasveerHai) await tasveerKaJawab(message, from)
+    if (tasveerHai) await tasveerKaJawab(message, from, khamoshi)
     return NextResponse.json({ ok: true })
   }
 
@@ -414,7 +441,7 @@ export async function POST(req: NextRequest) {
     const jawab = mila ? mila.answer : await getTopicAnswer('custom')
     if (jawab) {
       await clearState()
-      await bhejo(from, jawab)
+      await bhejoAam(jawab)
       console.log(`[wa] customization — ${from}`)
       return NextResponse.json({ ok: true })
     }
@@ -431,7 +458,7 @@ export async function POST(req: NextRequest) {
   if (plan.modelAvailability) {
     const orderGuide = await getGreetingMessage()
     await clearState()
-    await bhejo(from, orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
+    await bhejoAam(orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
     // Greeting isi message mein ja chuki — alag se dobara na jaye
     await markGreeted(from)
     console.log(`[wa] model availability — ${from}`)
@@ -507,7 +534,7 @@ export async function POST(req: NextRequest) {
       console.log(`[wa] ${MANUAL_REASON_LABEL[manualReason]} pehle se queue mein — ${from} ko dobara jawab nahi`)
     } else {
       const qnaAnswer = await matchQna(text)
-      await bhejo(from, qnaAnswer || MANUAL_REASON_REPLY[manualReason])
+      await bhejoAam(qnaAnswer || MANUAL_REASON_REPLY[manualReason])
     }
 
     console.log(
@@ -568,8 +595,7 @@ export async function POST(req: NextRequest) {
   if (confirmationNumber || (plan.readNumbers && (orderNumber || phoneInText))) {
     await clearState()
     const webTrack = await getTrackLinkAnswer()
-    await bhejo(
-      from,
+    await bhejoAam(
       webTrack ||
         [
           'Is Number Se Koi Order Nahi Mil Raha. Please Apna Correct ',
@@ -608,7 +634,7 @@ export async function POST(req: NextRequest) {
     // Replacement Policy). AI se poochte hain ke baat waqai isi topic ki
     // hai ya nahi. AI mana kare to bot khamosh — ek message bacha.
     const shakWaliHadd = Number(process.env.AI_CHECK_BELOW) || 0.6
-    if (qna.score < shakWaliHadd && aiAvailable()) {
+    if (qna.score < shakWaliHadd && aiAvailable() && !khamoshi) {
       const raye = await samjho(text)
       if (raye) {
         if (raye.insaan) {
@@ -626,7 +652,7 @@ export async function POST(req: NextRequest) {
           if (behtar) {
             console.log(`[wa] AI ne topic badla: "${qna.topic}" → "${raye.topic}"`)
             if (state) await clearState()
-            await bhejo(from, behtar)
+            await bhejoAam(behtar)
             await naySawaalLikho(from, text)
             return NextResponse.json({ ok: true })
           }
@@ -634,7 +660,7 @@ export async function POST(req: NextRequest) {
       }
     }
     if (state) await clearState()
-    await bhejo(from, qna.answer)
+    await bhejoAam(qna.answer)
     return NextResponse.json({ ok: true })
   }
 
@@ -650,7 +676,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await bhejo(from, ORDER_INFO_MAANGO)
+    await bhejoAam(ORDER_INFO_MAANGO)
     return NextResponse.json({ ok: true })
   }
 
@@ -665,7 +691,7 @@ export async function POST(req: NextRequest) {
   // bot khamosh, aur jumla Excel ki "Naye Sawaal" list mein chala jata hai.
   const asalSawaal = !plan.noQuestion && !plan.orderish && !isJunkMessage(text)
 
-  if (asalSawaal && aiMode() === 'full' && aiAvailable()) {
+  if (asalSawaal && aiMode() === 'full' && aiAvailable() && !khamoshi) {
     const raye = await samjho(text)
     if (raye && !raye.insaan && raye.topic) {
       const jawab = await answerForTopic(raye.topic)
@@ -675,7 +701,7 @@ export async function POST(req: NextRequest) {
         // Jumla Excel mein bhi jata hai: aap wahan us ka sawaal add kar dein
         // to agli dafa AI ki zaroorat hi nahi padegi (muft aur foran).
         await naySawaalLikho(from, text)
-        await bhejo(from, jawab)
+        await bhejoAam(jawab)
         return NextResponse.json({ ok: true })
       }
     }
@@ -890,7 +916,7 @@ async function bhejo(phone: string, text: string): Promise<boolean> {
  * dhoond kar SEEDHA tracking jati hai (na sawaal, na "order number bhejein").
  * Order ka screenshot na ho to kuch nahi hota — bot khamosh rehta hai.
  */
-async function tasveerKaJawab(message: any, from: string): Promise<void> {
+async function tasveerKaJawab(message: any, from: string, khamoshi = false): Promise<void> {
   const parha = await orderTasveerSe(message, from)
   let mila = parha.order
 
@@ -916,8 +942,9 @@ async function tasveerKaJawab(message: any, from: string): Promise<void> {
     return
   }
 
-  // Tasveer order ki thi lekin order nahi mil saka — ab number maang lete hain
-  if (parha.orderScreenshot) {
+  // Tasveer order ki thi lekin order nahi mil saka — ab number maang lete hain.
+  // (Khamoshi chal rahi ho to ye nahi maangte — aap khud baat kar rahe hain.)
+  if (parha.orderScreenshot && !khamoshi) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
