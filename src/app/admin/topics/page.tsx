@@ -130,6 +130,23 @@ export default async function TopicsPage({
   const puraneNaam = band.filter((r) => r.n > 0 && r.milaan >= PURANA_HAD)
   const baqiBand = band.filter((r) => !puraneNaam.includes(r))
 
+  // Kin CHALU topics ka jawab harf-ba-harf ek jaisa hai?
+  //
+  // Aisa ho to customer kuch bhi poochhe, use wohi ek jawab milta hai. Misal
+  // ke taur par "Buy 1 Get 1 Offer" aur "Salaam" ka jawab ek ho jaye to offer
+  // poochhne wale ko welcome message chala jata hai.
+  const jawabGrup = new Map<string, Row[]>()
+  for (const r of chalu) {
+    const saaf = r.answer.replace(/\s+/g, ' ').trim().toLowerCase()
+    if (!saaf) continue
+    const list = jawabGrup.get(saaf) || []
+    list.push(r)
+    jawabGrup.set(saaf, list)
+  }
+  const ekJaisa = Array.from(jawabGrup.values())
+    .filter((g) => g.length > 1)
+    .sort((a, b) => b.length - a.length)
+
   const chuna = one('t') ? rows.find((r) => r.id === one('t')) : undefined
   const nayaBanana = one('naya') === '1'
 
@@ -405,7 +422,43 @@ export default async function TopicsPage({
           </section>
         )}
 
-        {/* ── Chalu ────────────────────────────────────────────────────── */}
+                {/* Ek jaisa jawab */}
+        {ekJaisa.length > 0 && (
+          <section className="adm-card adm-in" data-tone="quiet" style={{ marginTop: 20 }}>
+            <h2 className="adm-h2">
+              Ek jaisa jawab{' '}
+              <span className="adm-badge" data-tone="count">
+                {ekJaisa.length}
+              </span>
+            </h2>
+            <p className="adm-p">
+              In topics ka jawab <b>harf-ba-harf ek jaisa</b> hai. Yani customer in mein se kuch bhi
+              poochhe, use ek hi matan jata hai. Agar kisi topic ka apna alag jawab hona chahiye, use
+              khol kar wahan likh dein.
+            </p>
+            {ekJaisa.map((grup, gi) => (
+              <div key={gi} style={{ marginTop: 14 }}>
+                <div className="adm-list">
+                  {grup.map((r) => (
+                    <Link key={r.id} href={href(`&t=${r.id}#edit`)} className="adm-item">
+                      <span className="adm-item-name">
+                        {r.topic}
+                        <span className="adm-item-sub">khol kar jawab badlein</span>
+                      </span>
+                      <span className="adm-item-n">{r.n} sawaal</span>
+                    </Link>
+                  ))}
+                </div>
+                <p className="adm-hint" style={{ marginTop: 6 }}>
+                  Jawab: {grup[0].answer.replace(/\s+/g, ' ').slice(0, 180)}
+                  {grup[0].answer.length > 180 ? '...' : ''}
+                </p>
+              </div>
+            ))}
+          </section>
+        )}
+
+{/* ── Chalu ────────────────────────────────────────────────────── */}
         <h2 className="adm-h3">Chalu topics ({chalu.length})</h2>
         <div className="adm-list">
           {chalu.map((r) => (
