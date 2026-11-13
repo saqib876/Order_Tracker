@@ -1059,3 +1059,38 @@ a.adm-tag:hover {
 .adm-a:hover {
   border-bottom-color: var(--brand);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Sehat ka safha — ginti aur hisse ki lakeer
+ * (Yahan bhi wohi usool: na blur, na hamesha chalne wali animation.)
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-num {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  min-width: 46px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.adm-meter {
+  flex-basis: 100%;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.adm-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--c, var(--brand));
+}
+
+/* Sehat ka sab se upar wala card — har baat apni lakeer par */
+.adm-khulasa .adm-item {
+  gap: 4px 10px;
+}

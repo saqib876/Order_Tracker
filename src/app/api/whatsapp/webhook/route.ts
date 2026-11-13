@@ -18,6 +18,7 @@ import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
 import { planReply, TRACK_LINK } from '@/lib/replyPlan'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
+import { AVAILABLE_LINE, ORDER_INFO_MAANGO, ORDER_NAHI_MILA } from '@/lib/replyText'
 import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
@@ -32,8 +33,6 @@ const MAX_WORKING_DAYS = 15
 
 // Ek hi order ki tracking isi customer ko is waqt ke andar dobara nahi jati
 const TRACKING_REPEAT_HOURS = Number(process.env.TRACKING_REPEAT_HOURS) || 24
-// Model available hai ya nahi — is ke jawab ki pehli line
-const AVAILABLE_LINE = '*Yes Available*'
 // Bot ne order number maanga ho to itni der tak us ke jawab ka intezaar
 const ASK_STATE_HOURS = 24
 // Bilkul wohi jawab isi number ko itne ghante tak DOBARA NAHI jata.
@@ -99,14 +98,6 @@ const MANUAL_PAUSE_HOURS = Number(process.env.MANUAL_PAUSE_HOURS) || 24
 // rahe hon to bot ka beech mein bolna sab se bura lagta hai.)
 const MAX_REPLIES_PER_DAY = Number(process.env.MAX_REPLIES_PER_DAY) || 4
 
-// Jab order ka pata hi na chale — ye message customer ko jata hai
-const ORDER_INFO_MAANGO = [
-  'Please Apna ( Text Msg Ma Type Kr K Send Kr Dain )',
-  '',
-  'Order Number (Jaise 40981), ',
-  'Confirmation Number (Jaise #N8FNNZAKE) ',
-  'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Abhi Check Karti Hun.',
-].join('\n')
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -628,14 +619,7 @@ export async function POST(req: NextRequest) {
     await clearState()
     const webTrack = await getTrackLinkAnswer()
     await bhejoAam(
-      webTrack ||
-        [
-          'Is Number Se Koi Order Nahi Mil Raha. Please Apna Correct ',
-          '',
-          'Order Number (Jaise 40981), ',
-          'Confirmation Number (Jaise #N8FNNZAKE) ',
-          'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Again Check Karti Hun.',
-        ].join('\n')
+      webTrack || ORDER_NAHI_MILA
     )
     return NextResponse.json({ ok: true })
   }

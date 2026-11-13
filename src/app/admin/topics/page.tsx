@@ -156,6 +156,7 @@ export default async function TopicsPage({
               Topics
             </Link>
             <Link href={`/admin/review?key=${encodeURIComponent(adminKey)}`}>Review</Link>
+            <Link href={`/admin/sehat?key=${encodeURIComponent(adminKey)}`}>Sehat</Link>
             <ThemeToggle />
           </span>
         </nav>
