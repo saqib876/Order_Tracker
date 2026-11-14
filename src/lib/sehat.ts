@@ -713,7 +713,26 @@ export async function sehatLo(): Promise<Sehat> {
       aakhri: String(un[0]?.sent_at || ''),
     })
   }
-  const anjaanList = Array.from(anjaanJama.values()).sort((a, b) => b.kitne - a.kitne).slice(0, 20)
+  // Jin jawabon ka matan mehfooz hi nahi, wo dekhne mein sab ek jaise lagte
+  // hain — paanch alag lines mein likhne ka koi faida nahi. Unhein ek hi
+  // line mein jama kar dete hain.
+  const saare = Array.from(anjaanJama.values())
+  const matanWalay = saare.filter((a) => !a.namuna.startsWith('(matan mehfooz nahi'))
+  const binaMatan = saare.filter((a) => a.namuna.startsWith('(matan mehfooz nahi'))
+
+  const anjaanList = matanWalay.sort((a, b) => b.kitne - a.kitne).slice(0, 20)
+
+  if (binaMatan.length) {
+    const kitne = binaMatan.reduce((n, a) => n + a.kitne, 0)
+    const log = binaMatan.reduce((n, a) => n + a.customers, 0)
+    const aakhri = binaMatan.map((a) => a.aakhri).sort().reverse()[0] || ''
+    anjaanList.push({
+      namuna: `${binaMatan.length} purane jawab — ye us waqt gaye the jab matan mehfooz nahi hota tha`,
+      kitne,
+      customers: log,
+      aakhri,
+    })
+  }
 
   const anjaanJawab = jane.find((j) => j.qism === 'anjaan')?.kitne || 0
 

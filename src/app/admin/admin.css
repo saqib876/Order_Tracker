@@ -1836,3 +1836,8 @@ a.adm-masla:hover {
     animation: none;
   }
 }
+
+/* Jab kisi section par le jaya jaye to upar ki patti us ko dhaank na le */
+.adm-fold {
+  scroll-margin-top: 86px;
+}

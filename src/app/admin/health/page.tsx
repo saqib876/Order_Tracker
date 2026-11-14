@@ -118,11 +118,13 @@ function KholoScript() {
     'function kholo(){',
     'var h=location.hash;if(!h||h.length<2)return;',
     'var el=null;try{el=document.querySelector(h)}catch(e){return}',
+    // Hash foran saaf kar dete hain. Warna wo URL mein pada rehta hai aur
+    // har refresh par safha dobara usi jagah kood jata tha.
+    'try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}',
     'if(!el)return;',
-    'var d=el.closest?el.closest("details"):null;',
-    'if(el.tagName==="DETAILS")d=el;',
+    'var d=(el.tagName==="DETAILS")?el:(el.closest?el.closest("details"):null);',
     'if(d)d.open=true;',
-    'el.scrollIntoView({block:"start"});',
+    'el.scrollIntoView({block:"start",behavior:"smooth"});',
     '}',
     'kholo();window.addEventListener("hashchange",kholo);',
     '})()',
@@ -419,7 +421,6 @@ export default async function HealthPage({
             tafseel="Ye jawab kisi maujooda topic se nahi milte — sab se pehle yahi dekhein"
             ginti={anjaanKul}
             rang="bura"
-            khula
           >
             <p className="adm-p">
               Har jawab kisi maloom raste se aana chahiye. Ye jawab gaye to sahi, lekin ab un ka
