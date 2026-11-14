@@ -279,3 +279,66 @@ create table wa_manual_jawab (
 );
 
 alter table wa_manual_jawab enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 14. bot_faisla — bot ke har faisle ka roznamcha
+--
+-- Pehle sirf ye pata chalta tha ke kaun sa matan kitni dafa gaya. Us se ye
+-- maloom nahi hota tha ke bot ne wo faisla KYUN kiya, aur jahan us ne kuch
+-- nahi bheja wahan kya soch kar khamosh raha.
+--
+-- Health ke safhe par bot ki saari kaarkardagi (performance) isi se banti
+-- hai: kitne sawaal samjha, kitne par khamosh raha, lafzon se kitne aur AI
+-- se kitne, tracking kaisi chali, aur waqt (guzra/aane wala) theek samjha
+-- ya nahi.
+--
+-- Safai (kabhi kabhi chala dein):
+--   delete from bot_faisla where created_at < now() - interval '90 days';
+-- ───────────────────────────────────────────────────────────────────────────
+create table if not exists bot_faisla (
+  id         bigserial   primary key,
+  phone      text,
+  -- tracking | tracking_na_mila | topic | system | manual | khamosh
+  qism       text        not null,
+  topic      text,
+  -- lafz | ai | code
+  zariya     text,
+  score      numeric,
+  -- pehle | baad | maloom-nahi
+  marhala    text,
+  bheja      boolean     not null default false,
+  wajah      text,
+  created_at timestamptz not null default now()
+);
+
+alter table bot_faisla enable row level security;
+create index if not exists bot_faisla_created_idx on bot_faisla (created_at desc);
+create index if not exists bot_faisla_qism_idx on bot_faisla (qism, created_at desc);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 15. bot_health_daily — har din ka natija, ek line mein
+--
+-- Roz raat ko ek cron chalta hai jo us din ka poora hisaab nikal kar yahan
+-- mehfooz kar deta hai. Faida: Health ka safha mahino ka safar dikha sakta
+-- hai, aur purana roznamcha saaf karne par bhi tareekh-war record rehta hai.
+-- ───────────────────────────────────────────────────────────────────────────
+create table if not exists bot_health_daily (
+  din            date        primary key,
+  sehat_fisad    numeric     not null default 0,
+  jawab          integer     not null default 0,
+  customers      integer     not null default 0,
+  tracking       integer     not null default 0,
+  tracking_na    integer     not null default 0,
+  topic_jawab    integer     not null default 0,
+  lafz_se        integer     not null default 0,
+  ai_se          integer     not null default 0,
+  khamosh        integer     not null default 0,
+  manual         integer     not null default 0,
+  anjaan         integer     not null default 0,
+  naye_sawaal    integer     not null default 0,
+  ai_calls       integer     not null default 0,
+  tafseel        jsonb,
+  banaya_gaya    timestamptz not null default now()
+);
+
+alter table bot_health_daily enable row level security;

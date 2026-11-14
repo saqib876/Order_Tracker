@@ -25,6 +25,8 @@ import {
   TRACK_LINK_JAWAB,
 } from '@/lib/replyText'
 import { MODEL_GUIDE_TOPIC, TRACKING_UNKNOWN_TOPIC } from '@/lib/topicNames'
+import { faislaLikho } from '@/lib/faisla'
+import { marhalaPehchano } from '@/lib/marhala'
 import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
@@ -493,6 +495,7 @@ export async function POST(req: NextRequest) {
       await clearState()
       await bhejoAam(jawab)
       console.log(`[wa] customization — ${from}`)
+    await faislaLikho({ phone: from, qism: 'topic', topic: 'Customization', zariya: 'lafz', bheja: true })
       return NextResponse.json({ ok: true })
     }
   }
@@ -522,6 +525,7 @@ export async function POST(req: NextRequest) {
     // Guide isi message mein ja chuki — record ke liye
     await markGreeted(from)
     console.log(`[wa] model availability — ${from}`)
+    await faislaLikho({ phone: from, qism: 'system', topic: MODEL_GUIDE_TOPIC, zariya: 'code', bheja: true, wajah: 'Yes Available' })
     return NextResponse.json({ ok: true })
   }
 
@@ -622,6 +626,15 @@ export async function POST(req: NextRequest) {
       `[wa] manual review: ${MANUAL_REASON_LABEL[manualReason]} — ${from}` +
         (contextOrder ? ` (order ${contextOrder.order_number})` : '')
     )
+    await faislaLikho({
+      phone: from,
+      qism: 'manual',
+      topic: label,
+      zariya: 'lafz',
+      marhala: marhalaPehchano(text),
+      bheja: true,
+      wajah: contextOrder ? `order ${contextOrder.order_number}` : 'order maloom nahi',
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -666,6 +679,7 @@ export async function POST(req: NextRequest) {
     }
 
     await bhejo(from, await buildStatusReply(order))
+    await faislaLikho({ phone: from, qism: 'tracking', zariya: 'code', bheja: true })
     return NextResponse.json({ ok: true })
   }
 
@@ -679,6 +693,13 @@ export async function POST(req: NextRequest) {
     await bhejoAam(
       (await orderNaMilaJawab(from)) || webTrack || ORDER_NAHI_MILA
     )
+    await faislaLikho({
+      phone: from,
+      qism: 'tracking_na_mila',
+      zariya: 'code',
+      bheja: !khamoshi,
+      wajah: 'number diya lekin order nahi mila',
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -699,6 +720,7 @@ export async function POST(req: NextRequest) {
   const sirfTrackingLink = qna !== null && TRACK_LINK.test(qna.answer)
   if (sirfTrackingLink && plan.orderish && !plan.mayAskForNumber) {
     console.log(`[wa] order number pehle maang chuke — ${from} ko dobara kuch nahi`)
+    await faislaLikho({ phone: from, qism: 'khamosh', zariya: 'code', bheja: false, wajah: 'order number pehle maang chuke' })
     return NextResponse.json({ ok: true })
   }
   if (qna && !(sirfTrackingLink && plan.mayAskForNumber)) {
@@ -713,11 +735,21 @@ export async function POST(req: NextRequest) {
       if (raye) {
         if (raye.insaan) {
           console.log(`[wa] AI: ye baat insaan ke liye hai — ${from} se bot khamosh`)
+          await faislaLikho({ phone: from, qism: 'khamosh', zariya: 'ai', bheja: false, wajah: 'AI: baat insaan ke liye hai' })
           await naySawaalLikho(from, text)
           return NextResponse.json({ ok: true })
         }
         if (!raye.topic) {
           console.log(`[wa] AI: "${qna.topic}" se baat nahi banti — bot khamosh`)
+          await faislaLikho({
+            phone: from,
+            qism: 'khamosh',
+            topic: qna.topic,
+            zariya: 'ai',
+            score: qna.score,
+            bheja: false,
+            wajah: 'AI ne kamzor milan radd kiya',
+          })
           await naySawaalLikho(from, text)
           return NextResponse.json({ ok: true })
         }
@@ -727,6 +759,15 @@ export async function POST(req: NextRequest) {
             console.log(`[wa] AI ne topic badla: "${qna.topic}" → "${raye.topic}"`)
             if (state) await clearState()
             await bhejoAam(behtar)
+            await faislaLikho({
+              phone: from,
+              qism: 'topic',
+              topic: raye.topic,
+              zariya: 'ai',
+              score: qna.score,
+              bheja: !khamoshi,
+              wajah: `AI ne badla (lafzon se "${qna.topic}" aaya tha)`,
+            })
             await naySawaalLikho(from, text)
             return NextResponse.json({ ok: true })
           }
@@ -735,6 +776,14 @@ export async function POST(req: NextRequest) {
     }
     if (state) await clearState()
     await bhejoAam(qna.answer)
+    await faislaLikho({
+      phone: from,
+      qism: 'topic',
+      topic: qna.topic,
+      zariya: 'lafz',
+      score: qna.score,
+      bheja: !khamoshi,
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -751,6 +800,13 @@ export async function POST(req: NextRequest) {
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
     await bhejoAam((await orderNaMilaJawab(from)) || ORDER_INFO_MAANGO)
+    await faislaLikho({
+      phone: from,
+      qism: 'tracking_na_mila',
+      zariya: 'code',
+      bheja: !khamoshi,
+      wajah: 'order ki koi pehchan nahi mili',
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -771,6 +827,7 @@ export async function POST(req: NextRequest) {
       const jawab = await answerForTopic(raye.topic)
       if (jawab) {
         console.log(`[wa] AI ne samjha — topic "${raye.topic}" ka jawab bheja`)
+        await faislaLikho({ phone: from, qism: 'topic', topic: raye.topic, zariya: 'ai', bheja: true })
         if (state && !askedBefore) await clearState()
         // Jumla Excel mein bhi jata hai: aap wahan us ka sawaal add kar dein
         // to agli dafa AI ki zaroorat hi nahi padegi (muft aur foran).
@@ -795,6 +852,13 @@ export async function POST(req: NextRequest) {
   // maang chuke) bhi sawaal nahi, bot use pehchan chuka hai.
   if (asalSawaal) {
     await naySawaalLikho(from, text)
+    await faislaLikho({
+      phone: from,
+      qism: 'khamosh',
+      zariya: 'lafz',
+      bheja: false,
+      wajah: 'kisi topic se milan nahi hua',
+    })
   }
 
   return NextResponse.json({ ok: true })

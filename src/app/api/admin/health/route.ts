@@ -1,7 +1,7 @@
 /**
- * Bot ki sehat, JSON mein — /api/admin/sehat?key=ADMIN_KEY
+ * Bot ki health, JSON mein — /api/admin/health?key=ADMIN_KEY
  *
- * Dekhne ke liye behtar safha /admin/sehat hai. Ye wohi hisaab hai, bas
+ * Dekhne ke liye behtar safha /admin/health hai. Ye wohi hisaab hai, bas
  * khaali JSON — agar kabhi kuch copy kar ke bhejna ho.
  */
 

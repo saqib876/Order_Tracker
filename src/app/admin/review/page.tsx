@@ -270,7 +270,7 @@ export default async function ReviewPage({
             <Link href={qs({ sec: '', r: '' })} data-on="1">
               Review
             </Link>
-            <Link href={`/admin/sehat?key=${encodeURIComponent(adminKey)}`}>Sehat</Link>
+            <Link href={`/admin/health?key=${encodeURIComponent(adminKey)}`}>Health</Link>
             <ThemeToggle />
           </span>
         </nav>

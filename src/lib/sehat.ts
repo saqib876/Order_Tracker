@@ -47,6 +47,26 @@ export interface Raasta {
   jhalak: string
 }
 
+/** Ek paimana — 0 se 100 tak, sath mein saaf matlab */
+export interface Paimana {
+  naam: string
+  fisad: number
+  matlab: string
+  tafseel: string
+  /** Kitne faislon par ye paimana bana — kam ho to bharosa bhi kam */
+  bunyad: number
+}
+
+export interface Kaarkardagi {
+  kul: number
+  darje: string
+  paimane: Paimana[]
+  /** AI kin kaamon mein madad kar raha hai */
+  aiKeKaam: { kaam: string; kitne: number }[]
+  /** Kitne faisle parkhe gaye */
+  faisle: number
+}
+
 export interface Sehat {
   waqt: string
   khulasa: { baat: string; theek: boolean }[]
@@ -59,6 +79,7 @@ export interface Sehat {
     khamoshAbhi: number
   }
   jawabBreakdown: JawabQism[]
+  kaam: Kaarkardagi
   raaste: Raasta[]
   zyadaJawab: { phone: string; kitne: number }[]
   hadParLog: number
@@ -131,6 +152,140 @@ async function jawabKeNaam(): Promise<Map<string, { naam: string; qism: JawabQis
   }
 
   return naqsha
+}
+
+/**
+ * BOT KI KAARKARDAGI — roznamche (bot_faisla) se nikali gayi.
+ *
+ * Har paimana ek sawaal ka jawab hai jo aap poochna chahte hain:
+ *   Samajh      — kitne sawaal samajh aaye?
+ *   Durusti     — jo bheja wo sahi jagah se tha?
+ *   Tracking    — order dhoondne mein kitni kaamyabi?
+ *   Muft kaam   — kitna kaam bina AI ke hua (yani bina kharche ke)?
+ *   Waqt        — guzra aur aane wala waqt theek pehchana?
+ *
+ * Har paimane ke sath "bunyad" bhi hai: wo kitne faislon par bana. Bunyad
+ * chhoti ho to number par zyada bharosa nahi karna chahiye.
+ */
+async function kaarkardagiNikalo(
+  ghante: number,
+  kulJawab: number,
+  anjaanJawab: number
+): Promise<Kaarkardagi> {
+  const { data, error } = await supabaseAdmin
+    .from('bot_faisla')
+    .select('qism,zariya,marhala,bheja,wajah,topic')
+    .gte('created_at', ghanteQabl(ghante))
+    .limit(5000)
+
+  const rows = error ? [] : data || []
+  const ginti = (f: (r: any) => boolean) => rows.filter(f).length
+
+  const kul = rows.length
+  const khamosh = ginti((r) => r.qism === 'khamosh')
+  const samjha = kul - khamosh
+
+  const tracking = ginti((r) => r.qism === 'tracking')
+  const trackingNa = ginti((r) => r.qism === 'tracking_na_mila')
+  const lafzSe = ginti((r) => r.zariya === 'lafz' && r.qism !== 'khamosh')
+  const aiSe = ginti((r) => r.zariya === 'ai' && r.qism !== 'khamosh')
+  const manual = ginti((r) => r.qism === 'manual')
+  const manualPakka = ginti((r) => r.qism === 'manual' && r.marhala === 'baad')
+
+  const hissa = (upar: number, neeche: number) =>
+    neeche > 0 ? Math.round((upar / neeche) * 100) : 0
+
+  const paimane: Paimana[] = [
+    {
+      naam: 'Samajh',
+      fisad: hissa(samjha, kul),
+      bunyad: kul,
+      matlab: `${samjha} mein se ${kul} messages ka jawab bana`,
+      tafseel:
+        'Jitne messages aaye un mein se kitnon ka bot ne jawab nikala. Baqi par wo ' +
+        'jaan boojh kar khamosh raha — khamoshi muft hai, ghalat jawab mehnga.',
+    },
+    {
+      naam: 'Durusti',
+      fisad: hissa(kulJawab - anjaanJawab, kulJawab),
+      bunyad: kulJawab,
+      matlab:
+        anjaanJawab === 0
+          ? `${kulJawab} jawab gaye, sab pehchane hue raston se`
+          : `${kulJawab} mein se ${anjaanJawab} jawab aise the jo kisi maujooda topic se nahi milte`,
+      tafseel:
+        'Har bheja hua jawab kisi maloom raste se aana chahiye — Excel ka topic, ' +
+        'tracking, ya code ka apna matan. Jo kahin se na mile wo "faltu jawab" ka ' +
+        'sab se pehla nishan hai.',
+    },
+    {
+      naam: 'Tracking',
+      fisad: hissa(tracking, tracking + trackingNa),
+      bunyad: tracking + trackingNa,
+      matlab: `${tracking} dafa live status mila, ${trackingNa} dafa order nahi mila`,
+      tafseel:
+        'Jab customer apne order ki baat karta hai, bot kitni dafa us ka asli order ' +
+        'dhoond kar live status bhej deta hai. Na mile to track link wala jawab jata hai.',
+    },
+    {
+      naam: 'Muft kaam',
+      fisad: hissa(lafzSe, lafzSe + aiSe),
+      bunyad: lafzSe + aiSe,
+      matlab: `${lafzSe} lafzon se, ${aiSe} AI ki madad se`,
+      tafseel:
+        'Lafzon se pehchana gaya jawab foran aur muft hota hai. AI sirf wahan bulaya ' +
+        'jata hai jahan lafz kaam na aayein. Ye number jitna ooncha, utna behtar.',
+    },
+    {
+      naam: 'Waqt ki samajh',
+      fisad: hissa(manualPakka, manual),
+      bunyad: manual,
+      matlab: `${manual} manual check mein se ${manualPakka} par yaqeen tha ke order mil chuka hai`,
+      tafseel:
+        'Shikayat sirf us waqt manual check mein jani chahiye jab order mil chuka ho. ' +
+        'Baqi par bot ehtiyatan manual check hi chunta hai — taake koi baat chhoot na jaye.',
+    },
+  ]
+
+  // Jin paimanon ki bunyad hi nahi bani, wo kul hisaab bigarte hain
+  const ginne = paimane.filter((x) => x.bunyad > 0)
+  const kulFisad = ginne.length
+    ? Math.round(ginne.reduce((a, x) => a + x.fisad, 0) / ginne.length)
+    : 0
+
+  const darje =
+    kulFisad >= 85
+      ? 'Bohat acha'
+      : kulFisad >= 70
+      ? 'Theek'
+      : kulFisad >= 50
+      ? 'Behtar ho sakta hai'
+      : kul === 0
+      ? 'Abhi koi khabar nahi'
+      : 'Dekhne ki zaroorat hai'
+
+  // AI kin kaamon mein madad kar raha hai
+  const aiKaam = new Map<string, number>()
+  for (const r of rows) {
+    if (r.zariya !== 'ai') continue
+    const kaam =
+      r.qism === 'khamosh'
+        ? String(r.wajah || 'bot ko rokna')
+        : r.wajah
+        ? 'lafzon ka ghalat milan theek karna'
+        : 'sawaal samajh kar topic chunna'
+    aiKaam.set(kaam, (aiKaam.get(kaam) || 0) + 1)
+  }
+
+  return {
+    kul: kulFisad,
+    darje,
+    paimane,
+    faisle: kul,
+    aiKeKaam: Array.from(aiKaam.entries())
+      .map(([kaam, kitne]) => ({ kaam, kitne }))
+      .sort((a, b) => b.kitne - a.kitne),
+  }
 }
 
 export async function sehatLo(): Promise<Sehat> {
@@ -387,6 +542,8 @@ export async function sehatLo(): Promise<Sehat> {
     })
   }
 
+  const anjaanJawab = jane.find((j) => j.qism === 'anjaan')?.kitne || 0
+
   return {
     waqt: new Date().toISOString(),
     khulasa,
@@ -399,6 +556,7 @@ export async function sehatLo(): Promise<Sehat> {
       khamoshAbhi: (pauses || []).length,
     },
     jawabBreakdown: jane,
+    kaam: await kaarkardagiNikalo(24, jawab.length, anjaanJawab),
     raaste,
     zyadaJawab,
     hadParLog,

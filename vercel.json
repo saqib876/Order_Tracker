@@ -5,6 +5,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/admin/health-snapshot",
+      "schedule": "45 18 * * *"
+    },
+    {
       "path": "/api/admin/qna-suggest",
       "schedule": "0 3 * * 0"
     }

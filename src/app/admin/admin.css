@@ -1210,3 +1210,153 @@ a.adm-item-name:hover {
 .adm-error {
   scroll-margin-top: 86px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Health — kaarkardagi (performance)
+ *
+ * Teen darje, teen rang: acha (hara), theek (amber), bura (surkh).
+ * Wohi usool yahan bhi: na blur, na hamesha chalne wali animation.
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-score {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px 24px;
+  padding: 20px 22px;
+  margin: 18px 0 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-score-big {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px;
+  flex: none;
+  min-width: 132px;
+}
+
+.adm-score-big b {
+  font-size: 54px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-score-big i {
+  font-size: 20px;
+  font-weight: 700;
+  font-style: normal;
+  opacity: 0.6;
+}
+
+.adm-score-big span {
+  flex-basis: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.adm-score-big[data-grade='acha'] b,
+.adm-score-big[data-grade='acha'] span {
+  color: #10b981;
+}
+.adm-score-big[data-grade='theek'] b,
+.adm-score-big[data-grade='theek'] span {
+  color: #f59e0b;
+}
+.adm-score-big[data-grade='bura'] b,
+.adm-score-big[data-grade='bura'] span {
+  color: #f43f5e;
+}
+
+.adm-score-note {
+  flex: 1;
+  min-width: 240px;
+}
+
+.adm-score-note .adm-h2 {
+  margin-bottom: 6px;
+}
+
+/* Paanch paimane */
+.adm-paimane {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.adm-paimana {
+  padding: 14px 16px 16px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-paimana-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.adm-paimana-naam {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.adm-paimana-n {
+  font-size: 19px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-paimana[data-grade='acha'] .adm-paimana-n {
+  color: #10b981;
+}
+.adm-paimana[data-grade='theek'] .adm-paimana-n {
+  color: #f59e0b;
+}
+.adm-paimana[data-grade='bura'] .adm-paimana-n {
+  color: #f43f5e;
+}
+
+.adm-paimana[data-grade='acha'] .adm-meter i {
+  background: #10b981;
+}
+.adm-paimana[data-grade='theek'] .adm-meter i {
+  background: #f59e0b;
+}
+.adm-paimana[data-grade='bura'] .adm-meter i {
+  background: #f43f5e;
+}
+
+.adm-paimana .adm-meter {
+  display: block;
+  flex-basis: auto;
+  margin-bottom: 10px;
+}
+
+.adm-paimana-matlab {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+
+.adm-paimana-tafseel {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
