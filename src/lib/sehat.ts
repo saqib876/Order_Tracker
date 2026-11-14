@@ -11,6 +11,7 @@
 import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
+import { orderIntentLoad } from '@/lib/orderIntentDb'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { AVAILABLE_LINE, ORDER_INFO_MAANGO, ORDER_NAHI_MILA } from '@/lib/replyText'
 import { GREETING_TOPIC, answerForTopic, getTopicAnswer } from '@/lib/whatsapp'
@@ -124,7 +125,13 @@ export interface Sehat {
   matanList: Matan[]
   echo: { kul: number; matanWale: number; sirfKhabar: number }
   khamoshi: { phone: string; kabTak: string }[]
-  excel: { parkhe: number; orderWale: number; namune: string[] }
+  excel: {
+    parkhe: number
+    orderWale: number
+    namune: string[]
+    /** Wo sawaal jo tracking wale lagte hain — id ke sath, taake yahin se theek ho sakein */
+    trackingWale: { id: string; matan: string; kab: string }[]
+  }
   nayeKhane: Record<string, boolean>
   tables: Record<string, { thik: boolean; rows: number; khata?: string }>
   settings: Record<string, string | number>
@@ -331,6 +338,8 @@ async function kaarkardagiNikalo(
 }
 
 export async function sehatLo(): Promise<Sehat> {
+  await orderIntentLoad()
+
   // Shuru ka saara data EK SATH mangwate hain.
   //
   // Pehle har sawaal ka jawab aane ke baad agla jata tha — ek darjan se
@@ -694,7 +703,7 @@ export async function sehatLo(): Promise<Sehat> {
         ? `Excel ki list mein ${orderWale.length} sawaal ab bhi order tracking wale lag rahe hain.`
         : `Excel ki list saaf hai — ${parkhe.length} sawaalon mein ek bhi order tracking wala nahi.`,
       theek: orderWale.length === 0,
-        jagah: '/admin/qna',
+        jagah: 'tracking-sawaal',
     })
   }
 
@@ -782,6 +791,14 @@ export async function sehatLo(): Promise<Sehat> {
       parkhe: parkhe.length,
       orderWale: orderWale.length,
       namune: orderWale.slice(0, 8).map((r) => String(r.message_text || '').slice(0, 90)),
+      trackingWale: (tazaList || [])
+        .filter((r) => looksLikeOrderIntent(String(r.message_text || '')))
+        .slice(0, 25)
+        .map((r) => ({
+          id: String(r.id),
+          matan: String(r.message_text || '').slice(0, 220),
+          kab: String(r.created_at || ''),
+        })),
     },
     nayeKhane,
     tables,

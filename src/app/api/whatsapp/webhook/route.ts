@@ -18,6 +18,7 @@ import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
 import { planReply, TRACK_LINK } from '@/lib/replyPlan'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
+import { orderIntentLoad } from '@/lib/orderIntentDb'
 import {
   AVAILABLE_LINE,
   ORDER_INFO_MAANGO,
@@ -400,6 +401,10 @@ export async function POST(req: NextRequest) {
   // taiyar shuda jawab, greeting, Q&A aur AI sab ruke rehte hain — lekin
   // agar customer ka asli order mil jaye to us ki tracking phir bhi jati
   // hai. (Band karna ho to TRACKING_DURING_PAUSE=0)
+  // Aap ke apne daale hue "tracking wale" jumle — paanch minute mein ek
+  // dafa taza hote hain, is liye ye takreeban hamesha muft hai.
+  await orderIntentLoad()
+
   const trackingBhiRoken = process.env.TRACKING_DURING_PAUSE === '0'
   const insaanHai = await insaanBaatKarRahaHai(from)
   if (insaanHai && trackingBhiRoken) {

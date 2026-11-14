@@ -352,3 +352,19 @@ alter table bot_health_daily enable row level security;
 -- tha ke wo tha kya. Ab pehle 160 harf bhi sath rehte hain.
 -- ───────────────────────────────────────────────────────────────────────────
 alter table wa_recent_reply add column if not exists sample text;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 17. order_intent_extra — aap ke apne "tracking wale" jumle
+--
+-- Code mein tracking wale jumlon ki ek lambi list hai. Kabhi koi naya andaz
+-- us se chhoot jata hai aur message "naye sawaal" wali list mein chala jata
+-- hai. Health ke safhe par aise sawaal dikhte hain, aur wahin se ek click
+-- mein yahan aa jate hain — us ke baad bot unhein pehchanne lagta hai.
+-- ───────────────────────────────────────────────────────────────────────────
+create table if not exists order_intent_extra (
+  id         bigserial   primary key,
+  matan      text        not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table order_intent_extra enable row level security;

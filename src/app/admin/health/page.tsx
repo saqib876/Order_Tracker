@@ -290,6 +290,12 @@ export default async function HealthPage({
             )}
           </p>
         )}
+        {one('tracking') && (
+          <p className="adm-flash">
+            Sawaal tracking wali list mein darj ho gaya — aage se aise message pehchane
+            jayenge.
+          </p>
+        )}
         {(one('jura') || one('hataya')) && (
           <p className="adm-flash">
             {one('jura') && (
@@ -685,6 +691,61 @@ export default async function HealthPage({
                     {p.phone}
                     <span className="adm-item-sub">{waqt(p.kabTak)} tak</span>
                   </span>
+                </div>
+              ))}
+            </div>
+          </Khana>
+        )}
+
+        {s.excel.trackingWale.length > 0 && (
+          <Khana
+            id="tracking-sawaal"
+            naam="Tracking wale sawaal naye sawaalon mein"
+            tafseel="Ye tracking ke sawaal lagte hain, lekin naye sawaalon ki list mein chale gaye"
+            ginti={s.excel.trackingWale.length}
+            rang="theek"
+          >
+            <p className="adm-p">
+              Order ki khabar poochne wale sawaal Excel wali list mein nahi aane chahiyein — un
+              ka apna rasta hai. Ye chand sawaal us filter se bach gaye. Do mein se ek kaam karein:
+            </p>
+            <ul className="adm-nukat">
+              <li>
+                <b>Tracking mein bhejein</b> — jumla bot ki tracking wali list mein darj ho jata
+                hai, is liye aage se aise message pehchane jayenge. Ye behtar hai.
+              </li>
+              <li>
+                <b>Remove</b> — sirf is sawaal ko list se hata dein, bot ko kuch na sikhayein.
+              </li>
+            </ul>
+
+            <div className="adm-list">
+              {s.excel.trackingWale.map((q) => (
+                <div className="adm-sawaal" key={q.id} data-order="1">
+                  <p className="adm-sawaal-matan">{q.matan}</p>
+                  <div className="adm-sawaal-niche">
+                    <span className="adm-sawaal-kab">{waqt(q.kab)}</span>
+
+                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
+                      <input type="hidden" name="key" value={adminKey} />
+                      <input type="hidden" name="id" value={q.id} />
+                      <input type="hidden" name="matan" value={q.matan} />
+                      <input type="hidden" name="kaam" value="tracking" />
+                      <button type="submit" className="adm-chota-btn">
+                        Tracking mein bhejein
+                      </button>
+                    </form>
+
+                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
+                      <input type="hidden" name="key" value={adminKey} />
+                      <input type="hidden" name="id" value={q.id} />
+                      <input type="hidden" name="matan" value={q.matan} />
+                      <input type="hidden" name="kaam" value="hatao" />
+                      <button type="submit" className="adm-chota-btn adm-chota-bad">
+                        Remove
+                      </button>
+                    </form>
+                  </div>
                 </div>
               ))}
             </div>

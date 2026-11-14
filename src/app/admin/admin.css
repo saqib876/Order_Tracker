@@ -1910,3 +1910,16 @@ a.adm-masla:hover {
 .adm-chip[data-qism='anjaan'] i {
   background: rgba(244, 63, 94, 0.3);
 }
+
+/* Chhoti wazahati fehrist */
+.adm-nukat {
+  margin: 8px 0 14px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+
+.adm-nukat li {
+  margin-bottom: 5px;
+}

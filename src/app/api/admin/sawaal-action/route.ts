@@ -22,7 +22,7 @@ function wapas(req: NextRequest, adminKey: string, params: Record<string, string
   const url = new URL('/admin/health', req.url)
   url.searchParams.set('key', adminKey)
   for (const [k, v] of Object.entries(params)) if (v) url.searchParams.set(k, v)
-  url.hash = 'naye-sawaal'
+  url.hash = 'tracking-sawaal'
   return NextResponse.redirect(url, { status: 303 })
 }
 
@@ -54,6 +54,34 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from('unmatched_messages').delete().eq('id', id)
     console.log('[sawaal] nazar-andaz: ' + matan.slice(0, 60))
     return wapas(req, adminKey, { hataya: '1' })
+  }
+
+  // ── Tracking wale sawaalon mein bhej do ─────────────────────
+  //
+  // Do kaam hote hain: jumla bot ki tracking wali list mein darj ho jata
+  // hai (taake aage se pehchana jaye), aur ye message "naye sawaal" ki
+  // list se nikal kar apni sahi jagah chala jata hai.
+  if (kaam === 'tracking') {
+    const { error: likhKhata } = await supabaseAdmin
+      .from('order_intent_extra')
+      .upsert({ matan }, { onConflict: 'matan', ignoreDuplicates: true })
+
+    if (likhKhata) return wapas(req, adminKey, { khata: likhKhata.message })
+
+    const { data: purana } = await supabaseAdmin
+      .from('unmatched_messages')
+      .select('phone')
+      .eq('id', id)
+      .maybeSingle()
+
+    await supabaseAdmin.from('order_sawaal_log').insert({
+      phone: purana?.phone ? String(purana.phone) : 'maloom nahi',
+      message_text: matan,
+    })
+    await supabaseAdmin.from('unmatched_messages').delete().eq('id', id)
+
+    console.log('[sawaal] tracking wale mein: ' + matan.slice(0, 60))
+    return wapas(req, adminKey, { tracking: '1' })
   }
 
   // ── Kisi topic mein daal do ─────────────────────────────────────────────

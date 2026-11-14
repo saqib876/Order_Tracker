@@ -269,6 +269,17 @@ export const ORDER_STATUS_QUESTIONS: string[] = [
   "Which one is order no",
 ]
 
+/**
+ * Jo jumle aap ne khud Health ke safhe se "tracking wale sawaalon" mein
+ * daale hain. Ye code ki list ke SAATH chalte hain, us ki jagah nahi.
+ *
+ * Yaad-dasht mein rakhe jate hain aur har paanch minute baad taza ho jate
+ * hain — taake database se baar baar poochna na pare.
+ */
+let apneJumle: string[] = []
+let apneKabLiye = 0
+const APNE_CACHE_MS = 5 * 60 * 1000
+
 let cached: QnaIndex | null = null
 
 function getIndex(): QnaIndex {
@@ -277,12 +288,34 @@ function getIndex(): QnaIndex {
       {
         topic: 'order_status',
         answer: '',
-        questions: ORDER_STATUS_QUESTIONS,
+        questions: ORDER_STATUS_QUESTIONS.concat(apneJumle),
         priority: 0,
       },
     ])
   }
   return cached
+}
+
+/**
+ * Database se aap ke apne daale hue jumle le aata hai.
+ *
+ * Isi ko bulane se "tracking wale sawaalon mein daalo" wala kaam asar
+ * dikhata hai. Table na ho ya kuch na mile to purani list chalti rehti
+ * hai — kuch tootta nahi.
+ */
+export async function orderIntentTazaKaro(
+  parho: () => Promise<string[]>
+): Promise<void> {
+  if (Date.now() - apneKabLiye < APNE_CACHE_MS) return
+  apneKabLiye = Date.now()
+  try {
+    const naye = await parho()
+    const purane = apneJumle.join('|')
+    apneJumle = naye
+    if (purane !== naye.join('|')) cached = null // list badli — dobara banegi
+  } catch {
+    // Kuch na mile to jo pehle se hai wohi chalta rahe
+  }
 }
 
 /**
