@@ -67,6 +67,14 @@ export interface Kaarkardagi {
   faisle: number
 }
 
+/** Wo jawab jo kisi maujooda topic se nahi milte */
+export interface Anjaan {
+  namuna: string
+  kitne: number
+  customers: number
+  aakhri: string
+}
+
 export interface Sehat {
   waqt: string
   khulasa: { baat: string; theek: boolean }[]
@@ -79,6 +87,7 @@ export interface Sehat {
     khamoshAbhi: number
   }
   jawabBreakdown: JawabQism[]
+  anjaanList: Anjaan[]
   kaam: Kaarkardagi
   raaste: Raasta[]
   zyadaJawab: { phone: string; kitne: number }[]
@@ -294,7 +303,7 @@ export async function sehatLo(): Promise<Sehat> {
   // ── Aaj ke jawab: kaun sa kitni dafa gaya ──────────────────────────────
   const { data: jawabRows } = await supabaseAdmin
     .from('wa_recent_reply')
-    .select('reply_hash,phone')
+    .select('reply_hash,phone,sent_at,sample')
     .gte('sent_at', ghanteQabl(24))
     .limit(3000)
 
@@ -326,6 +335,7 @@ export async function sehatLo(): Promise<Sehat> {
   const tracking24 = await ginti('wa_tracking_sent', 'sent_at', 24)
 
   const jane: JawabQism[] = []
+  const anjaanHash = new Set<string>()
   let anjaanN = 0
   const anjaanLog = new Set<string>()
   Array.from(perHashN.entries()).forEach(([h, n]) => {
@@ -341,6 +351,7 @@ export async function sehatLo(): Promise<Sehat> {
     } else {
       anjaanN += n
       for (const p of Array.from(perHash.get(h) || new Set<string>())) anjaanLog.add(p)
+      anjaanHash.add(h)
     }
   })
 
@@ -558,6 +569,20 @@ export async function sehatLo(): Promise<Sehat> {
     })
   }
 
+  // Jo jawab kisi topic se nahi mile — un ka namuna, taake pata chale ke the kya
+  const anjaanJama = new Map<string, Anjaan>()
+  for (const h of Array.from(anjaanHash)) {
+    const un = jawab.filter((r) => String(r.reply_hash) === h)
+    const namuna = String(un.find((r) => r.sample)?.sample || '')
+    anjaanJama.set(h, {
+      namuna: namuna ? namuna.slice(0, 150) : '(matan mehfooz nahi — purana jawab)',
+      kitne: un.length,
+      customers: new Set(un.map((r) => String(r.phone))).size,
+      aakhri: String(un[0]?.sent_at || ''),
+    })
+  }
+  const anjaanList = Array.from(anjaanJama.values()).sort((a, b) => b.kitne - a.kitne).slice(0, 20)
+
   const anjaanJawab = jane.find((j) => j.qism === 'anjaan')?.kitne || 0
 
   return {
@@ -572,6 +597,7 @@ export async function sehatLo(): Promise<Sehat> {
       khamoshAbhi: (pauses || []).length,
     },
     jawabBreakdown: jane,
+    anjaanList,
     kaam: await kaarkardagiNikalo(24, jawab.length, anjaanJawab),
     raaste,
     zyadaJawab,

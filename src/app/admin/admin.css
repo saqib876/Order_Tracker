@@ -1360,3 +1360,131 @@ a.adm-item-name:hover {
   line-height: 1.55;
   color: var(--ink-3);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Health — khulne band hone wale sections
+ *
+ * <details> browser ka apna hissa hai, is ke liye koi script nahi chahiye.
+ * Patti par click karte hi khul jata hai. Wohi usool yahan bhi: na blur,
+ * na hamesha chalne wali animation.
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-fold {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.adm-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background-color 0.16s;
+}
+
+.adm-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adm-fold > summary:hover {
+  background: var(--accent-bg);
+}
+
+.adm-fold-arrow {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--ink-3);
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.adm-fold[open] > summary .adm-fold-arrow {
+  transform: rotate(90deg);
+}
+
+.adm-fold-naam {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.adm-fold-tafseel {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.adm-fold-n {
+  flex: none;
+  min-width: 34px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--card-2);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Section ka rang — ek patli lakeer bayen taraf */
+.adm-fold[data-grade='acha'] {
+  border-left: 3px solid #10b981;
+}
+.adm-fold[data-grade='theek'] {
+  border-left: 3px solid #f59e0b;
+}
+.adm-fold[data-grade='bura'] {
+  border-left: 3px solid #f43f5e;
+}
+
+.adm-fold[data-grade='bura'] .adm-fold-n {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+.adm-fold[data-grade='acha'] .adm-fold-n {
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.adm-fold-andar {
+  padding: 4px 16px 18px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.adm-fold-andar > .adm-p:first-child,
+.adm-fold-andar > .adm-h3:first-child {
+  margin-top: 12px;
+}
+
+.adm-fold-andar .adm-h3 {
+  margin: 16px 0 8px;
+}
+
+/* Score wale card mein Refresh ka button daayen kone par */
+.adm-score > .adm-btn-ghost {
+  flex: none;
+  align-self: flex-start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-fold > summary,
+  .adm-fold-arrow {
+    transition: none;
+  }
+}

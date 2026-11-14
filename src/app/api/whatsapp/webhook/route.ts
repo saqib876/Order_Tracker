@@ -963,7 +963,13 @@ async function manualJawabDarj(phone: string, reason: string, order: string): Pr
  * se do mein se sirf EK insert kaamyab hota hai, doosra 23505 le kar hat jata
  * hai. Table hi na ho to "haan" keh dete hain taake bot ruke nahi.
  */
-async function claim(table: string, keys: Record<string, string>, windowMs: number): Promise<boolean> {
+async function claim(
+  table: string,
+  keys: Record<string, string>,
+  windowMs: number,
+  /** Sirf yaad-dasht ke liye (jaise jawab ka pehla hissa) — na ho to bhi chalega */
+  yaad?: Record<string, string>
+): Promise<boolean> {
   const ab = new Date().toISOString()
   const cutoff = new Date(Date.now() - windowMs).toISOString()
 
@@ -977,9 +983,20 @@ async function claim(table: string, keys: Record<string, string>, windowMs: numb
   }
   if (data && data.length) return true // purani entry thi aur waqt guzar chuka
 
-  const { error: insErr } = await supabaseAdmin.from(table).insert({ ...keys, sent_at: ab })
+  const { error: insErr } = await supabaseAdmin
+    .from(table)
+    .insert({ ...keys, ...(yaad || {}), sent_at: ab })
   if (!insErr) return true
   if (insErr.code === '23505') return false // abhi abhi ja chuka hai
+
+  // Yaad-dasht wala khana abhi bana hi na ho (42703) to us ke baghair likho -
+  // jawab bhejna kisi haal mein nahi rukna chahiye.
+  if (yaad && insErr.code === '42703') {
+    const { error: dobara } = await supabaseAdmin.from(table).insert({ ...keys, sent_at: ab })
+    if (!dobara) return true
+    if (dobara.code === '23505') return false
+  }
+
   console.warn(`[wa] ${table} mein likh nahi saka:`, insErr.message)
   return true
 }
@@ -1187,7 +1204,17 @@ async function trackingClaim(phone: string, orderNumber: string | number): Promi
  */
 async function bhejo(phone: string, text: string): Promise<boolean> {
   const hash = createHash('sha1').update(text).digest('hex').slice(0, 32)
-  if (!(await claim('wa_recent_reply', { phone, reply_hash: hash }, SAME_REPLY_HOURS * 3600 * 1000))) {
+  // Matan ka pehla hissa bhi mehfooz karte hain. Health ka safha isi se
+  // bata deta hai ke "pehchana nahi gaya" wala jawab asal mein tha kya.
+  const namuna = text.replace(/\s+/g, ' ').slice(0, 160)
+  if (
+    !(await claim(
+      'wa_recent_reply',
+      { phone, reply_hash: hash },
+      SAME_REPLY_HOURS * 3600 * 1000,
+      { sample: namuna }
+    ))
+  ) {
     console.log(`[wa] yehi jawab pehle ja chuka — ${phone} ko dobara nahi bheja`)
     return false
   }

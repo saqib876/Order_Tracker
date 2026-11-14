@@ -1,16 +1,22 @@
 /**
  * Bot ki Health — /admin/health?key=ADMIN_KEY
  *
- * Ek nazar mein pata chal jata hai ke sab theek chal raha hai ya nahi:
- *   - har cheez ka hara / laal nishan
- *   - AAJ kaun sa jawab kitni dafa gaya (sab se zaroori hissa)
- *   - aap ka quick reply bot ne pehchana ya nahi
- *   - Excel ki list saaf hai ya nahi
+ * Safha kaise bana hua hai
+ * ------------------------
+ * Upar wali cheezein HAMESHA khuli rehti hain: ek bara number (bot kitna
+ * theek chal raha hai), paanch paimane, aur agar koi gharbar ho to us ki
+ * lal lines.
+ *
+ * Baqi sab kuch BAND hota hai. Har section ek patti hai jis par naam,
+ * ginti aur ek chhota khulasa likha hai — click karo to khul jaye, dobara
+ * click karo to band. Is tarah safha chhota rehta hai aur jo dekhna ho
+ * sirf wohi khulta hai.
  *
  * Ye safha koi message nahi bhejta aur AI ko call nahi karta — sirf dekhta
  * hai. Jitni dafa marzi kholein.
  */
 
+import type { ReactNode } from 'react'
 import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { sehatLo } from '@/lib/sehat'
@@ -40,12 +46,63 @@ const QISM_NAAM: Record<string, string> = {
   anjaan: 'Pehchana nahi gaya',
 }
 
+const waqt = (iso: string) =>
+  iso
+    ? new Date(iso).toLocaleString('en-GB', {
+        timeZone: 'Asia/Karachi',
+        hour12: true,
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—'
+
+/**
+ * Ek band hone wala section.
+ *
+ * `<details>` istemal kiya hai — ye browser ka apna hissa hai, is ke liye
+ * koi script nahi chahiye. Safha halka rehta hai aur bina JavaScript ke
+ * bhi khulta band hota hai.
+ */
+function Khana({
+  naam,
+  tafseel,
+  ginti,
+  rang,
+  khula,
+  children,
+}: {
+  naam: string
+  tafseel: string
+  ginti?: number | string
+  rang?: 'acha' | 'theek' | 'bura'
+  khula?: boolean
+  children: ReactNode
+}) {
+  return (
+    <details className="adm-fold" open={khula} data-grade={rang}>
+      <summary>
+        <span className="adm-fold-arrow" aria-hidden>
+          ›
+        </span>
+        <span className="adm-fold-naam">
+          {naam}
+          <span className="adm-fold-tafseel">{tafseel}</span>
+        </span>
+        {ginti !== undefined && <span className="adm-fold-n">{ginti}</span>}
+      </summary>
+      <div className="adm-fold-andar">{children}</div>
+    </details>
+  )
+}
+
 export default async function HealthPage({
   searchParams,
 }: {
   searchParams: { [key: string]: string | string[] | undefined }
 }) {
-  // Har dafa taza data - Next ka koi cache beech mein na aaye
+  // Har dafa taza data — Next ka koi cache beech mein na aaye
   noStore()
 
   const adminKey = process.env.ADMIN_KEY
@@ -78,17 +135,9 @@ export default async function HealthPage({
   const s = await sehatLo()
   const k = encodeURIComponent(adminKey)
 
-  const sabTheek = s.khulasa.every((x) => x.theek)
+  const masle = s.khulasa.filter((x) => !x.theek)
   const topTopic = s.jawabBreakdown[0]
-
-  const waqtLocal = new Date(s.waqt).toLocaleString('en-GB', {
-    timeZone: 'Asia/Karachi',
-    hour12: true,
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const anjaanKul = s.jawabBreakdown.find((j) => j.qism === 'anjaan')?.kitne || 0
 
   return (
     <main className="adm">
@@ -114,10 +163,11 @@ export default async function HealthPage({
 
         <h1 className="adm-title">Bot ki Health</h1>
         <p className="adm-sub">
-          {waqtLocal} tak ka haal (Pakistan ka waqt) — ye safha koi message nahi bhejta.
+          {waqt(s.waqt)} tak ka haal (Pakistan ka waqt). Har section par click karein — khul
+          jayega, dobara click par band.
         </p>
 
-        {/* Kaarkardagi: bot kitna theek chal raha hai */}
+        {/* ── Bara number: hamesha khula ────────────────────────────────── */}
         <section className="adm-score">
           <div className="adm-score-big" data-grade={gradeKa(s.kaam.kul)}>
             <b>{s.kaam.kul}</b>
@@ -127,16 +177,18 @@ export default async function HealthPage({
           <div className="adm-score-note">
             <h2 className="adm-h2">Bot kitna theek chal raha hai</h2>
             <p className="adm-p">
-              Ye number paanch cheezon ka ausat hai — har ek neeche alag se likhi hai.
-              Pichle 24 ghanton ke <b>{s.kaam.faisle}</b> faislon par bana hai.
+              Paanch cheezon ka ausat — har ek neeche alag se likhi hai. Pichle 24 ghanton ke{' '}
+              <b>{s.kaam.faisle}</b> faislon par bana hai.
             </p>
             {s.kaam.faisle === 0 && (
               <p className="adm-hint">
-                Abhi koi faisla darj nahi hua. Ya to traffic nahi aaya, ya roznamche ki table
-                (bot_faisla) abhi bani nahi — neeche "Nizam ka andar ka haal" dekh lein.
+                Abhi koi faisla darj nahi hua — roznamcha naye messages se bharta hai.
               </p>
             )}
           </div>
+          <a className="adm-btn-ghost" href={`/admin/health?key=${k}&t=${Date.now()}`}>
+            Refresh
+          </a>
         </section>
 
         <div className="adm-paimane">
@@ -157,56 +209,24 @@ export default async function HealthPage({
           ))}
         </div>
 
-        {/* AI kin kaamon mein madad kar raha hai */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>AI kin kaamon mein madad kar raha hai</h2>
-            <p>
-              AI har message par nahi chalta. Wo sirf wahan bulaya jata hai jahan lafz kaam na
-              aayein — aur wahan bhi wo jawab nahi likhta, sirf aap ka topic chunta hai.
-            </p>
-            <span className="adm-sec-n">{s.sb.aiCalls24}</span>
-          </div>
-          {s.kaam.aiKeKaam.length === 0 ? (
-            <p className="adm-khali">
-              Pichle 24 ghanton mein AI ki zaroorat hi nahi pari — sab kuch lafzon se chal gaya.
-            </p>
-          ) : (
-            <div className="adm-list">
-              {s.kaam.aiKeKaam.map((a, i) => (
-                <div className="adm-item" key={i}>
-                  <span className="adm-dot" style={{ background: '#8b5cf6' }} aria-hidden />
-                  <span className="adm-item-name">{a.kaam}</span>
-                  <span className="adm-num">{a.kitne}</span>
+        {/* ── Gharbar: sirf tab jab waqai koi masla ho ──────────────────── */}
+        {masle.length > 0 ? (
+          <div className="adm-card" data-tone="quiet">
+            <h2 className="adm-h2">Dekhne wali baatein</h2>
+            <div className="adm-list adm-khulasa">
+              {masle.map((x, i) => (
+                <div className="adm-item" key={i} data-off="1">
+                  <span className="adm-dot" style={{ background: '#f43f5e' }} aria-hidden />
+                  <span className="adm-item-name" style={{ fontWeight: 500 }}>
+                    {x.baat}
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* ── Sab se upar: hara ya laal ───────────────────────────────── */}
-        <div className="adm-card" data-tone={sabTheek ? 'new' : 'quiet'}>
-          <div className="adm-card-top">
-            <h2 className="adm-h2">{sabTheek ? 'Sab theek chal raha hai' : 'Dekhne wali baatein'}</h2>
-            <a className="adm-btn-ghost" href={`/admin/health?key=${k}&t=${Date.now()}`}>
-              Dobara check karein
-            </a>
           </div>
-          <div className="adm-list adm-khulasa">
-            {s.khulasa.map((x, i) => (
-              <div className="adm-item" key={i} data-off={x.theek ? undefined : '1'}>
-                <span
-                  className="adm-dot"
-                  style={{ background: x.theek ? '#10b981' : '#f43f5e' }}
-                  aria-hidden
-                />
-                <span className="adm-item-name" style={{ fontWeight: 500 }}>
-                  {x.baat}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        ) : (
+          <p className="adm-flash">Sab theek chal raha hai — koi dekhne wali baat nahi.</p>
+        )}
 
         {/* ── Aaj ki ginti ─────────────────────────────────────────────── */}
         <div className="adm-stats">
@@ -228,57 +248,147 @@ export default async function HealthPage({
           </div>
         </div>
 
-        {/* ── ASAL CHEEZ: kaun sa jawab kitni dafa gaya ────────────────── */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>Aaj kaun sa jawab kitni dafa gaya</h2>
-            <p>
-              Pichle 24 ghante ke <b>{s.sb.jawab24}</b> jawab — kis topic ke, kitne customers ko.
-              Koi faltu jawab ja raha ho to yahin nazar aa jayega.
-            </p>
-            <span className="adm-sec-n">{s.jawabBreakdown.length}</span>
-          </div>
+        {/* ══ Yahan se sab band hota hai ═══════════════════════════════════ */}
 
+        {anjaanKul > 0 && (
+          <Khana
+            naam="Pehchana nahi gaya"
+            tafseel="Ye jawab kisi maujooda topic se nahi milte — sab se pehle yahi dekhein"
+            ginti={anjaanKul}
+            rang="bura"
+            khula
+          >
+            <p className="adm-p">
+              Har jawab kisi maloom raste se aana chahiye. Ye jawab gaye to sahi, lekin ab un ka
+              matan kisi chalu topic se nahi milta. <b>Aam wajah:</b> jawab bhejne ke baad aap ne us
+              topic ka matan badal diya, ya topic delete ho gaya — matan badalte hi purana jawab
+              yahan aa jata hai. Ye kharabi nahi hoti.
+            </p>
+            <div className="adm-list">
+              {s.anjaanList.map((a, i) => (
+                <div className="adm-item" key={i} data-off="1">
+                  <span className="adm-item-name">
+                    {a.namuna}
+                    <span className="adm-item-sub">
+                      {a.customers} customers · aakhri dafa {waqt(a.aakhri)}
+                    </span>
+                  </span>
+                  <span className="adm-num">{a.kitne}</span>
+                </div>
+              ))}
+            </div>
+            <p className="adm-hint">
+              Jin jawabon ka matan "mehfooz nahi" likha hai, wo is cheez se pehle gaye the. Aage se
+              har jawab ka matan mehfooz hota hai, is liye agli dafa yahan poora matan dikhega.
+            </p>
+          </Khana>
+        )}
+
+        <Khana
+          naam="Aaj kaun sa jawab kitni dafa gaya"
+          tafseel="Kis topic ke jawab gaye, kitne customers ko"
+          ginti={s.jawabBreakdown.length}
+        >
           {s.jawabBreakdown.length === 0 ? (
             <p className="adm-khali">Pichle 24 ghante mein koi jawab nahi gaya.</p>
           ) : (
-            <div className="adm-list">
-              {s.jawabBreakdown.map((j, i) => (
-                <div className="adm-item" key={i}>
-                  <span className="adm-dot" style={{ background: RANG[j.qism] }} aria-hidden />
-                  <span className="adm-item-name">
-                    {j.naam}
-                    <span className="adm-item-sub">
-                      {QISM_NAAM[j.qism]} · {j.customers} customers · {j.hissa}%
+            <>
+              <div className="adm-list">
+                {s.jawabBreakdown.map((j, i) => (
+                  <div className="adm-item" key={i}>
+                    <span className="adm-dot" style={{ background: RANG[j.qism] }} aria-hidden />
+                    <span className="adm-item-name">
+                      {j.naam}
+                      <span className="adm-item-sub">
+                        {QISM_NAAM[j.qism]} · {j.customers} customers · {j.hissa}%
+                      </span>
                     </span>
-                  </span>
-                  <span className="adm-num">{j.kitne}</span>
-                  <span className="adm-meter">
-                    <i style={{ width: `${Math.max(j.hissa, 2)}%`, background: RANG[j.qism] }} />
-                  </span>
+                    <span className="adm-num">{j.kitne}</span>
+                    <span className="adm-meter">
+                      <i style={{ width: `${Math.max(j.hissa, 2)}%`, background: RANG[j.qism] }} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {topTopic && (
+                <p className="adm-hint">
+                  Sab se zyada <b>{topTopic.naam}</b> gaya — {topTopic.kitne} dafa.
+                </p>
+              )}
+            </>
+          )}
+        </Khana>
+
+        <Khana
+          naam="AI kin kaamon mein madad kar raha hai"
+          tafseel="AI har message par nahi chalta — sirf jahan lafz kaam na aayein"
+          ginti={s.sb.aiCalls24}
+        >
+          {s.kaam.aiKeKaam.length === 0 ? (
+            <p className="adm-khali">
+              Pichle 24 ghanton mein AI ki zaroorat hi nahi pari — sab kuch lafzon se chal gaya.
+            </p>
+          ) : (
+            <div className="adm-list">
+              {s.kaam.aiKeKaam.map((a, i) => (
+                <div className="adm-item" key={i}>
+                  <span className="adm-dot" style={{ background: '#8b5cf6' }} aria-hidden />
+                  <span className="adm-item-name">{a.kaam}</span>
+                  <span className="adm-num">{a.kitne}</span>
                 </div>
               ))}
             </div>
           )}
+          <p className="adm-hint">
+            AI kabhi jawab nahi likhta — wo sirf aap ka topic chunta hai. Jawab hamesha aap ki
+            Excel se lafz ba lafz jata hai.
+          </p>
+        </Khana>
 
-          {topTopic && (
-            <p className="adm-hint">
-              Sab se zyada <b>{topTopic.naam}</b> gaya — {topTopic.kitne} dafa, yaani har{' '}
-              {Math.max(1, Math.round(100 / Math.max(topTopic.hissa, 1)))} mein se ek jawab.
+        <Khana
+          naam="Kis customer ko kitne jawab gaye"
+          tafseel={`Ek se zyada jawab paane wale customers — ${s.settings.MAX_REPLIES_PER_DAY} par bot khud ruk jata hai`}
+          ginti={s.zyadaJawab.length}
+          rang={s.hadParLog > 0 ? 'theek' : undefined}
+        >
+          {s.zyadaJawab.length === 0 ? (
+            <p className="adm-khali">
+              Har customer ko sirf ek jawab gaya — koi message dohraya nahi gaya.
             </p>
+          ) : (
+            <div className="adm-list">
+              {s.zyadaJawab.map((c, i) => (
+                <div className="adm-item" key={i} data-off={c.kitne >= 4 ? '1' : undefined}>
+                  <span
+                    className="adm-dot"
+                    style={{
+                      background: c.kitne >= 4 ? '#f43f5e' : c.kitne >= 3 ? '#f59e0b' : '#10b981',
+                    }}
+                    aria-hidden
+                  />
+                  <span className="adm-item-name">
+                    {c.phone}
+                    <span className="adm-item-sub">
+                      {c.kitne >= 4
+                        ? 'rozana ki had par — bot is se aage khamosh ho jata hai'
+                        : c.kitne >= 3
+                        ? 'thore zyada — ek dafa chat dekh lein'
+                        : 'aam baat'}
+                    </span>
+                  </span>
+                  <span className="adm-num">{c.kitne}</span>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
+        </Khana>
 
-        {/* Jawab ke raaste */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>Jawab ke raaste</h2>
-            <p>
-              Ye do jawab customer ke alfaz se nahi chune jate — bot inhein naam se bulata hai.
-              Topic ka naam theek hona zaroori hai, warna bot purane matan par chala jata hai.
-            </p>
-            <span className="adm-sec-n">{s.raaste.length}</span>
-          </div>
+        <Khana
+          naam="Jawab ke raaste"
+          tafseel="Do jawab jinhein bot topic ke NAAM se bulata hai"
+          ginti={s.raaste.filter((r) => r.mila).length + '/' + s.raaste.length}
+          rang={s.raaste.every((r) => r.mila) ? 'acha' : 'bura'}
+        >
           <div className="adm-list">
             {s.raaste.map((r, i) => (
               <div className="adm-item" key={i} data-off={r.mila ? undefined : '1'}>
@@ -297,62 +407,22 @@ export default async function HealthPage({
               </div>
             ))}
           </div>
-        </div>
+          <p className="adm-hint">
+            Topic ka naam badal jaye to bot use dhoond nahi payega aur chup chaap purane matan par
+            chala jayega. Is liye yahan hara nishan zaroori hai.
+          </p>
+        </Khana>
 
-        {/* Kis customer ko kitne jawab */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>Kis customer ko kitne jawab gaye</h2>
-            <p>
-              Aam tor par ek customer ko ek ya do jawab jate hain. Kisi ko{' '}
-              <b>{s.settings.MAX_REPLIES_PER_DAY}</b> ya us se zyada chale jayein to bot khud ruk
-              jata hai. Yahan sirf wo customers hain jin ko ek se zyada jawab gaye.
-            </p>
-            <span className="adm-sec-n">{s.zyadaJawab.length}</span>
-          </div>
-
-          {s.zyadaJawab.length === 0 ? (
-            <p className="adm-khali">
-              Har customer ko sirf ek jawab gaya - koi message dohraya nahi gaya.
-            </p>
-          ) : (
-            <div className="adm-list">
-              {s.zyadaJawab.map((c, i) => (
-                <div className="adm-item" key={i} data-off={c.kitne >= 4 ? '1' : undefined}>
-                  <span
-                    className="adm-dot"
-                    style={{ background: c.kitne >= 4 ? '#f43f5e' : c.kitne >= 3 ? '#f59e0b' : '#10b981' }}
-                    aria-hidden
-                  />
-                  <span className="adm-item-name">
-                    {c.phone}
-                    <span className="adm-item-sub">
-                      {c.kitne >= 4
-                        ? 'rozana ki had par - bot is se aage khamosh ho jata hai'
-                        : c.kitne >= 3
-                        ? 'thore zyada - ek dafa chat dekh lein'
-                        : 'aam baat'}
-                    </span>
-                  </span>
-                  <span className="adm-num">{c.kitne}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Aap ke apne bheje message ────────────────────────────────── */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>Aap ke bheje hue message</h2>
-            <p>
-              Bot un ka matan dekh kar faisla karta hai: ek hi matan 3 ya zyada customers ko jaye to
-              wo <b>quick reply</b> hai aur bot chalta rehta hai. Sirf ek customer ko jaye to bot
-              samajhta hai ke aap khud baat kar rahe hain aur khamosh ho jata hai.
-            </p>
-            <span className="adm-sec-n">{s.echo.matanWale}</span>
-          </div>
-
+        <Khana
+          naam="Aap ke bheje hue message"
+          tafseel="Quick reply pehchana gaya ya nahi"
+          ginti={s.echo.matanWale}
+        >
+          <p className="adm-p">
+            Ek hi matan 3 ya zyada customers ko jaye to wo <b>quick reply</b> hai aur bot chalta
+            rehta hai. Sirf ek customer ko jaye to bot samajhta hai ke aap khud baat kar rahe hain
+            aur khamosh ho jata hai.
+          </p>
           {s.matanList.length === 0 ? (
             <p className="adm-khali">
               Abhi tak koi matan nahi mila. Ya to koi message bahar nahi gaya, ya Meta par
@@ -372,7 +442,7 @@ export default async function HealthPage({
                     <span className="adm-item-sub">
                       {m.quickReply
                         ? 'QUICK REPLY — bot chalta rahega'
-                        : `abhi aap ki apni likhai samjha ja raha hai (3 customers par pehchan lega)`}
+                        : 'abhi aap ki apni likhai samjha ja raha hai (3 customers par pehchan lega)'}
                     </span>
                   </span>
                   <span className="adm-num">{m.customers}</span>
@@ -380,58 +450,49 @@ export default async function HealthPage({
               ))}
             </div>
           )}
-
           {s.echo.sirfKhabar > 0 && (
             <p className="adm-hint">
-              {s.echo.sirfKhabar} message aise the jin ka matan nahi mila (tasveer, ya sirf status ki
-              khabar) — in par purana ginti wala tareeqa chalta hai.
+              {s.echo.sirfKhabar} message aise the jin ka matan nahi mila (tasveer, ya sirf status
+              ki khabar) — in par purana ginti wala tareeqa chalta hai.
             </p>
           )}
-        </div>
+        </Khana>
 
-        {/* ── Abhi khamoshi kis par ────────────────────────────────────── */}
         {s.khamoshi.length > 0 && (
-          <div className="adm-sec">
-            <div className="adm-sec-head">
-              <h2>Abhi in par bot khamosh hai</h2>
-              <p>Tracking phir bhi jati rahegi — sirf aam jawab ruke hue hain.</p>
-              <span className="adm-sec-n">{s.khamoshi.length}</span>
-            </div>
+          <Khana
+            naam="Abhi in par bot khamosh hai"
+            tafseel="Tracking phir bhi jati rahegi — sirf aam jawab ruke hue hain"
+            ginti={s.khamoshi.length}
+          >
             <div className="adm-list">
               {s.khamoshi.map((p, i) => (
                 <div className="adm-item" key={i}>
                   <span className="adm-item-name">
                     {p.phone}
-                    <span className="adm-item-sub">
-                      {new Date(p.kabTak).toLocaleString('en-GB', {
-                        timeZone: 'Asia/Karachi',
-                        hour12: true,
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        day: '2-digit',
-                        month: 'short',
-                      })}{' '}
-                      tak
-                    </span>
+                    <span className="adm-item-sub">{waqt(p.kabTak)} tak</span>
                   </span>
                 </div>
               ))}
             </div>
-          </div>
+          </Khana>
         )}
 
-        {/* ── Excel ki list ────────────────────────────────────────────── */}
-        <div className="adm-card" data-tone={s.excel.orderWale ? 'quiet' : 'new'}>
-          <div className="adm-card-top">
-            <h2 className="adm-h2">Excel ki list saaf hai?</h2>
-            <Link className="adm-btn-ghost" href={`/admin/qna?key=${k}`}>
-              Naye sawaal dekhein
-            </Link>
-          </div>
+        <Khana
+          naam="Excel ki list"
+          tafseel={
+            s.excel.orderWale === 0
+              ? 'Saaf hai — koi order tracking wala sawaal nahi'
+              : `${s.excel.orderWale} sawaal ab bhi order tracking wale lag rahe hain`
+          }
+          ginti={s.sb.naySawaal24}
+          rang={s.excel.orderWale === 0 ? 'acha' : 'theek'}
+        >
           <p className="adm-p">
             Pichle 7 din ke <b>{s.excel.parkhe}</b> naye sawaal parhe —{' '}
             {s.excel.orderWale === 0 ? (
-              <>in mein <b>ek bhi</b> order tracking wala nahi. List saaf hai.</>
+              <>
+                in mein <b>ek bhi</b> order tracking wala nahi.
+              </>
             ) : (
               <>
                 in mein <b>{s.excel.orderWale}</b> ab bhi order tracking wale lag rahe hain.
@@ -449,18 +510,20 @@ export default async function HealthPage({
           )}
           <p className="adm-hint">
             Aaj ke naye sawaal: <b>{s.sb.naySawaal24}</b> · Jama shuda kul:{' '}
-            <b>{s.tables['unmatched_messages']?.rows ?? 0}</b> — in par AI ki tajweez chalayein to
-            bot aur zyada sawaal samajhne lagega.
+            <b>{s.tables['unmatched_messages']?.rows ?? 0}</b> —{' '}
+            <Link className="adm-a" href={`/admin/qna?key=${k}`}>
+              in par AI ki tajweez chalayein
+            </Link>
           </p>
-        </div>
+        </Khana>
 
-        {/* ── Nizam ka andar ka haal ───────────────────────────────────── */}
-        <div className="adm-sec">
-          <div className="adm-sec-head">
-            <h2>Nizam ka andar ka haal</h2>
-            <p>Supabase ki tables aur settings — in ko aam taur par haath lagane ki zaroorat nahi.</p>
-          </div>
-
+        <Khana
+          naam="Nizam ka andar ka haal"
+          tafseel="Supabase ki tables aur settings — aam taur par haath lagane ki zaroorat nahi"
+          ginti={Object.keys(s.tables).length}
+          rang={Object.values(s.tables).every((t) => t.thik) ? 'acha' : 'bura'}
+        >
+          <h3 className="adm-h3">Naye khane</h3>
           <div className="adm-mini">
             {Object.entries(s.nayeKhane).map(([naam, ok]) => (
               <div key={naam}>
@@ -470,6 +533,7 @@ export default async function HealthPage({
             ))}
           </div>
 
+          <h3 className="adm-h3">Tables</h3>
           <div className="adm-mini">
             {Object.entries(s.tables).map(([naam, t]) => (
               <div key={naam}>
@@ -481,6 +545,7 @@ export default async function HealthPage({
             ))}
           </div>
 
+          <h3 className="adm-h3">Settings</h3>
           <div className="adm-mini">
             {Object.entries(s.settings).map(([naam, val]) => (
               <div key={naam}>
@@ -489,7 +554,7 @@ export default async function HealthPage({
               </div>
             ))}
           </div>
-        </div>
+        </Khana>
 
         <p className="adm-foot">
           Sab kuch JSON mein chahiye to{' '}

@@ -342,3 +342,13 @@ create table if not exists bot_health_daily (
 );
 
 alter table bot_health_daily enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 16. wa_recent_reply mein jawab ka namuna
+--
+-- Ab tak sirf matan ka hash mehfooz hota tha. Us se ye to pata chal jata
+-- tha ke "ek jaisa jawab" kitni dafa gaya, lekin Health ke safhe par jab
+-- koi jawab kisi maujooda topic se na milta, to ye nahi bataya ja sakta
+-- tha ke wo tha kya. Ab pehle 160 harf bhi sath rehte hain.
+-- ───────────────────────────────────────────────────────────────────────────
+alter table wa_recent_reply add column if not exists sample text;
