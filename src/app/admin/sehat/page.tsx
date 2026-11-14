@@ -11,6 +11,7 @@
  * hai. Jitni dafa marzi kholein.
  */
 
+import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { sehatLo } from '@/lib/sehat'
 import { ThemeBoot, ThemeToggle } from '../ThemeBits'
@@ -37,6 +38,9 @@ export default async function SehatPage({
 }: {
   searchParams: { [key: string]: string | string[] | undefined }
 }) {
+  // Har dafa taza data - Next ka koi cache beech mein na aaye
+  noStore()
+
   const adminKey = process.env.ADMIN_KEY
   if (!adminKey) {
     return (

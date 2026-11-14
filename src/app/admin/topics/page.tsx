@@ -29,6 +29,7 @@
  */
 
 import type { CSSProperties } from 'react'
+import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { ignoreKey } from '@/lib/qnaIgnore'
@@ -60,6 +61,9 @@ export default async function TopicsPage({
 }: {
   searchParams: { [key: string]: string | string[] | undefined }
 }) {
+  // Har dafa taza data - Next ka koi bhi cache beech mein na aaye
+  noStore()
+
   const adminKey = process.env.ADMIN_KEY
   if (!adminKey) {
     return (

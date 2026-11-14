@@ -127,16 +127,28 @@ export async function POST(req: NextRequest) {
         updated_at: ab,
       })
       .eq('id', id)
-      .select('id')
+      // Database se wohi row wapas mangwate hain JO UPDATE KE BAAD hai -
+      // andaza nahi lagate ke kya hua, usi se parh lete hain.
+      .select('id, is_active')
     if (error) return wapas(req, adminKey, { khata: error.message })
     if (!badle || !badle.length) {
       return wapas(req, adminKey, { khata: 'Topic nahi mila — kuch badla nahi' })
     }
+
+    const abChalu = Boolean(badle[0].is_active)
+    if (abChalu !== chalu) {
+      return wapas(
+        req,
+        adminKey,
+        { khata: 'Database ne tabdeeli qubool nahi ki — topic ab bhi ' + (abChalu ? 'ON' : 'OFF') + ' hai' },
+        id
+      )
+    }
     invalidateQnaCache()
-    console.log('[topics] ' + id + ' ab ' + (chalu ? 'ON' : 'OFF'))
+    console.log('[topics] ' + id + ' ab ' + (abChalu ? 'ON' : 'OFF'))
     // Topic khula hua tha to wapas usi par, warna list par
     const khulaRahe = String(form.get('khulaRahe') || '') === '1'
-    return wapas(req, adminKey, { badla: chalu ? 'chalu' : 'band' }, khulaRahe ? id : undefined)
+    return wapas(req, adminKey, { badla: abChalu ? 'chalu' : 'band' }, khulaRahe ? id : undefined)
   }
 
   // ── Hamesha ke liye hatao ──────────────────────────────────────────────
