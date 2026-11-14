@@ -18,7 +18,12 @@ import type { CourierStage } from '@/lib/courierStatus'
 import { phoneVariants, extractIncomingText, isJunkMessage } from '@/lib/messageParse'
 import { planReply, TRACK_LINK } from '@/lib/replyPlan'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
-import { AVAILABLE_LINE, ORDER_INFO_MAANGO, ORDER_NAHI_MILA } from '@/lib/replyText'
+import {
+  AVAILABLE_LINE,
+  ORDER_INFO_MAANGO,
+  ORDER_NAHI_MILA,
+  TRACK_LINK_JAWAB,
+} from '@/lib/replyText'
 import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
@@ -687,7 +692,7 @@ export async function POST(req: NextRequest) {
     await clearState()
     const webTrack = await getTrackLinkAnswer()
     await bhejoAam(
-      (await orderNaMilaJawab()) || webTrack || ORDER_NAHI_MILA
+      (await orderNaMilaJawab(from)) || webTrack || ORDER_NAHI_MILA
     )
     return NextResponse.json({ ok: true })
   }
@@ -760,7 +765,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await bhejoAam((await orderNaMilaJawab()) || ORDER_INFO_MAANGO)
+    await bhejoAam((await orderNaMilaJawab(from)) || ORDER_INFO_MAANGO)
     return NextResponse.json({ ok: true })
   }
 
@@ -999,9 +1004,29 @@ async function insaniJawabDekho(value: any): Promise<void> {
  * Mil jaye to yehi jata hai; warna null, aur bulane wali jagah purana
  * message bhej deti hai.
  */
-async function orderNaMilaJawab(): Promise<string | null> {
+async function orderNaMilaJawab(phone: string): Promise<string | null> {
+  // Asli tracking haal hi mein ja chuki ho to ye NAHI jata. Warna customer
+  // ko do tarah ki tracking mil jati — ek live status, ek website ka link.
+  const kabSe = new Date(Date.now() - TRACKING_REPEAT_HOURS * 3600 * 1000).toISOString()
+  const { data: jaChuki } = await supabaseAdmin
+    .from('wa_tracking_sent')
+    .select('sent_at')
+    .eq('phone', phone)
+    .gt('sent_at', kabSe)
+    .limit(1)
+
+  if (jaChuki && jaChuki.length) {
+    console.log(`[wa] asli tracking pehle ja chuki — ${phone} ko link wala jawab nahi bheja`)
+    return null
+  }
+
+  // Excel mein aap ka apna matan ho to wo, warna code mein likha hua.
+  // Dono surton mein matan ek jaisa rehta hai, is liye bhejne wala hissa
+  // khud hi 24 ghante mein ek dafa se zyada nahi bhejta.
   return (
-    (await answerForTopic(TRACKING_UNKNOWN_TOPIC)) || (await getTopicAnswer(TRACKING_UNKNOWN_TOPIC))
+    (await answerForTopic(TRACKING_UNKNOWN_TOPIC)) ||
+    (await getTopicAnswer(TRACKING_UNKNOWN_TOPIC)) ||
+    TRACK_LINK_JAWAB
   )
 }
 
@@ -1162,7 +1187,7 @@ async function tasveerKaJawab(message: any, from: string, khamoshi = false): Pro
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await bhejo(from, (await orderNaMilaJawab()) || ORDER_INFO_MAANGO)
+    await bhejo(from, (await orderNaMilaJawab(from)) || ORDER_INFO_MAANGO)
   }
 }
 

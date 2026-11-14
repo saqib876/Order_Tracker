@@ -28,3 +28,23 @@ export const ORDER_NAHI_MILA = [
   'Confirmation Number (Jaise #N8FNNZAKE) ',
   'Ya Jis Mobile Number Se Order Kiya Tha Wo Bhej Dein — Main Again Check Karti Hun.',
 ].join('\n')
+
+/**
+ * Sawaal order tracking ka hai, lekin bot ko order mila hi nahi — na order
+ * number, na confirmation number, aur na us phone par koi order.
+ *
+ * Aise mein customer ko khali haath nahi chhorte: website ka tracking link
+ * bhej dete hain taake wo khud dekh le.
+ */
+export const TRACK_LINK_JAWAB = [
+  'Dear Customer,',
+  '',
+  'You can track your shipment using the link below:',
+  '',
+  '🔗 https://myzan.net/pages/track-your-order',
+  '',
+  'Thank you for choosing us!',
+  '',
+  'Best regards,',
+  'Myzan',
+].join('\n')

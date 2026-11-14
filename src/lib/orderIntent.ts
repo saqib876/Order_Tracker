@@ -114,7 +114,6 @@ export const ORDER_STATUS_QUESTIONS: string[] = [
   "Kaafi din hgye",
   "Kab recive hoga yaaa",
   "Kab tak parsal delivered ho ga?",
-  "Karachi delivery available??",
   "Kb ana hai order",
   "Kb tak aye ga order",
   "Kb tk hoga mujhy yh receive?",
@@ -238,8 +237,6 @@ export const ORDER_STATUS_QUESTIONS: string[] = [
   "I just placed my order",
   "I ordered mobile cover's",
   "I ordered these 2 phone cases",
-  "I want to order mobile cover",
-  "I want to order this",
   "Insta page say order kia hai confirm ho gaya hai ?",
   "Is this order confirmed?",
   "Just placed an order",
@@ -318,11 +315,33 @@ const LANGAR = [
  *   - koi "langar" lafz (order, parcel, delivery, tracking...) mojood ho, YA
  *   - jumla ba-qaida aap ki list ke kisi jumle jaisa ho (0.70 se upar)
  */
+/**
+ * NAYA KHARIDAR — ye abhi order karna CHAHTA hai, kiya nahi.
+ *
+ * "I want to order mobile cover" aur "I ordered mobile cover's" lafzon ke
+ * lihaz se bohat milte julte hain, is liye score wala tareeqa dono ko ek
+ * jaisa samajh leta tha — aur naye kharidar ko "apna order number bhejein"
+ * chala jata tha. Ye jumle saaf saaf aane wale waqt ki baat karte hain, is
+ * liye inhein pehle hi alag kar dete hain.
+ *
+ * "order kaise track karun" jaise jumle yahan jaan boojh kar shamil NAHI -
+ * wo apne maujooda order ki baat hai.
+ */
+const NAYA_KHARIDAR = [
+  /\bwant(s|ed)? to order\b/,
+  /\bwanna order\b/,
+  /\blike to order\b/,
+  /\bhow (to|can i|do i|i) order\b/,
+  /\border (karna|krna|karni|krni|kara|krwana) (hai|ha|h|hy|he)\b/,
+]
+
 export function looksLikeOrderIntent(text: string): boolean {
+  const saaf = normalizeForMatch(text)
+  if (NAYA_KHARIDAR.some((re) => re.test(saaf))) return false
+
   const mila = matchAgainstIndex(getIndex(), text, ORDER_INTENT_THRESHOLD)
   if (!mila) return false
 
-  const t = normalizeForMatch(text)
-  if (LANGAR.some((w) => t.includes(w))) return true
+  if (LANGAR.some((w) => saaf.includes(w))) return true
   return mila.score >= 0.7
 }
