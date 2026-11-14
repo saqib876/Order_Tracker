@@ -11,7 +11,7 @@ import {
   answerForTopic,
 } from '@/lib/whatsapp'
 import { samjho, aiAvailable, aiMode } from '@/lib/aiTopic'
-import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
+import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL, ISSUE_REASONS } from '@/lib/intents'
 import { noteForCourierStage, noteToWhatsAppText } from '@/lib/courierNotes'
 import { classifyCourierStage, courierApiUrl } from '@/lib/courierStatus'
 import type { CourierStage } from '@/lib/courierStatus'
@@ -602,7 +602,11 @@ export async function POST(req: NextRequest) {
       (await answerForTopic(label)) || (await getTopicAnswer(label)) || (await matchQna(text))
     const matan = excelJawab || MANUAL_REASON_REPLY[manualReason]
 
-    if (pehleSeMojood) {
+    // Shikayat par queue mein pehle se hona khamoshi ki wajah nahi banta -
+    // wahan 24 ghante wala usool chalta hai (neeche bhejne wala hissa).
+    const shikayatHai = (ISSUE_REASONS as string[]).includes(manualReason)
+
+    if (pehleSeMojood && !shikayatHai) {
       console.log(`[wa] ${label} pehle se queue mein — ${from} ko dobara jawab nahi`)
     } else if (await manualJawabPehleGaya(from, manualReason, orderKey)) {
       // Request manual check mein jur chuki hai (upar), sirf message nahi jata
@@ -841,6 +845,15 @@ async function manualJawabPehleGaya(
   reason: string,
   order: string
 ): Promise<boolean> {
+  // Shikayat wali baatein (quality, ghalat item, return/refund) alag hain.
+  //
+  // Cancel ya address change ek dafa ho kar khatam ho jata hai, lekin
+  // shikayat chalti rehti hai — customer agle din phir likh sakta hai aur
+  // us waqt khamoshi bura lagti hai. In par "hamesha ki" pabandi nahi:
+  // bhejne wala hissa khud 24 ghante tak wohi matan dobara nahi bhejta,
+  // aur manual check mein us ki baat har dafa jurti rehti hai.
+  if ((ISSUE_REASONS as string[]).includes(reason)) return false
+
   const { data, error } = await supabaseAdmin
     .from('wa_manual_jawab')
     .select('sent_at')

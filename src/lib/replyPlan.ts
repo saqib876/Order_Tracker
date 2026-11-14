@@ -21,7 +21,8 @@ import {
   saysNotOrderedYet,
   saysAlreadyOrdered,
 } from '@/lib/messageParse'
-import { detectManualReason } from '@/lib/intents'
+import { detectManualReason, ISSUE_REASONS } from '@/lib/intents'
+import { marhalaPehchano } from '@/lib/marhala'
 import type { ManualReason } from '@/lib/intents'
 import { looksLikeModelAvailability } from '@/lib/modelQuery'
 import { looksLikeCustomization } from '@/lib/customQuery'
@@ -99,7 +100,16 @@ export function planReply(text: string, opts: { alreadyAskedForNumber: boolean }
   // order is ajnabi ko chala jata tha. Isi liye ye guard hai.
   // Manual wajah (cancel, galat model mila...) sab par bhaari hai, phir
   // model availability — dono order-status se pehle aate hain.
-  const manualReason = noQuestion ? null : detectManualReason(text)
+  // Shikayat wali wajhein (ghalat model mila, quality, return/refund) sirf
+  // TAB manual check mein jati hain jab order mil CHUKA ho.
+  //
+  // "Replacement ki policy kya hai?" aur "Cover toota hua mila, replacement
+  // do" — dono mein wohi lafz hai, lekin pehla ek sawaal hai. Us ka jawab
+  // Excel se jata hai, team ko bulane ki zaroorat nahi.
+  let manualReason = noQuestion ? null : detectManualReason(text)
+  if (manualReason && ISSUE_REASONS.includes(manualReason) && marhalaPehchano(text) === 'pehle') {
+    manualReason = null
+  }
   const customization = !noQuestion && !manualReason && looksLikeCustomization(text)
   const modelAvailability =
     !noQuestion && !manualReason && !customization && looksLikeModelAvailability(text)
