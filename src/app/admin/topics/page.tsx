@@ -207,7 +207,12 @@ export default async function TopicsPage({
           <div className="adm-flash">
             {one('mehfooz') && (
               <>
-                <b>{one('mehfooz')}</b> mehfooz ho gaya — bot foran naye mutabiq chalega.
+                <b>{one('mehfooz')}</b> mehfooz ho gaya
+                {one('halat') === 'band'
+                  ? ' — ye topic ab BAND hai, bot is ka jawab nahi bhejega.'
+                  : one('halat') === 'chalu'
+                  ? ' — ye topic CHALU hai.'
+                  : ' — bot foran naye mutabiq chalega.'}
               </>
             )}
             {one('bana') && (
@@ -291,6 +296,14 @@ export default async function TopicsPage({
               <input type="hidden" name="kaam" value="save" />
               <input type="hidden" name="id" value={chuna.id} />
 
+              <p className="adm-hint">
+                Is waqt ye topic{' '}
+                <span className="adm-badge" data-tone={chuna.is_active ? 'on' : 'off'}>
+                  {chuna.is_active ? 'ON' : 'OFF'}
+                </span>{' '}
+                hai.
+              </p>
+
               <label className="adm-label">
                 Topic ka naam
                 <input name="topic" defaultValue={chuna.topic} className="adm-input" required />
@@ -331,6 +344,9 @@ export default async function TopicsPage({
                 />
               </label>
 
+              {/* Tick na laga ho to browser kuch nahi bhejta — is liye ek
+                  chhupa hua "0" hamesha jata hai */}
+              <input type="hidden" name="chalu" value="0" />
               <label className="adm-check">
                 <input
                   type="checkbox"

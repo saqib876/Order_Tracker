@@ -46,6 +46,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // Checkbox ka tick parhne ka mehfooz tareeqa.
+  //
+  // Un-ticked checkbox browser bhejta hi nahi. Is liye form mein ek chhupa
+  // hua "0" bhi jata hai: tick laga ho to DONO (0 aur 1) aate hain, warna
+  // sirf 0. Yani "chalu" hamesha aata hai aur uska matlab saaf hota hai.
+  const chaluHai = (): boolean => form.getAll('chalu').map(String).includes('1')
+
   const kaam = String(form.get('kaam') || 'save')
   const id = String(form.get('id') || '')
   const ab = new Date().toISOString()
@@ -106,12 +113,16 @@ export async function POST(req: NextRequest) {
 
   // ── ON / OFF ───────────────────────────────────────────────────────────
   if (kaam === 'toggle') {
-    const chalu = String(form.get('chalu') || '') === '1'
-    const { error } = await supabaseAdmin
+    const chalu = chaluHai()
+    const { data: badle, error } = await supabaseAdmin
       .from('qna_topics')
       .update({ is_active: chalu, updated_at: ab })
       .eq('id', id)
+      .select('id')
     if (error) return wapas(req, adminKey, { khata: error.message })
+    if (!badle || !badle.length) {
+      return wapas(req, adminKey, { khata: 'Topic nahi mila — kuch badla nahi' })
+    }
     invalidateQnaCache()
     console.log('[topics] ' + id + ' ab ' + (chalu ? 'ON' : 'OFF'))
     return wapas(req, adminKey, { badla: chalu ? 'chalu' : 'band' })
@@ -133,14 +144,14 @@ export async function POST(req: NextRequest) {
   const topic = String(form.get('topic') || '').trim()
   const answer = String(form.get('answer') || '').trim()
   const questions = saafSawaal(String(form.get('questions') || ''))
-  const chalu = String(form.get('chalu') || '') === '1'
+  const chalu = chaluHai()
 
   if (!topic) return wapas(req, adminKey, { khata: 'Topic ka naam khali nahi ho sakta' }, id)
   if (!answer) return wapas(req, adminKey, { khata: 'Jawab khali nahi ho sakta' }, id)
 
   const wajah = String(form.get('wajah') || '').trim()
 
-  const { error } = await supabaseAdmin
+  const { data: badle, error } = await supabaseAdmin
     .from('qna_topics')
     .update({
       topic,
@@ -153,12 +164,17 @@ export async function POST(req: NextRequest) {
       updated_at: ab,
     })
     .eq('id', id)
+    .select('id, is_active')
 
   if (error) return wapas(req, adminKey, { khata: error.message }, id)
+  if (!badle || !badle.length) {
+    return wapas(req, adminKey, { khata: 'Topic nahi mila — kuch mehfooz nahi hua' }, id)
+  }
 
+  const abChalu = Boolean(badle[0].is_active)
   invalidateQnaCache()
-  console.log('[topics] mehfooz: ' + topic)
-  return wapas(req, adminKey, { mehfooz: topic }, id)
+  console.log('[topics] mehfooz: ' + topic + ' — ab ' + (abChalu ? 'ON' : 'OFF'))
+  return wapas(req, adminKey, { mehfooz: topic, halat: abChalu ? 'chalu' : 'band' }, id)
 }
 
 function wapas(req: NextRequest, adminKey: string, params: Record<string, string>, id?: string) {
