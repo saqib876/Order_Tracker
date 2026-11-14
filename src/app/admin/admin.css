@@ -1841,3 +1841,72 @@ a.adm-masla:hover {
 .adm-fold {
   scroll-margin-top: 86px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Chips — ek customer ko kis topic ke kitne jawab gaye
+ *
+ * Ye khole baghair nazar aate hain, taake list par nazar daalte hi pata
+ * chal jaye ke kis ko kya gaya.
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0 4px;
+}
+
+.adm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--card-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  max-width: 100%;
+}
+
+.adm-chip i {
+  display: inline-block;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  color: var(--ink);
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.adm-chip[data-qism='topic'] {
+  border-color: rgba(99, 102, 241, 0.42);
+}
+.adm-chip[data-qism='topic'] i {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+.adm-chip[data-qism='tracking'] {
+  border-color: var(--ok-line);
+}
+.adm-chip[data-qism='tracking'] i {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.adm-chip[data-qism='system'] {
+  border-color: var(--new-line);
+}
+.adm-chip[data-qism='system'] i {
+  background: rgba(251, 191, 36, 0.32);
+}
+
+.adm-chip[data-qism='anjaan'] {
+  border-color: var(--bad-line);
+}
+.adm-chip[data-qism='anjaan'] i {
+  background: rgba(244, 63, 94, 0.3);
+}

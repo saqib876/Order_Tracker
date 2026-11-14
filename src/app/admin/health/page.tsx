@@ -554,8 +554,18 @@ export default async function HealthPage({
                           ? 'rozana ki had par — bot is se aage khamosh ho jata hai'
                           : c.kitne >= 3
                           ? 'thore zyada — ek dafa chat dekh lein'
-                          : 'aam baat'}{' '}
-                        · kaun se jawab gaye, dekhne ke liye click karein
+                          : 'aam baat'}
+                      </span>
+                      <span className="adm-chips">
+                        {c.topicGinti.map((t, n) => (
+                          <span className="adm-chip" key={n} data-qism={t.qism}>
+                            {t.naam}
+                            <i>{t.kitne}</i>
+                          </span>
+                        ))}
+                      </span>
+                      <span className="adm-item-sub">
+                        Waqt aur poora matan dekhne ke liye click karein
                       </span>
                     </span>
                     <span className="adm-num">{c.kitne}</span>

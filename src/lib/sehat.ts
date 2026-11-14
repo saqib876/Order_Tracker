@@ -117,6 +117,8 @@ export interface Sehat {
     kitne: number
     /** Us customer ko kaun kaun se jawab gaye */
     jawabList: { naam: string; qism: string; kab: string; namuna: string }[]
+    /** Topic ke hisaab se jama — khole baghair hi nazar aa jaye */
+    topicGinti: { naam: string; qism: string; kitne: number }[]
   }[]
   hadParLog: number
   matanList: Matan[]
@@ -401,6 +403,17 @@ export async function sehatLo(): Promise<Sehat> {
     const ph = String(r.phone)
     perLog.set(ph, (perLog.get(ph) || 0) + 1)
   }
+  /** Ek customer ke jawab topic ke hisaab se jama kar deta hai */
+  const topicWarGinti = (list: { naam: string; qism: string }[]) => {
+    const jama = new Map<string, { naam: string; qism: string; kitne: number }>()
+    for (const j of list) {
+      const pehle = jama.get(j.naam)
+      if (pehle) pehle.kitne += 1
+      else jama.set(j.naam, { naam: j.naam, qism: j.qism, kitne: 1 })
+    }
+    return Array.from(jama.values()).sort((a, b) => b.kitne - a.kitne)
+  }
+
   const zyadaJawab = Array.from(perLog.entries())
     .filter(([, n]) => n >= 2)
     .sort((a, b) => b[1] - a[1])
@@ -422,6 +435,7 @@ export async function sehatLo(): Promise<Sehat> {
           }
         }),
     }))
+    .map((c) => ({ ...c, topicGinti: topicWarGinti(c.jawabList) }))
   const hadPar = Number(process.env.MAX_REPLIES_PER_DAY) || 4
   const hadParLog = Array.from(perLog.values()).filter((n) => n >= hadPar).length
 
