@@ -126,6 +126,18 @@ const ANJAAN_ORDER = '-'
 const MODEL_GUIDE_TOPIC =
   process.env.MODEL_GUIDE_TOPIC || 'Buy 1 Get 1 Offer / Product Info Chahiye / How To Place Order'
 
+// Sawaal order tracking ka hai, lekin bot ko order mila hi nahi — na order
+// number, na confirmation number, aur na hi us number par koi order jis se
+// message aaya. Aisi surat mein AAP ka likha hua jawab jata hai.
+//
+// Ye jawab Excel ke is topic se aata hai. Topic na ho to bot purane tareeqe
+// par chalta hai (order number maang leta hai) — kuch tootta nahi.
+//
+// NOTE: is topic mein SAWAAL khali rakhein — sirf naam aur jawab. Warna ye
+// aam Q&A mein bhi match hone lagega.
+const TRACKING_UNKNOWN_TOPIC =
+  process.env.TRACKING_UNKNOWN_TOPIC || 'Order Details Nahi Milin'
+
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -675,7 +687,7 @@ export async function POST(req: NextRequest) {
     await clearState()
     const webTrack = await getTrackLinkAnswer()
     await bhejoAam(
-      webTrack || ORDER_NAHI_MILA
+      (await orderNaMilaJawab()) || webTrack || ORDER_NAHI_MILA
     )
     return NextResponse.json({ ok: true })
   }
@@ -748,7 +760,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await bhejoAam(ORDER_INFO_MAANGO)
+    await bhejoAam((await orderNaMilaJawab()) || ORDER_INFO_MAANGO)
     return NextResponse.json({ ok: true })
   }
 
@@ -981,6 +993,18 @@ async function insaniJawabDekho(value: any): Promise<void> {
   }
 }
 
+/**
+ * Order ki koi pehchan nahi mili — aap ka apna jawab (agar likha hua ho).
+ *
+ * Mil jaye to yehi jata hai; warna null, aur bulane wali jagah purana
+ * message bhej deti hai.
+ */
+async function orderNaMilaJawab(): Promise<string | null> {
+  return (
+    (await answerForTopic(TRACKING_UNKNOWN_TOPIC)) || (await getTopicAnswer(TRACKING_UNKNOWN_TOPIC))
+  )
+}
+
 /** Ye message bot ne khud bheja tha? */
 async function hamaraHai(id: string, phone: string): Promise<boolean> {
   const { data: hamara } = await supabaseAdmin
@@ -1138,7 +1162,7 @@ async function tasveerKaJawab(message: any, from: string, khamoshi = false): Pro
     await supabaseAdmin
       .from('wa_conversation_state')
       .upsert({ phone: from, state: 'awaiting_order_info', updated_at: new Date().toISOString() })
-    await bhejo(from, ORDER_INFO_MAANGO)
+    await bhejo(from, (await orderNaMilaJawab()) || ORDER_INFO_MAANGO)
   }
 }
 
