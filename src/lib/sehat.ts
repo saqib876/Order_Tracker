@@ -352,7 +352,6 @@ export async function sehatLo(): Promise<Sehat> {
     { data: pauses },
     { data: tazaSawaal },
     { data: sabTopics },
-    { data: tazaList },
     { data: safarRows },
     tracking24,
   ] = await Promise.all([
@@ -374,19 +373,17 @@ export async function sehatLo(): Promise<Sehat> {
       .gt('until', new Date().toISOString())
       .order('until', { ascending: false })
       .limit(50),
-    supabaseAdmin
-      .from('unmatched_messages')
-      .select('message_text')
-      .gte('created_at', ghanteQabl(24 * 7))
-      .order('created_at', { ascending: false })
-      .limit(300),
-    supabaseAdmin.from('qna_topics').select('id,topic,is_active').limit(500),
+    // Ek hi list do kaamon ke liye: ginti bhi isi se, aur "tracking wale
+    // sawaal" ka khana bhi. Pehle ye do alag queries thin (300 aur 40) aur
+    // purana sawaal ginti mein to aa jata tha lekin khane mein nahi — is
+    // liye us par click karne se kuch nazar nahi aata tha.
     supabaseAdmin
       .from('unmatched_messages')
       .select('id,message_text,created_at')
       .gte('created_at', ghanteQabl(24 * 7))
       .order('created_at', { ascending: false })
-      .limit(40),
+      .limit(300),
+    supabaseAdmin.from('qna_topics').select('id,topic,is_active').limit(500),
     supabaseAdmin
       .from('bot_health_daily')
       .select('din,sehat_fisad,jawab,customers')
@@ -564,7 +561,7 @@ export async function sehatLo(): Promise<Sehat> {
   chaluTopics.sort((a, b) => a.topic.localeCompare(b.topic))
 
   // ── Naye sawaal ── jin par aap yahin se kaam kar sakte hain
-  const nayeSawaal: NayaSawaal[] = (tazaList || []).map((r) => ({
+  const nayeSawaal: NayaSawaal[] = parkhe.slice(0, 40).map((r) => ({
     id: String(r.id),
     matan: String(r.message_text || '').slice(0, 220),
     kab: String(r.created_at || ''),
@@ -791,8 +788,7 @@ export async function sehatLo(): Promise<Sehat> {
       parkhe: parkhe.length,
       orderWale: orderWale.length,
       namune: orderWale.slice(0, 8).map((r) => String(r.message_text || '').slice(0, 90)),
-      trackingWale: (tazaList || [])
-        .filter((r) => looksLikeOrderIntent(String(r.message_text || '')))
+      trackingWale: orderWale
         .slice(0, 25)
         .map((r) => ({
           id: String(r.id),
