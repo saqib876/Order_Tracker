@@ -355,11 +355,23 @@ export default async function HealthPage({
             <div className="adm-list adm-khulasa">
               {masle.map((x, i) =>
                 x.jagah ? (
-                  <a className="adm-item adm-masla" key={i} href={`#${x.jagah}`}>
+                  <a
+                    className="adm-item adm-masla"
+                    key={i}
+                    href={
+                      x.jagah.startsWith('/')
+                        ? `${x.jagah}?key=${k}`
+                        : `#${x.jagah}`
+                    }
+                  >
                     <span className="adm-dot" style={{ background: '#f43f5e' }} aria-hidden />
                     <span className="adm-item-name" style={{ fontWeight: 600 }}>
                       {x.baat}
-                      <span className="adm-item-sub">Kholne ke liye click karein</span>
+                      <span className="adm-item-sub">
+                        {x.jagah.startsWith('/')
+                          ? 'Dashboard par khul jayega'
+                          : 'Kholne ke liye click karein'}
+                      </span>
                     </span>
                     <span className="adm-masla-btn">Dekhein ›</span>
                   </a>
@@ -525,26 +537,47 @@ export default async function HealthPage({
           ) : (
             <div className="adm-list">
               {s.zyadaJawab.map((c, i) => (
-                <div className="adm-item" key={i} data-off={c.kitne >= 4 ? '1' : undefined}>
-                  <span
-                    className="adm-dot"
-                    style={{
-                      background: c.kitne >= 4 ? '#f43f5e' : c.kitne >= 3 ? '#f59e0b' : '#10b981',
-                    }}
-                    aria-hidden
-                  />
-                  <span className="adm-item-name">
-                    {c.phone}
-                    <span className="adm-item-sub">
-                      {c.kitne >= 4
-                        ? 'rozana ki had par — bot is se aage khamosh ho jata hai'
-                        : c.kitne >= 3
-                        ? 'thore zyada — ek dafa chat dekh lein'
-                        : 'aam baat'}
+                <details className="adm-andar" key={i} data-off={c.kitne >= 4 ? '1' : undefined}>
+                  <summary>
+                    <span
+                      className="adm-dot"
+                      style={{
+                        background: c.kitne >= 4 ? '#f43f5e' : c.kitne >= 3 ? '#f59e0b' : '#10b981',
+                      }}
+                      aria-hidden
+                    />
+                    <span className="adm-item-name">
+                      {c.phone}
+                      <span className="adm-item-sub">
+                        {c.kitne >= 4
+                          ? 'rozana ki had par — bot is se aage khamosh ho jata hai'
+                          : c.kitne >= 3
+                          ? 'thore zyada — ek dafa chat dekh lein'
+                          : 'aam baat'}{' '}
+                        · kaun se jawab gaye, dekhne ke liye click karein
+                      </span>
                     </span>
-                  </span>
-                  <span className="adm-num">{c.kitne}</span>
-                </div>
+                    <span className="adm-num">{c.kitne}</span>
+                  </summary>
+                  <div className="adm-andar-list">
+                    {c.jawabList.map((j, n) => (
+                      <div className="adm-jawab-line" key={n}>
+                        <span className="adm-dot" style={{ background: RANG[j.qism] || '#6b7a93' }} aria-hidden />
+                        <span className="adm-jawab-naam">
+                          {s.topicIds[j.naam] ? (
+                            <Link href={`/admin/topics?key=${k}&t=${s.topicIds[j.naam]}#edit`}>
+                              {j.naam}
+                            </Link>
+                          ) : (
+                            j.naam
+                          )}
+                          {j.namuna && <span className="adm-item-sub">{j.namuna}</span>}
+                        </span>
+                        <span className="adm-jawab-kab">{waqt(j.kab)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               ))}
             </div>
           )}

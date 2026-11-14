@@ -112,7 +112,12 @@ export interface Sehat {
   safar: DinKaHaal[]
   kaam: Kaarkardagi
   raaste: Raasta[]
-  zyadaJawab: { phone: string; kitne: number }[]
+  zyadaJawab: {
+    phone: string
+    kitne: number
+    /** Us customer ko kaun kaun se jawab gaye */
+    jawabList: { naam: string; qism: string; kab: string; namuna: string }[]
+  }[]
   hadParLog: number
   matanList: Matan[]
   echo: { kul: number; matanWale: number; sirfKhabar: number }
@@ -349,8 +354,24 @@ export async function sehatLo(): Promise<Sehat> {
   const zyadaJawab = Array.from(perLog.entries())
     .filter(([, n]) => n >= 2)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([phone, kitne]) => ({ phone, kitne }))
+    .slice(0, 15)
+    .map(([phone, kitne]) => ({
+      phone,
+      kitne,
+      // Usi customer ko gaye hue jawab — naam ke sath, naye se purane
+      jawabList: jawab
+        .filter((r) => String(r.phone) === phone)
+        .sort((a, b) => String(b.sent_at || '').localeCompare(String(a.sent_at || '')))
+        .map((r) => {
+          const mila = naqsha.get(String(r.reply_hash || ''))
+          return {
+            naam: mila ? mila.naam : 'Tracking ya pehchana nahi gaya',
+            qism: mila ? mila.qism : 'anjaan',
+            kab: String(r.sent_at || ''),
+            namuna: String(r.sample || '').slice(0, 120),
+          }
+        }),
+    }))
   const hadPar = Number(process.env.MAX_REPLIES_PER_DAY) || 4
   const hadParLog = Array.from(perLog.values()).filter((n) => n >= hadPar).length
 
@@ -629,7 +650,7 @@ export async function sehatLo(): Promise<Sehat> {
         ? `Excel ki list mein ${orderWale.length} sawaal ab bhi order tracking wale lag rahe hain.`
         : `Excel ki list saaf hai — ${parkhe.length} sawaalon mein ek bhi order tracking wala nahi.`,
       theek: orderWale.length === 0,
-        jagah: 'naye-sawaal',
+        jagah: '/admin/qna',
     })
   }
 
