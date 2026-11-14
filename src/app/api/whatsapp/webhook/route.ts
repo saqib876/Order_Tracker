@@ -117,6 +117,15 @@ const MANUAL_ANJAAN_ORDER_HOURS = Number(process.env.MANUAL_UNKNOWN_REPEAT_HOURS
 // Order ka pata na ho to is nishani se darj hota hai
 const ANJAAN_ORDER = '-'
 
+// "Yes Available" ke sath jo guide jati hai, wo IS topic ke jawab se aati
+// hai. Pehle ye "Salaam / Greeting" se aati thi; ab wo row band ho chuki
+// hai, is liye seedha isi topic se.
+//
+// Naam badalna ho to Vercel mein MODEL_GUIDE_TOPIC laga dein — code chhune
+// ki zaroorat nahi.
+const MODEL_GUIDE_TOPIC =
+  process.env.MODEL_GUIDE_TOPIC || 'Buy 1 Get 1 Offer / Product Info Chahiye / How To Place Order'
+
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -
 // underlying Supabase 'status' column abhi bhi 6 values rakh sakta hai
@@ -467,8 +476,9 @@ export async function POST(req: NextRequest) {
   // availability poochhe ("Samsung A54 ka cover mil jayega?") — tab "Yes
   // Available" ke sath usi ek message mein (neeche 0b).
   //
-  // Matan phir bhi Excel ki "Salaam / Greeting" row se aata hai, is liye wo
-  // row file mein rehni chahiye.
+  // Matan Excel ke MODEL_GUIDE_TOPIC wale topic se aata hai (jis mein deal,
+  // product info aur order karne ka tareeqa — teeno ek hi message mein
+  // likhe hue hain). Wo topic chalu rehna chahiye.
 
   // ── 0a) "Apni picture wala cover bana dein" ──────────────────────────────
   // Customization ka sawaal. Jawab AAP ki Excel ki Customize wali row se
@@ -498,10 +508,20 @@ export async function POST(req: NextRequest) {
   // "mil jayega" ki wajah se bot pehle "apna order number bhejein" bhej
   // deta tha.
   if (plan.modelAvailability) {
-    const orderGuide = await getGreetingMessage()
+    // Pehle poora naam, phir shuru ka tukra (naam mein halki si tabdeeli ho
+    // to bhi mil jaye), aur aakhir mein purani "Salaam / Greeting" row -
+    // taake kisi surat mein customer khali haath na rahe.
+    const orderGuide =
+      (await answerForTopic(MODEL_GUIDE_TOPIC)) ||
+      (await getTopicAnswer(MODEL_GUIDE_TOPIC)) ||
+      (await getGreetingMessage())
+
+    if (!orderGuide) {
+      console.warn(`[wa] model guide ka topic nahi mila: "${MODEL_GUIDE_TOPIC}"`)
+    }
     await clearState()
     await bhejoAam(orderGuide ? `${AVAILABLE_LINE}\n\n${orderGuide}` : AVAILABLE_LINE)
-    // Greeting isi message mein ja chuki — alag se dobara na jaye
+    // Guide isi message mein ja chuki — record ke liye
     await markGreeted(from)
     console.log(`[wa] model availability — ${from}`)
     return NextResponse.json({ ok: true })
