@@ -1772,3 +1772,67 @@ a.adm-masla:hover {
   color: var(--ink-3);
   white-space: nowrap;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Safha khulte waqt ke khali dabbe
+ *
+ * Yahan ek halki si chamak chalti hai — ye wo "hamesha chalne wali
+ * animation" nahi hai jis se mana kiya tha: ye sirf us lamhe tak rehti
+ * hai jab tak safha nahi aa jata, phir gayab ho jati hai.
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-skel {
+  border-radius: 11px;
+  background: var(--card-2);
+  animation: adm-chamak 1.2s ease-in-out infinite;
+}
+
+.adm-skel-title {
+  width: 230px;
+  height: 36px;
+  margin: 10px 0 10px;
+}
+
+.adm-skel-sub {
+  width: min(420px, 80%);
+  height: 15px;
+  margin-bottom: 18px;
+}
+
+.adm-skel-box {
+  border: 1px solid var(--line);
+  min-height: 78px;
+  animation: adm-chamak 1.2s ease-in-out infinite;
+}
+
+.adm-skel-row {
+  height: 62px;
+  margin-bottom: 10px;
+}
+
+.adm-loading-pill {
+  display: inline-block;
+  width: 180px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--card-2);
+  animation: adm-chamak 1.2s ease-in-out infinite;
+}
+
+@keyframes adm-chamak {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-skel,
+  .adm-skel-box,
+  .adm-loading-pill {
+    animation: none;
+  }
+}

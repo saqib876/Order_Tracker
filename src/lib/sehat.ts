@@ -129,9 +129,13 @@ export interface Sehat {
 }
 
 async function tableHaal(naam: string) {
+  // 'estimated' = database apne hisaab se bata deta hai, poori table ginta
+  // nahi. Bari tables par ye farq second ka hota hai, aur yahan ginti ka
+  // theek theek hona zaroori bhi nahi — sirf ye dekhna hai ke table chal
+  // rahi hai aur khali to nahi.
   const { count, error } = await supabaseAdmin
     .from(naam)
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
   if (error) return { thik: false, rows: 0, khata: error.message }
   return { thik: true, rows: count ?? 0 }
 }
@@ -325,14 +329,60 @@ async function kaarkardagiNikalo(
 }
 
 export async function sehatLo(): Promise<Sehat> {
-  const naqsha = await jawabKeNaam()
-
-  // ── Aaj ke jawab: kaun sa kitni dafa gaya ──────────────────────────────
-  const { data: jawabRows } = await supabaseAdmin
-    .from('wa_recent_reply')
-    .select('reply_hash,phone,sent_at,sample')
-    .gte('sent_at', ghanteQabl(24))
-    .limit(3000)
+  // Shuru ka saara data EK SATH mangwate hain.
+  //
+  // Pehle har sawaal ka jawab aane ke baad agla jata tha — ek darjan se
+  // zyada chakkar, aur safha khulne mein kai second lag jate the. Ye sab
+  // ek doosre se azaad hain, is liye saath bhejna hi theek hai.
+  const [
+    naqsha,
+    { data: jawabRows },
+    { data: bahar },
+    { data: pauses },
+    { data: tazaSawaal },
+    { data: sabTopics },
+    { data: tazaList },
+    { data: safarRows },
+    tracking24,
+  ] = await Promise.all([
+    jawabKeNaam(),
+    supabaseAdmin
+      .from('wa_recent_reply')
+      .select('reply_hash,phone,sent_at,sample')
+      .gte('sent_at', ghanteQabl(24))
+      .limit(3000),
+    supabaseAdmin
+      .from('wa_human_message')
+      .select('phone,text_hash,sample,sent_at')
+      .gte('sent_at', ghanteQabl(24 * 7))
+      .order('sent_at', { ascending: false })
+      .limit(1000),
+    supabaseAdmin
+      .from('wa_human_pause')
+      .select('phone,until')
+      .gt('until', new Date().toISOString())
+      .order('until', { ascending: false })
+      .limit(50),
+    supabaseAdmin
+      .from('unmatched_messages')
+      .select('message_text')
+      .gte('created_at', ghanteQabl(24 * 7))
+      .order('created_at', { ascending: false })
+      .limit(300),
+    supabaseAdmin.from('qna_topics').select('id,topic,is_active').limit(500),
+    supabaseAdmin
+      .from('unmatched_messages')
+      .select('id,message_text,created_at')
+      .gte('created_at', ghanteQabl(24 * 7))
+      .order('created_at', { ascending: false })
+      .limit(40),
+    supabaseAdmin
+      .from('bot_health_daily')
+      .select('din,sehat_fisad,jawab,customers')
+      .order('din', { ascending: false })
+      .limit(14),
+    ginti('wa_tracking_sent', 'sent_at', 24),
+  ])
 
   const jawab = jawabRows || []
   const perHash = new Map<string, Set<string>>()
@@ -374,8 +424,6 @@ export async function sehatLo(): Promise<Sehat> {
     }))
   const hadPar = Number(process.env.MAX_REPLIES_PER_DAY) || 4
   const hadParLog = Array.from(perLog.values()).filter((n) => n >= hadPar).length
-
-  const tracking24 = await ginti('wa_tracking_sent', 'sent_at', 24)
 
   const jane: JawabQism[] = []
   const anjaanHash = new Set<string>()
@@ -426,13 +474,6 @@ export async function sehatLo(): Promise<Sehat> {
   jane.sort((a, b) => b.kitne - a.kitne)
 
   // ── Aap ke bheje hue message (echo) ────────────────────────────────────
-  const { data: bahar } = await supabaseAdmin
-    .from('wa_human_message')
-    .select('phone,text_hash,sample,sent_at')
-    .gte('sent_at', ghanteQabl(24 * 7))
-    .order('sent_at', { ascending: false })
-    .limit(1000)
-
   const rows = bahar || []
   const matanWale = rows.filter((r) => r.text_hash)
 
@@ -460,21 +501,7 @@ export async function sehatLo(): Promise<Sehat> {
     }))
 
   // ── Abhi kis par khamoshi ──────────────────────────────────────────────
-  const { data: pauses } = await supabaseAdmin
-    .from('wa_human_pause')
-    .select('phone,until')
-    .gt('until', new Date().toISOString())
-    .order('until', { ascending: false })
-    .limit(50)
-
   // ── Excel ki list saaf hai? ────────────────────────────────────────────
-  const { data: tazaSawaal } = await supabaseAdmin
-    .from('unmatched_messages')
-    .select('message_text')
-    .gte('created_at', ghanteQabl(24 * 7))
-    .order('created_at', { ascending: false })
-    .limit(300)
-
   const parkhe = tazaSawaal || []
   const orderWale = parkhe.filter((r) => looksLikeOrderIntent(String(r.message_text || '')))
 
@@ -492,17 +519,18 @@ export async function sehatLo(): Promise<Sehat> {
     }
   }
 
-  const raaste: Raasta[] = [
-    await raastaDekho('"Yes Available" ke sath jane wali guide', MODEL_GUIDE_TOPIC),
-    await raastaDekho('Order ki pehchan na mile to ye jawab', TRACKING_UNKNOWN_TOPIC),
-  ]
+  const raaste: Raasta[] = await Promise.all([
+    raastaDekho('"Yes Available" ke sath jane wali guide', MODEL_GUIDE_TOPIC),
+    raastaDekho('Order ki pehchan na mile to ye jawab', TRACKING_UNKNOWN_TOPIC),
+  ])
+
+  // Teen ginti ek sath
+  const [naySawaal24, aiCalls24] = await Promise.all([
+    ginti('unmatched_messages', 'created_at', 24),
+    ginti('ai_call_log', 'created_at', 24),
+  ])
 
   // ── Topics ki fehrist ── taake har naam se seedha edit par ja sakein
-  const { data: sabTopics } = await supabaseAdmin
-    .from('qna_topics')
-    .select('id,topic,is_active')
-    .limit(500)
-
   const topicIds: Record<string, string> = {}
   const chaluTopics: { id: string; topic: string }[] = []
   for (const t of sabTopics || []) {
@@ -513,13 +541,6 @@ export async function sehatLo(): Promise<Sehat> {
   chaluTopics.sort((a, b) => a.topic.localeCompare(b.topic))
 
   // ── Naye sawaal ── jin par aap yahin se kaam kar sakte hain
-  const { data: tazaList } = await supabaseAdmin
-    .from('unmatched_messages')
-    .select('id,message_text,created_at')
-    .gte('created_at', ghanteQabl(24 * 7))
-    .order('created_at', { ascending: false })
-    .limit(40)
-
   const nayeSawaal: NayaSawaal[] = (tazaList || []).map((r) => ({
     id: String(r.id),
     matan: String(r.message_text || '').slice(0, 220),
@@ -528,12 +549,6 @@ export async function sehatLo(): Promise<Sehat> {
   }))
 
   // ── Rozana ka safar
-  const { data: safarRows } = await supabaseAdmin
-    .from('bot_health_daily')
-    .select('din,sehat_fisad,jawab,customers')
-    .order('din', { ascending: false })
-    .limit(14)
-
   const safar: DinKaHaal[] = (safarRows || []).map((r) => ({
     din: String(r.din),
     fisad: Number(r.sehat_fisad) || 0,
@@ -542,8 +557,13 @@ export async function sehatLo(): Promise<Sehat> {
   }))
 
   // ── Tables aur naye khane ──────────────────────────────────────────────
-  const tables: Record<string, { thik: boolean; rows: number; khata?: string }> = {}
-  for (const t of [
+  // Pandrah tables aur teen khane — sab EK SATH poochte hain.
+  //
+  // Pehle ye baari baari chalte the: har sawaal ka jawab aane ka intezaar,
+  // phir agla. Pandrah chakkar lagte the aur safha khulne mein kai second
+  // lag jate the. Ab sab ek sath jate hain — sab se lamba jitna waqt le,
+  // bas utna.
+  const tableNaam = [
     'wa_human_message',
     'wa_human_pause',
     'wa_manual_jawab',
@@ -559,14 +579,24 @@ export async function sehatLo(): Promise<Sehat> {
     'unmatched_messages',
     'ai_topic_cache',
     'ai_call_log',
-  ]) {
-    tables[t] = await tableHaal(t)
-  }
+  ]
+
+  const [tableHaalat, hash1, hash2, hash3] = await Promise.all([
+    Promise.all(tableNaam.map((t) => tableHaal(t))),
+    khanaHai('wa_human_message', 'text_hash'),
+    khanaHai('wa_human_message', 'sample'),
+    khanaHai('qna_topics', 'off_reason'),
+  ])
+
+  const tables: Record<string, { thik: boolean; rows: number; khata?: string }> = {}
+  tableNaam.forEach((t, i) => {
+    tables[t] = tableHaalat[i]
+  })
 
   const nayeKhane = {
-    'wa_human_message.text_hash': await khanaHai('wa_human_message', 'text_hash'),
-    'wa_human_message.sample': await khanaHai('wa_human_message', 'sample'),
-    'qna_topics.off_reason': await khanaHai('qna_topics', 'off_reason'),
+    'wa_human_message.text_hash': hash1,
+    'wa_human_message.sample': hash2,
+    'qna_topics.off_reason': hash3,
   }
 
   // ── Seedha matlab ──────────────────────────────────────────────────────
@@ -694,8 +724,8 @@ export async function sehatLo(): Promise<Sehat> {
       jawab24: jawab.length,
       tracking24,
       customers24: new Set(jawab.map((r) => String(r.phone))).size,
-      naySawaal24: await ginti('unmatched_messages', 'created_at', 24),
-      aiCalls24: await ginti('ai_call_log', 'created_at', 24),
+      naySawaal24,
+      aiCalls24,
       khamoshAbhi: (pauses || []).length,
     },
     jawabBreakdown: jane,
