@@ -4,6 +4,20 @@
  * Yahan se har topic khol kar dekha ja sakta hai (kaun se sawaal, kya
  * jawab), badla ja sakta hai, ON/OFF ho sakta hai, aur hataya ja sakta hai.
  *
+ * Buttons ke naam
+ * ---------------
+ * Jo buttons har jagah hote hain — Save, Back, Cancel, Delete, ON/OFF — wo
+ * apni aam angrezi shakl mein rakhe gaye hain. Samjhane wali baat un ke
+ * neeche Roman Urdu mein likhi jati hai. Button ka naam paheli nahi hona
+ * chahiye.
+ *
+ * ON/OFF ka alag button
+ * ---------------------
+ * Pehle ye ek checkbox tha jo Save ke sath chalta tha — do alag kaam ek hi
+ * button mein mil kar uljhan paida karte the. Ab ON/OFF ka apna button hai,
+ * aur wo list mein bhi hai taake topic khole baghair badla ja sake. Save ab
+ * sirf likhi hui baat mehfooz karta hai, ON/OFF ko haath nahi lagata.
+ *
  * "Purane naam" ki safai
  * ----------------------
  * Excel mein topic ka naam badalne par purana naam delete nahi hota tha,
@@ -155,6 +169,32 @@ export default async function TopicsPage({
 
   const fisad = (x: number) => Math.round(x * 100)
 
+  /**
+   * ON/OFF ka button — har jagah bilkul ek hi shakl mein.
+   *
+   * Form maujooda halat ka ULAT bhejta hai: ON dikh raha ho to dabane par
+   * OFF ho jayega. `khulaRahe` bhejne par safha wapas isi topic par khulta
+   * hai, warna list par.
+   */
+  const SwitchBtn = ({ r, khulaRahe }: { r: Row; khulaRahe?: boolean }) => (
+    <form action="/api/admin/topic-save" method="POST" className="adm-switch-form">
+      <input type="hidden" name="key" value={adminKey} />
+      <input type="hidden" name="kaam" value="toggle" />
+      <input type="hidden" name="id" value={r.id} />
+      <input type="hidden" name="chalu" value={r.is_active ? '0' : '1'} />
+      {khulaRahe && <input type="hidden" name="khulaRahe" value="1" />}
+      <button
+        type="submit"
+        className="adm-switch"
+        data-on={r.is_active ? '1' : '0'}
+        title={r.is_active ? 'Turn OFF' : 'Turn ON'}
+      >
+        <i />
+        <b>{r.is_active ? 'ON' : 'OFF'}</b>
+      </button>
+    </form>
+  )
+
   return (
     <main className="adm">
       <ThemeBoot />
@@ -181,7 +221,7 @@ export default async function TopicsPage({
         <h1 className="adm-title">Topics</h1>
         <p className="adm-sub">
           Har topic khol kar dekhein ke us mein kaun se sawaal hain aur jawab kya hai — wahin badal
-          bhi sakte hain.
+          bhi sakte hain. ON/OFF karne ke liye kholna zaroori nahi, list mein hi button hai.
         </p>
 
         <div className="adm-stats">
@@ -207,12 +247,7 @@ export default async function TopicsPage({
           <div className="adm-flash">
             {one('mehfooz') && (
               <>
-                <b>{one('mehfooz')}</b> mehfooz ho gaya
-                {one('halat') === 'band'
-                  ? ' — ye topic ab BAND hai, bot is ka jawab nahi bhejega.'
-                  : one('halat') === 'chalu'
-                  ? ' — ye topic CHALU hai.'
-                  : ' — bot foran naye mutabiq chalega.'}
+                <b>{one('mehfooz')}</b> — jo likha tha wo mehfooz ho gaya.
               </>
             )}
             {one('bana') && (
@@ -221,7 +256,16 @@ export default async function TopicsPage({
               </>
             )}
             {one('hataya') && <>Topic hamesha ke liye hata diya gaya.</>}
-            {one('badla') && <>Topic ab {one('badla')} hai.</>}
+            {one('badla') === 'chalu' && (
+              <>
+                Topic ab <b>ON</b> hai — bot is ka jawab bhejega.
+              </>
+            )}
+            {one('badla') === 'band' && (
+              <>
+                Topic ab <b>OFF</b> hai — bot is ka jawab nahi bhejega.
+              </>
+            )}
             {one('safai') && (
               <>
                 <b>{one('safai')}</b> purane naam saaf ho gaye.
@@ -262,17 +306,21 @@ export default async function TopicsPage({
               </label>
               <div className="adm-btn-row">
                 <button type="submit" className="adm-btn-go">
-                  Topic banayein
+                  Create
                 </button>
                 <Link href={href('')} className="adm-btn-ghost">
-                  Rehne dein
+                  Cancel
                 </Link>
               </div>
+              <p className="adm-hint">
+                <b>Create</b> dabate hi topic ban kar ON ho jata hai — bot foran is ke sawaal
+                pehchanne lagega.
+              </p>
             </form>
           </section>
         ) : (
           <Link href={href('&naya=1')} className="adm-btn">
-            + Naya topic banayein
+            + Naya topic
           </Link>
         )}
 
@@ -280,29 +328,34 @@ export default async function TopicsPage({
         {chuna && (
           <section className="adm-card adm-in" id="edit" style={{ marginTop: 16 }}>
             <div className="adm-card-top">
-              <h2 className="adm-h2">
-                {chuna.topic}{' '}
-                <span className="adm-badge" data-tone={chuna.is_active ? 'on' : 'off'}>
-                  {chuna.is_active ? 'ON' : 'OFF'}
-                </span>
-              </h2>
+              <h2 className="adm-h2">{chuna.topic}</h2>
               <Link href={href('')} className="adm-back">
-                &#8592; Topics ki list
+                &#8592; Back
               </Link>
+            </div>
+
+            {/* ON/OFF — apna alag button, Save se bilkul alag kaam */}
+            <div className="adm-switch-row">
+              <SwitchBtn r={chuna} khulaRahe />
+              <span>
+                {chuna.is_active ? (
+                  <>
+                    Ye topic is waqt <b>ON</b> hai — bot is ka jawab bhejta hai. Band karna ho to ye
+                    button daba dein.
+                  </>
+                ) : (
+                  <>
+                    Ye topic is waqt <b>OFF</b> hai — bot is ka jawab nahi bhejta. Chalu karna ho to
+                    ye button daba dein.
+                  </>
+                )}
+              </span>
             </div>
 
             <form action="/api/admin/topic-save" method="POST">
               <input type="hidden" name="key" value={adminKey} />
               <input type="hidden" name="kaam" value="save" />
               <input type="hidden" name="id" value={chuna.id} />
-
-              <p className="adm-hint">
-                Is waqt ye topic{' '}
-                <span className="adm-badge" data-tone={chuna.is_active ? 'on' : 'off'}>
-                  {chuna.is_active ? 'ON' : 'OFF'}
-                </span>{' '}
-                hai.
-              </p>
 
               <label className="adm-label">
                 Topic ka naam
@@ -344,30 +397,15 @@ export default async function TopicsPage({
                 />
               </label>
 
-              {/* Tick na laga ho to browser kuch nahi bhejta — is liye ek
-                  chhupa hua "0" hamesha jata hai */}
-              <input type="hidden" name="chalu" value="0" />
-              <label className="adm-check">
-                <input
-                  type="checkbox"
-                  name="chalu"
-                  value="1"
-                  defaultChecked={chuna.is_active}
-                  className="adm-cb"
-                />
-                <span>
-                  Chalu rakhein — <b>OFF</b> karne par bot is topic ka jawab bhejna band kar dega
-                </span>
-              </label>
-
               <div className="adm-stick">
                 <button type="submit" className="adm-btn-go">
-                  Mehfooz karein
+                  Save
                 </button>
-                <Link href={href('')} className="adm-btn-ghost">
-                  Band karein — wapas list par
-                </Link>
               </div>
+              <p className="adm-hint">
+                <b>Save</b> upar likhi hui baatein mehfooz karta hai — naam, sawaal, jawab aur
+                wajah. Ye topic ko ON ya OFF nahi karta; us ke liye upar wala ON/OFF button hai.
+              </p>
             </form>
 
             <form action="/api/admin/topic-save" method="POST" style={styles.del}>
@@ -379,11 +417,11 @@ export default async function TopicsPage({
                 <span>Haan, is topic ko hamesha ke liye hata dein</span>
               </label>
               <button type="submit" className="adm-btn-bad">
-                Hamesha ke liye hatayein
+                Delete
               </button>
               <p className="adm-hint">
-                Hatane ke baad wapas nahi aata. Sirf band karna ho to oopar wala tick hata kar
-                “Mehfooz karein” daba dein.
+                <b>Delete</b> ke baad topic wapas nahi aata. Sirf kuch dair ke liye rokna ho to
+                Delete ke bajaye upar wala <b>ON/OFF</b> button istemal karein.
               </p>
             </form>
           </section>
@@ -428,17 +466,17 @@ export default async function TopicsPage({
               </div>
               <div className="adm-btn-row">
                 <button type="submit" className="adm-btn-go">
-                  Chune hue hata dein
+                  Delete selected
                 </button>
                 <Link href={href('')} className="adm-btn-ghost">
-                  Abhi rehne dein
+                  Cancel
                 </Link>
               </div>
             </form>
           </section>
         )}
 
-                {/* Ek jaisa jawab */}
+        {/* ── Ek jaisa jawab ───────────────────────────────────────────── */}
         {ekJaisa.length > 0 && (
           <section className="adm-card adm-in" data-tone="quiet" style={{ marginTop: 20 }}>
             <h2 className="adm-h2">
@@ -456,13 +494,14 @@ export default async function TopicsPage({
               <div key={gi} style={{ marginTop: 14 }}>
                 <div className="adm-list">
                   {grup.map((r) => (
-                    <Link key={r.id} href={href(`&t=${r.id}#edit`)} className="adm-item">
-                      <span className="adm-item-name">
+                    <div key={r.id} className="adm-item">
+                      <Link href={href(`&t=${r.id}#edit`)} className="adm-item-name">
                         {r.topic}
                         <span className="adm-item-sub">khol kar jawab badlein</span>
-                      </span>
+                      </Link>
                       <span className="adm-item-n">{r.n} sawaal</span>
-                    </Link>
+                      <SwitchBtn r={r} />
+                    </div>
                   ))}
                 </div>
                 <p className="adm-hint" style={{ marginTop: 6 }}>
@@ -474,17 +513,17 @@ export default async function TopicsPage({
           </section>
         )}
 
-{/* ── Chalu ────────────────────────────────────────────────────── */}
+        {/* ── Chalu ────────────────────────────────────────────────────── */}
         <h2 className="adm-h3">Chalu topics ({chalu.length})</h2>
         <div className="adm-list">
           {chalu.map((r) => (
-            <Link key={r.id} href={href(`&t=${r.id}#edit`)} className="adm-item">
-              <span className="adm-item-name">{r.topic}</span>
+            <div key={r.id} className="adm-item">
+              <Link href={href(`&t=${r.id}#edit`)} className="adm-item-name">
+                {r.topic}
+              </Link>
               <span className="adm-item-n">{r.n} sawaal</span>
-              <span className="adm-badge" data-tone="on">
-                ON
-              </span>
-            </Link>
+              <SwitchBtn r={r} />
+            </div>
           ))}
         </div>
 
@@ -498,16 +537,14 @@ export default async function TopicsPage({
             </p>
             <div className="adm-list">
               {baqiBand.map((r) => (
-                <Link key={r.id} href={href(`&t=${r.id}#edit`)} className="adm-item" data-off="1">
-                  <span className="adm-item-name">
+                <div key={r.id} className="adm-item" data-off="1">
+                  <Link href={href(`&t=${r.id}#edit`)} className="adm-item-name">
                     {r.topic}
                     {r.off_reason && <span className="adm-item-sub">{r.off_reason}</span>}
-                  </span>
+                  </Link>
                   <span className="adm-item-n">{r.n} sawaal</span>
-                  <span className="adm-badge" data-tone="off">
-                    OFF
-                  </span>
-                </Link>
+                  <SwitchBtn r={r} />
+                </div>
               ))}
             </div>
           </>

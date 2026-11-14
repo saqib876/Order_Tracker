@@ -3,7 +3,11 @@
  *
  *   POST /api/admin/topic-save
  *     key      ADMIN_KEY
- *     kaam     "save" | "toggle" | "delete" | "naya"
+ *     kaam     "save" | "toggle" | "delete" | "naya" | "safai"
+ *
+ * "save" sirf likhi hui baat mehfooz karta hai (naam, sawaal, jawab,
+ * wajah). ON/OFF ka kaam alag hai — "toggle" — taake ek button do
+ * kaam na kare aur uljhan na ho.
  *     id       jis topic par kaam karna hai (naya ke ilawa)
  *     topic    naam
  *     questions  har line par ek sawaal
@@ -116,7 +120,12 @@ export async function POST(req: NextRequest) {
     const chalu = chaluHai()
     const { data: badle, error } = await supabaseAdmin
       .from('qna_topics')
-      .update({ is_active: chalu, updated_at: ab })
+      .update({
+        is_active: chalu,
+        // Chalu karte hi "band kyun hai" ki wajah bemani ho jati hai
+        ...(chalu ? { off_reason: null } : {}),
+        updated_at: ab,
+      })
       .eq('id', id)
       .select('id')
     if (error) return wapas(req, adminKey, { khata: error.message })
@@ -125,7 +134,9 @@ export async function POST(req: NextRequest) {
     }
     invalidateQnaCache()
     console.log('[topics] ' + id + ' ab ' + (chalu ? 'ON' : 'OFF'))
-    return wapas(req, adminKey, { badla: chalu ? 'chalu' : 'band' })
+    // Topic khula hua tha to wapas usi par, warna list par
+    const khulaRahe = String(form.get('khulaRahe') || '') === '1'
+    return wapas(req, adminKey, { badla: chalu ? 'chalu' : 'band' }, khulaRahe ? id : undefined)
   }
 
   // ── Hamesha ke liye hatao ──────────────────────────────────────────────
@@ -144,8 +155,6 @@ export async function POST(req: NextRequest) {
   const topic = String(form.get('topic') || '').trim()
   const answer = String(form.get('answer') || '').trim()
   const questions = saafSawaal(String(form.get('questions') || ''))
-  const chalu = chaluHai()
-
   if (!topic) return wapas(req, adminKey, { khata: 'Topic ka naam khali nahi ho sakta' }, id)
   if (!answer) return wapas(req, adminKey, { khata: 'Jawab khali nahi ho sakta' }, id)
 
@@ -157,24 +166,22 @@ export async function POST(req: NextRequest) {
       topic,
       questions,
       answer,
-      is_active: chalu,
-      // Band kyun hai — sirf aap ki yaad-dasht ke liye. Chalu topic par
-      // wajah ka koi matlab nahi, is liye saaf kar dete hain.
-      off_reason: chalu ? null : wajah || null,
+      // ON/OFF yahan se nahi badalta — us ka apna button hai. Save sirf
+      // likhi hui baat mehfooz karta hai.
+      off_reason: wajah || null,
       updated_at: ab,
     })
     .eq('id', id)
-    .select('id, is_active')
+    .select('id')
 
   if (error) return wapas(req, adminKey, { khata: error.message }, id)
   if (!badle || !badle.length) {
     return wapas(req, adminKey, { khata: 'Topic nahi mila — kuch mehfooz nahi hua' }, id)
   }
 
-  const abChalu = Boolean(badle[0].is_active)
   invalidateQnaCache()
-  console.log('[topics] mehfooz: ' + topic + ' — ab ' + (abChalu ? 'ON' : 'OFF'))
-  return wapas(req, adminKey, { mehfooz: topic, halat: abChalu ? 'chalu' : 'band' }, id)
+  console.log('[topics] mehfooz: ' + topic)
+  return wapas(req, adminKey, { mehfooz: topic }, id)
 }
 
 function wapas(req: NextRequest, adminKey: string, params: Record<string, string>, id?: string) {

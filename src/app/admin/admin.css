@@ -1094,3 +1094,112 @@ a.adm-tag:hover {
 .adm-khulasa .adm-item {
   gap: 4px 10px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * ON / OFF ka button
+ *
+ * Asli switch jaisa dikhta hai taake ek nazar mein pata chale ke topic
+ * chalu hai ya nahi — aur ye ke daba kar badla ja sakta hai.
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-switch-form {
+  flex: none;
+  margin: 0;
+}
+
+.adm-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--card-2);
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 0.16s, background-color 0.16s, color 0.16s;
+}
+
+/* Gol tukra jo ON par daayein chala jata hai */
+.adm-switch i {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  flex: none;
+  transition: background-color 0.16s;
+}
+
+.adm-switch i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.adm-switch[data-on='1'] {
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.adm-switch[data-on='1'] i {
+  background: #10b981;
+}
+
+.adm-switch[data-on='1'] i::after {
+  transform: translateX(12px);
+}
+
+.adm-switch:hover {
+  border-color: var(--accent-line);
+}
+
+/* Topic khula ho to switch apni lakeer par, sath mein wazahat */
+.adm-switch-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  margin: 14px 0 4px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+
+.adm-switch-row > span {
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-switch,
+  .adm-switch i,
+  .adm-switch i::after {
+    transition: none;
+  }
+}
+
+/* Row ke andar topic ka naam ab apna link hai (poora row nahi) */
+a.adm-item-name {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.adm-item-name:hover {
+  color: var(--brand);
+}
