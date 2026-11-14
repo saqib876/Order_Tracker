@@ -449,6 +449,8 @@ export async function sehatLo(): Promise<Sehat> {
     'wa_human_message',
     'wa_human_pause',
     'wa_manual_jawab',
+    'bot_faisla',
+    'bot_health_daily',
     'wa_bot_message',
     'wa_recent_reply',
     'wa_tracking_sent',
@@ -484,6 +486,20 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: `Meta se echo aa raha hai — ${matanWale.length} message matan ke sath mehfooz hue.`,
       theek: true,
+    })
+  }
+
+  if (!tables['bot_faisla']?.thik) {
+    khulasa.push({
+      baat: 'bot_faisla table nahi bani — kaarkardagi ke numbers khali rahenge.',
+      theek: false,
+    })
+  }
+
+  if (!tables['bot_health_daily']?.thik) {
+    khulasa.push({
+      baat: 'bot_health_daily table nahi bani — rozana ka hisaab mehfooz nahi hoga.',
+      theek: false,
     })
   }
 
