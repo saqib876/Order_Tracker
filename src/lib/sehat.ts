@@ -13,7 +13,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
 import { AVAILABLE_LINE, ORDER_INFO_MAANGO, ORDER_NAHI_MILA } from '@/lib/replyText'
-import { GREETING_TOPIC } from '@/lib/whatsapp'
+import { GREETING_TOPIC, answerForTopic, getTopicAnswer } from '@/lib/whatsapp'
+import { MODEL_GUIDE_TOPIC, TRACKING_UNKNOWN_TOPIC } from '@/lib/topicNames'
 
 export const QUICK_REPLY_MIN_CUSTOMERS = Number(process.env.QUICK_REPLY_MIN_CUSTOMERS) || 3
 
@@ -37,6 +38,15 @@ export interface Matan {
   aakhriDafa: string
 }
 
+/** Code jin topics ko naam se bulata hai — wo mil rahe hain ya nahi */
+export interface Raasta {
+  kaam: string
+  topic: string
+  mila: boolean
+  zariya: string
+  jhalak: string
+}
+
 export interface Sehat {
   waqt: string
   khulasa: { baat: string; theek: boolean }[]
@@ -49,6 +59,7 @@ export interface Sehat {
     khamoshAbhi: number
   }
   jawabBreakdown: JawabQism[]
+  raaste: Raasta[]
   zyadaJawab: { phone: string; kitne: number }[]
   hadParLog: number
   matanList: Matan[]
@@ -258,6 +269,25 @@ export async function sehatLo(): Promise<Sehat> {
   const parkhe = tazaSawaal || []
   const orderWale = parkhe.filter((r) => looksLikeOrderIntent(String(r.message_text || '')))
 
+  // ── Code jin topics ko naam se bulata hai ────────────────────
+  const raastaDekho = async (kaam: string, topic: string): Promise<Raasta> => {
+    const poora = await answerForTopic(topic)
+    const tukra = poora ? null : await getTopicAnswer(topic)
+    const jawab = poora || tukra
+    return {
+      kaam,
+      topic,
+      mila: Boolean(jawab),
+      zariya: poora ? 'poore naam se mila' : tukra ? 'naam ke shuru se mila' : 'nahi mila',
+      jhalak: jawab ? String(jawab).replace(/\s+/g, ' ').slice(0, 110) : '',
+    }
+  }
+
+  const raaste: Raasta[] = [
+    await raastaDekho('"Yes Available" ke sath jane wali guide', MODEL_GUIDE_TOPIC),
+    await raastaDekho('Order ki pehchan na mile to ye jawab', TRACKING_UNKNOWN_TOPIC),
+  ]
+
   // ── Tables aur naye khane ──────────────────────────────────────────────
   const tables: Record<string, { thik: boolean; rows: number; khata?: string }> = {}
   for (const t of [
@@ -307,6 +337,15 @@ export async function sehatLo(): Promise<Sehat> {
       baat: 'wa_manual_jawab table nahi bani — cancel/return ka jawab abhi bhi dobara ja sakta hai.',
       theek: false,
     })
+  }
+
+  for (const r of raaste) {
+    if (!r.mila) {
+      khulasa.push({
+        baat: `Topic nahi mila: "${r.topic}" — ${r.kaam} ke liye bot purane matan par chalega.`,
+        theek: false,
+      })
+    }
   }
 
   const pehchane = matanList.filter((m) => m.quickReply).length
@@ -360,6 +399,7 @@ export async function sehatLo(): Promise<Sehat> {
       khamoshAbhi: (pauses || []).length,
     },
     jawabBreakdown: jane,
+    raaste,
     zyadaJawab,
     hadParLog,
     matanList,

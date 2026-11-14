@@ -24,6 +24,7 @@ import {
   ORDER_NAHI_MILA,
   TRACK_LINK_JAWAB,
 } from '@/lib/replyText'
+import { MODEL_GUIDE_TOPIC, TRACKING_UNKNOWN_TOPIC } from '@/lib/topicNames'
 import { ocrAvailable, whatsappMedia, readTextFromImage } from '@/lib/ocr'
 import { readOrderScreenshot, confirmationVariants } from '@/lib/orderScreenshot'
 
@@ -122,26 +123,6 @@ const MANUAL_ANJAAN_ORDER_HOURS = Number(process.env.MANUAL_UNKNOWN_REPEAT_HOURS
 // Order ka pata na ho to is nishani se darj hota hai
 const ANJAAN_ORDER = '-'
 
-// "Yes Available" ke sath jo guide jati hai, wo IS topic ke jawab se aati
-// hai. Pehle ye "Salaam / Greeting" se aati thi; ab wo row band ho chuki
-// hai, is liye seedha isi topic se.
-//
-// Naam badalna ho to Vercel mein MODEL_GUIDE_TOPIC laga dein — code chhune
-// ki zaroorat nahi.
-const MODEL_GUIDE_TOPIC =
-  process.env.MODEL_GUIDE_TOPIC || 'Buy 1 Get 1 Offer / Product Info Chahiye / How To Place Order'
-
-// Sawaal order tracking ka hai, lekin bot ko order mila hi nahi — na order
-// number, na confirmation number, aur na hi us number par koi order jis se
-// message aaya. Aisi surat mein AAP ka likha hua jawab jata hai.
-//
-// Ye jawab Excel ke is topic se aata hai. Topic na ho to bot purane tareeqe
-// par chalta hai (order number maang leta hai) — kuch tootta nahi.
-//
-// NOTE: is topic mein SAWAAL khali rakhein — sirf naam aur jawab. Warna ye
-// aam Q&A mein bhi match hone lagega.
-const TRACKING_UNKNOWN_TOPIC =
-  process.env.TRACKING_UNKNOWN_TOPIC || 'Order Details Nahi Mili To Ye Ans Send Ho Ga'
 
 
 // 4-step model jo customer ko dikhta hai (WhatsApp message ke liye) -

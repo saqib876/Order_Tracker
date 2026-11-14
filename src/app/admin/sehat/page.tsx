@@ -195,6 +195,36 @@ export default async function SehatPage({
           )}
         </div>
 
+        {/* Jawab ke raaste */}
+        <div className="adm-sec">
+          <div className="adm-sec-head">
+            <h2>Jawab ke raaste</h2>
+            <p>
+              Ye do jawab customer ke alfaz se nahi chune jate — bot inhein naam se bulata hai.
+              Topic ka naam theek hona zaroori hai, warna bot purane matan par chala jata hai.
+            </p>
+            <span className="adm-sec-n">{s.raaste.length}</span>
+          </div>
+          <div className="adm-list">
+            {s.raaste.map((r, i) => (
+              <div className="adm-item" key={i} data-off={r.mila ? undefined : '1'}>
+                <span
+                  className="adm-dot"
+                  style={{ background: r.mila ? '#10b981' : '#f43f5e' }}
+                  aria-hidden
+                />
+                <span className="adm-item-name">
+                  {r.kaam}
+                  <span className="adm-item-sub">
+                    {r.topic} — {r.zariya}
+                  </span>
+                  {r.jhalak && <span className="adm-item-sub">{r.jhalak}...</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Kis customer ko kitne jawab */}
         <div className="adm-sec">
           <div className="adm-sec-head">
