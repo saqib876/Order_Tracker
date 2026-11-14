@@ -75,9 +75,25 @@ export interface Anjaan {
   aakhri: string
 }
 
+/** Naya sawaal jis par aap yahin se kaam kar sakte hain */
+export interface NayaSawaal {
+  id: string
+  matan: string
+  kab: string
+  orderWala: boolean
+}
+
+/** Har din ka natija — bot_health_daily se */
+export interface DinKaHaal {
+  din: string
+  fisad: number
+  jawab: number
+  customers: number
+}
+
 export interface Sehat {
   waqt: string
-  khulasa: { baat: string; theek: boolean }[]
+  khulasa: { baat: string; theek: boolean; jagah?: string }[]
   sb: {
     jawab24: number
     tracking24: number
@@ -88,6 +104,12 @@ export interface Sehat {
   }
   jawabBreakdown: JawabQism[]
   anjaanList: Anjaan[]
+  /** Topic ka naam -> us ki id (taake seedha edit par le ja sakein) */
+  topicIds: Record<string, string>
+  /** Chalu topics ki list (naam + id) — sawaal jorne ke liye */
+  chaluTopics: { id: string; topic: string }[]
+  nayeSawaal: NayaSawaal[]
+  safar: DinKaHaal[]
   kaam: Kaarkardagi
   raaste: Raasta[]
   zyadaJawab: { phone: string; kitne: number }[]
@@ -454,6 +476,50 @@ export async function sehatLo(): Promise<Sehat> {
     await raastaDekho('Order ki pehchan na mile to ye jawab', TRACKING_UNKNOWN_TOPIC),
   ]
 
+  // ── Topics ki fehrist ── taake har naam se seedha edit par ja sakein
+  const { data: sabTopics } = await supabaseAdmin
+    .from('qna_topics')
+    .select('id,topic,is_active')
+    .limit(500)
+
+  const topicIds: Record<string, string> = {}
+  const chaluTopics: { id: string; topic: string }[] = []
+  for (const t of sabTopics || []) {
+    const naam = String(t.topic || '')
+    topicIds[naam] = String(t.id)
+    if (t.is_active) chaluTopics.push({ id: String(t.id), topic: naam })
+  }
+  chaluTopics.sort((a, b) => a.topic.localeCompare(b.topic))
+
+  // ── Naye sawaal ── jin par aap yahin se kaam kar sakte hain
+  const { data: tazaList } = await supabaseAdmin
+    .from('unmatched_messages')
+    .select('id,message_text,created_at')
+    .gte('created_at', ghanteQabl(24 * 7))
+    .order('created_at', { ascending: false })
+    .limit(40)
+
+  const nayeSawaal: NayaSawaal[] = (tazaList || []).map((r) => ({
+    id: String(r.id),
+    matan: String(r.message_text || '').slice(0, 220),
+    kab: String(r.created_at || ''),
+    orderWala: looksLikeOrderIntent(String(r.message_text || '')),
+  }))
+
+  // ── Rozana ka safar
+  const { data: safarRows } = await supabaseAdmin
+    .from('bot_health_daily')
+    .select('din,sehat_fisad,jawab,customers')
+    .order('din', { ascending: false })
+    .limit(14)
+
+  const safar: DinKaHaal[] = (safarRows || []).map((r) => ({
+    din: String(r.din),
+    fisad: Number(r.sehat_fisad) || 0,
+    jawab: Number(r.jawab) || 0,
+    customers: Number(r.customers) || 0,
+  }))
+
   // ── Tables aur naye khane ──────────────────────────────────────────────
   const tables: Record<string, { thik: boolean; rows: number; khata?: string }> = {}
   for (const t of [
@@ -483,20 +549,26 @@ export async function sehatLo(): Promise<Sehat> {
   }
 
   // ── Seedha matlab ──────────────────────────────────────────────────────
-  const khulasa: { baat: string; theek: boolean }[] = []
+  const khulasa: { baat: string; theek: boolean; jagah?: string }[] = []
   const khaneTheek = Object.values(nayeKhane).every(Boolean)
   if (!khaneTheek) {
-    khulasa.push({ baat: 'Supabase ka SQL poora nahi chala — naye khane nahi bane.', theek: false })
+    khulasa.push({
+      baat: 'Supabase ka SQL poora nahi chala — naye khane nahi bane.',
+      theek: false,
+      jagah: 'nizam',
+    })
   }
   if (matanWale.length === 0) {
     khulasa.push({
       baat: 'Aap ke bheje message ka matan nahi aa raha — Meta par smb_message_echoes dekh lein.',
       theek: false,
+      jagah: 'echo',
     })
   } else {
     khulasa.push({
       baat: `Meta se echo aa raha hai — ${matanWale.length} message matan ke sath mehfooz hue.`,
       theek: true,
+        jagah: 'echo',
     })
   }
 
@@ -504,6 +576,7 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: 'bot_faisla table nahi bani — kaarkardagi ke numbers khali rahenge.',
       theek: false,
+        jagah: 'nizam',
     })
   }
 
@@ -511,6 +584,7 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: 'bot_health_daily table nahi bani — rozana ka hisaab mehfooz nahi hoga.',
       theek: false,
+        jagah: 'nizam',
     })
   }
 
@@ -518,6 +592,7 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: 'wa_manual_jawab table nahi bani — cancel/return ka jawab abhi bhi dobara ja sakta hai.',
       theek: false,
+        jagah: 'nizam',
     })
   }
 
@@ -526,6 +601,7 @@ export async function sehatLo(): Promise<Sehat> {
       khulasa.push({
         baat: `Topic nahi mila: "${r.topic}" — ${r.kaam} ke liye bot purane matan par chalega.`,
         theek: false,
+        jagah: 'raaste',
       })
     }
   }
@@ -536,6 +612,7 @@ export async function sehatLo(): Promise<Sehat> {
       ? `${pehchane} matan ko bot ne quick reply maan liya — un par kabhi khamosh nahi hoga.`
       : 'Abhi koi matan quick reply nahi mana gaya — har matan ko 3 alag customers tak jana baqi hai.',
     theek: pehchane > 0,
+        jagah: 'echo',
   })
 
   khulasa.push({
@@ -543,6 +620,7 @@ export async function sehatLo(): Promise<Sehat> {
       ? `${(pauses || []).length} customers par bot is waqt khamosh hai (tracking phir bhi jati hai).`
       : 'Is waqt kisi customer par ghalat khamoshi nahi lagi hui.',
     theek: true,
+        jagah: 'khamoshi',
   })
 
   if (parkhe.length) {
@@ -551,6 +629,7 @@ export async function sehatLo(): Promise<Sehat> {
         ? `Excel ki list mein ${orderWale.length} sawaal ab bhi order tracking wale lag rahe hain.`
         : `Excel ki list saaf hai — ${parkhe.length} sawaalon mein ek bhi order tracking wala nahi.`,
       theek: orderWale.length === 0,
+        jagah: 'naye-sawaal',
     })
   }
 
@@ -558,6 +637,7 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: `${hadParLog} customers ko aaj ${hadPar} ya us se zyada jawab gaye — had par pohonch gaye.`,
       theek: false,
+        jagah: 'customers',
     })
   }
 
@@ -566,6 +646,7 @@ export async function sehatLo(): Promise<Sehat> {
     khulasa.push({
       baat: `${anjaanKul} jawab aise gaye jo kisi maujooda topic se nahi milte — niche dekh lein.`,
       theek: false,
+        jagah: 'anjaan',
     })
   }
 
@@ -598,6 +679,10 @@ export async function sehatLo(): Promise<Sehat> {
     },
     jawabBreakdown: jane,
     anjaanList,
+    topicIds,
+    chaluTopics,
+    nayeSawaal,
+    safar,
     kaam: await kaarkardagiNikalo(24, jawab.length, anjaanJawab),
     raaste,
     zyadaJawab,

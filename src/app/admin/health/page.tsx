@@ -39,6 +39,12 @@ const RANG: Record<string, string> = {
   anjaan: '#f43f5e',
 }
 
+const RANG_DARJA: Record<string, string> = {
+  acha: '#10b981',
+  theek: '#f59e0b',
+  bura: '#f43f5e',
+}
+
 const QISM_NAAM: Record<string, string> = {
   topic: 'Excel ka topic',
   tracking: 'Tracking',
@@ -66,6 +72,7 @@ const waqt = (iso: string) =>
  * bhi khulta band hota hai.
  */
 function Khana({
+  id,
   naam,
   tafseel,
   ginti,
@@ -73,6 +80,7 @@ function Khana({
   khula,
   children,
 }: {
+  id: string
   naam: string
   tafseel: string
   ginti?: number | string
@@ -81,7 +89,7 @@ function Khana({
   children: ReactNode
 }) {
   return (
-    <details className="adm-fold" open={khula} data-grade={rang}>
+    <details className="adm-fold" id={id} open={khula} data-grade={rang}>
       <summary>
         <span className="adm-fold-arrow" aria-hidden>
           ›
@@ -95,6 +103,29 @@ function Khana({
       <div className="adm-fold-andar">{children}</div>
     </details>
   )
+}
+
+/**
+ * Upar wali "dekhne wali baatein" par click karne se wo section khul jata
+ * hai. <details> khud ba khud nahi khulta, is liye ye chhota sa script
+ * hash dekh kar use khol deta hai aur wahan le jata hai.
+ */
+function KholoScript() {
+  const code = [
+    '(function(){',
+    'function kholo(){',
+    'var h=location.hash;if(!h||h.length<2)return;',
+    'var el=null;try{el=document.querySelector(h)}catch(e){return}',
+    'if(!el)return;',
+    'var d=el.closest?el.closest("details"):null;',
+    'if(el.tagName==="DETAILS")d=el;',
+    'if(d)d.open=true;',
+    'el.scrollIntoView({block:"start"});',
+    '}',
+    'kholo();window.addEventListener("hashchange",kholo);',
+    '})()',
+  ].join('')
+  return <script dangerouslySetInnerHTML={{ __html: code }} />
 }
 
 export default async function HealthPage({
@@ -142,6 +173,7 @@ export default async function HealthPage({
   return (
     <main className="adm">
       <ThemeBoot />
+      <KholoScript />
       <div className="adm-wrap">
         <nav className="adm-bar adm-in">
           <span className="adm-brand">
@@ -167,6 +199,18 @@ export default async function HealthPage({
           jayega, dobara click par band.
         </p>
 
+        {(one('jura') || one('hataya')) && (
+          <p className="adm-flash">
+            {one('jura') && (
+              <>
+                Sawaal <b>{one('jura')}</b> mein daal diya gaya — bot foran pehchanne lagega.
+              </>
+            )}
+            {one('hataya') && <>Sawaal hamesha ke liye nazar-andaz kar diya gaya.</>}
+          </p>
+        )}
+        {one('khata') && <p className="adm-error">{one('khata')}</p>}
+
         {/* ── Bara number: hamesha khula ────────────────────────────────── */}
         <section className="adm-score">
           <div className="adm-score-big" data-grade={gradeKa(s.kaam.kul)}>
@@ -180,11 +224,17 @@ export default async function HealthPage({
               Paanch cheezon ka ausat — har ek neeche alag se likhi hai. Pichle 24 ghanton ke{' '}
               <b>{s.kaam.faisle}</b> faislon par bana hai.
             </p>
-            {s.kaam.faisle === 0 && (
+            {s.kaam.faisle === 0 ? (
               <p className="adm-hint">
-                Abhi koi faisla darj nahi hua — roznamcha naye messages se bharta hai.
+                Abhi koi faisla darj nahi hua — roznamcha naye messages se bharta hai. Kal tak
+                asli tasveer saamne aa jayegi.
               </p>
-            )}
+            ) : s.kaam.faisle < 20 ? (
+              <p className="adm-hint">
+                Abhi sirf {s.kaam.faisle} faisle hain, is liye ye number kacha hai. Jab 20 se zyada
+                ho jayein tab is par bharosa karein.
+              </p>
+            ) : null}
           </div>
           <a className="adm-btn-ghost" href={`/admin/health?key=${k}&t=${Date.now()}`}>
             Refresh
@@ -252,7 +302,8 @@ export default async function HealthPage({
 
         {anjaanKul > 0 && (
           <Khana
-            naam="Pehchana nahi gaya"
+            id="anjaan"
+          naam="Pehchana nahi gaya"
             tafseel="Ye jawab kisi maujooda topic se nahi milte — sab se pehle yahi dekhein"
             ginti={anjaanKul}
             rang="bura"
@@ -285,6 +336,7 @@ export default async function HealthPage({
         )}
 
         <Khana
+          id="jawab"
           naam="Aaj kaun sa jawab kitni dafa gaya"
           tafseel="Kis topic ke jawab gaye, kitne customers ko"
           ginti={s.jawabBreakdown.length}
@@ -297,12 +349,25 @@ export default async function HealthPage({
                 {s.jawabBreakdown.map((j, i) => (
                   <div className="adm-item" key={i}>
                     <span className="adm-dot" style={{ background: RANG[j.qism] }} aria-hidden />
-                    <span className="adm-item-name">
-                      {j.naam}
-                      <span className="adm-item-sub">
-                        {QISM_NAAM[j.qism]} · {j.customers} customers · {j.hissa}%
+                    {s.topicIds[j.naam] ? (
+                      <Link
+                        className="adm-item-name"
+                        href={`/admin/topics?key=${k}&t=${s.topicIds[j.naam]}#edit`}
+                      >
+                        {j.naam}
+                        <span className="adm-item-sub">
+                          {QISM_NAAM[j.qism]} · {j.customers} customers · {j.hissa}% · kholne ke
+                          liye click karein
+                        </span>
+                      </Link>
+                    ) : (
+                      <span className="adm-item-name">
+                        {j.naam}
+                        <span className="adm-item-sub">
+                          {QISM_NAAM[j.qism]} · {j.customers} customers · {j.hissa}%
+                        </span>
                       </span>
-                    </span>
+                    )}
                     <span className="adm-num">{j.kitne}</span>
                     <span className="adm-meter">
                       <i style={{ width: `${Math.max(j.hissa, 2)}%`, background: RANG[j.qism] }} />
@@ -320,6 +385,7 @@ export default async function HealthPage({
         </Khana>
 
         <Khana
+          id="ai"
           naam="AI kin kaamon mein madad kar raha hai"
           tafseel="AI har message par nahi chalta — sirf jahan lafz kaam na aayein"
           ginti={s.sb.aiCalls24}
@@ -346,6 +412,7 @@ export default async function HealthPage({
         </Khana>
 
         <Khana
+          id="customers"
           naam="Kis customer ko kitne jawab gaye"
           tafseel={`Ek se zyada jawab paane wale customers — ${s.settings.MAX_REPLIES_PER_DAY} par bot khud ruk jata hai`}
           ginti={s.zyadaJawab.length}
@@ -384,6 +451,7 @@ export default async function HealthPage({
         </Khana>
 
         <Khana
+          id="raaste"
           naam="Jawab ke raaste"
           tafseel="Do jawab jinhein bot topic ke NAAM se bulata hai"
           ginti={s.raaste.filter((r) => r.mila).length + '/' + s.raaste.length}
@@ -414,6 +482,7 @@ export default async function HealthPage({
         </Khana>
 
         <Khana
+          id="echo"
           naam="Aap ke bheje hue message"
           tafseel="Quick reply pehchana gaya ya nahi"
           ginti={s.echo.matanWale}
@@ -460,7 +529,8 @@ export default async function HealthPage({
 
         {s.khamoshi.length > 0 && (
           <Khana
-            naam="Abhi in par bot khamosh hai"
+            id="khamoshi"
+          naam="Abhi in par bot khamosh hai"
             tafseel="Tracking phir bhi jati rahegi — sirf aam jawab ruke hue hain"
             ginti={s.khamoshi.length}
           >
@@ -478,46 +548,128 @@ export default async function HealthPage({
         )}
 
         <Khana
-          naam="Excel ki list"
+          id="naye-sawaal"
+          naam="Naye sawaal"
           tafseel={
             s.excel.orderWale === 0
-              ? 'Saaf hai — koi order tracking wala sawaal nahi'
-              : `${s.excel.orderWale} sawaal ab bhi order tracking wale lag rahe hain`
+              ? 'Jin ka bot jawab nahi de saka — yahin se kisi topic mein daal dein'
+              : `${s.excel.orderWale} sawaal order tracking wale lag rahe hain`
           }
-          ginti={s.sb.naySawaal24}
+          ginti={s.nayeSawaal.length}
           rang={s.excel.orderWale === 0 ? 'acha' : 'theek'}
         >
           <p className="adm-p">
-            Pichle 7 din ke <b>{s.excel.parkhe}</b> naye sawaal parhe —{' '}
-            {s.excel.orderWale === 0 ? (
-              <>
-                in mein <b>ek bhi</b> order tracking wala nahi.
-              </>
-            ) : (
-              <>
-                in mein <b>{s.excel.orderWale}</b> ab bhi order tracking wale lag rahe hain.
-              </>
-            )}
+            Ye wo sawaal hain jin ka bot jawab nahi de saka. Har sawaal ke saamne se seedha kisi
+            topic mein daal dein — agli dafa bot usay <b>lafzon se</b> pehchan lega, yani AI ki
+            zaroorat bhi nahi paregi. Jo sawaal kaam ka na ho, usay hata dein.
           </p>
-          {s.excel.namune.length > 0 && (
+
+          {s.nayeSawaal.length === 0 ? (
+            <p className="adm-khali">Pichle 7 din mein koi naya sawaal nahi aaya.</p>
+          ) : (
             <div className="adm-list">
-              {s.excel.namune.map((t, i) => (
-                <div className="adm-item" key={i} data-off="1">
-                  <span className="adm-item-name">{t}</span>
+              {s.nayeSawaal.map((q) => (
+                <div className="adm-sawaal" key={q.id} data-order={q.orderWala ? '1' : undefined}>
+                  <p className="adm-sawaal-matan">{q.matan}</p>
+                  <div className="adm-sawaal-niche">
+                    <span className="adm-sawaal-kab">
+                      {waqt(q.kab)}
+                      {q.orderWala && ' · order tracking wala lagta hai'}
+                    </span>
+
+                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
+                      <input type="hidden" name="key" value={adminKey} />
+                      <input type="hidden" name="id" value={q.id} />
+                      <input type="hidden" name="matan" value={q.matan} />
+                      <input type="hidden" name="kaam" value="joro" />
+                      <select name="topic_id" className="adm-chota-select" defaultValue="" required>
+                        <option value="" disabled>
+                          Topic chunein...
+                        </option>
+                        {s.chaluTopics.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.topic}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="submit" className="adm-chota-btn">
+                        Add
+                      </button>
+                    </form>
+
+                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
+                      <input type="hidden" name="key" value={adminKey} />
+                      <input type="hidden" name="id" value={q.id} />
+                      <input type="hidden" name="matan" value={q.matan} />
+                      <input type="hidden" name="kaam" value="hatao" />
+                      <button type="submit" className="adm-chota-btn adm-chota-bad">
+                        Remove
+                      </button>
+                    </form>
+                  </div>
                 </div>
               ))}
             </div>
           )}
+
           <p className="adm-hint">
             Aaj ke naye sawaal: <b>{s.sb.naySawaal24}</b> · Jama shuda kul:{' '}
-            <b>{s.tables['unmatched_messages']?.rows ?? 0}</b> —{' '}
+            <b>{s.tables['unmatched_messages']?.rows ?? 0}</b> · upar sirf taza{' '}
+            {s.nayeSawaal.length} dikhaye gaye hain.{' '}
             <Link className="adm-a" href={`/admin/qna?key=${k}`}>
-              in par AI ki tajweez chalayein
+              Poori list par AI ki tajweez chalayein
             </Link>
           </p>
         </Khana>
 
         <Khana
+          id="safar"
+          naam="Rozana ka safar"
+          tafseel="Har din ka natija — har raat khud mehfooz hota hai"
+          ginti={s.safar.length}
+        >
+          {s.safar.length === 0 ? (
+            <p className="adm-khali">
+              Abhi koi din mehfooz nahi hua. Pehla hisaab aaj raat 11:45 (Pakistan ka waqt) par
+              banega, phir har raat.
+            </p>
+          ) : (
+            <div className="adm-list">
+              {s.safar.map((d) => (
+                <div className="adm-item" key={d.din}>
+                  <span className="adm-item-name">
+                    {new Date(d.din + 'T00:00:00Z').toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      timeZone: 'UTC',
+                    })}
+                    <span className="adm-item-sub">
+                      {d.jawab} jawab · {d.customers} customers
+                    </span>
+                  </span>
+                  <span className="adm-num" style={{ color: RANG_DARJA[gradeKa(d.fisad)] }}>
+                    {d.fisad}%
+                  </span>
+                  <span className="adm-meter">
+                    <i
+                      style={{
+                        width: `${Math.max(d.fisad, 2)}%`,
+                        background: RANG_DARJA[gradeKa(d.fisad)],
+                      }}
+                    />
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="adm-hint">
+            Ye hisaab har raat khud mehfooz hota hai, is liye aap jab bhi aayein — guzre hue din
+            saamne hote hain.
+          </p>
+        </Khana>
+
+        <Khana
+          id="nizam"
           naam="Nizam ka andar ka haal"
           tafseel="Supabase ki tables aur settings — aam taur par haath lagane ki zaroorat nahi"
           ginti={Object.keys(s.tables).length}

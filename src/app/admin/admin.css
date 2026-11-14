@@ -1488,3 +1488,98 @@ a.adm-item-name:hover {
     transition: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Health — naye sawaal par wahin se kaam
+ * ───────────────────────────────────────────────────────────────────── */
+
+.adm-sawaal {
+  padding: 12px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-sawaal[data-order='1'] {
+  border-left: 3px solid #f59e0b;
+}
+
+.adm-sawaal-matan {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-bottom: 9px;
+  word-break: break-word;
+}
+
+.adm-sawaal-niche {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.adm-sawaal-kab {
+  flex: 1;
+  min-width: 130px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.adm-sawaal-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.adm-chota-select {
+  max-width: 230px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--field-line);
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.adm-chota-select:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.adm-chota-btn {
+  padding: 6px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.16s, background-color 0.16s;
+}
+
+.adm-chota-btn:hover {
+  border-color: var(--brand);
+}
+
+.adm-chota-bad {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+/* Upar wali "dekhne wali baatein" ab click hone wali hain */
+a.adm-item {
+  text-decoration: none;
+}
+
+a.adm-item .adm-fold-arrow {
+  font-size: 16px;
+}
