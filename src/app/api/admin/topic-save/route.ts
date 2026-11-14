@@ -92,8 +92,6 @@ export async function POST(req: NextRequest) {
     return wapas(req, adminKey, { bana: topic }, naya?.id)
   }
 
-  if (!id) return wapas(req, adminKey, { khata: 'Topic nahi mila' })
-
   // ── Kai purane naam ek sath hatana ─────────────────────────────────────
   if (kaam === 'safai') {
     const ids = form.getAll('pick').map((v) => String(v)).filter(Boolean)
@@ -114,6 +112,12 @@ export async function POST(req: NextRequest) {
     console.log('[topics] safai — ' + hatane.length + ' purane naam hata diye')
     return wapas(req, adminKey, { safai: String(hatane.length) })
   }
+
+  // Safai mein koi EK topic nahi hota — chune hue kai hote hain (pick).
+  // Is liye ye neeche wale "ek id zaroori hai" wale pehre se PEHLE aata hai,
+  // warna ye har dafa "Topic nahi mila" keh kar ruk jata tha.
+  if (!id) return wapas(req, adminKey, { khata: 'Topic nahi mila' })
+
 
   // ── ON / OFF ───────────────────────────────────────────────────────────
   if (kaam === 'toggle') {
@@ -203,5 +207,8 @@ function wapas(req: NextRequest, adminKey: string, params: Record<string, string
   for (const [k, v] of Object.entries(params)) {
     if (v) url.searchParams.set(k, v)
   }
+  // Safha wahin khulta hai jahan paigham likha hota hai. Warna neeche
+  // scroll kiye hue user ko lagta hai ke kuch hua hi nahi.
+  url.hash = 'khabar'
   return NextResponse.redirect(url, { status: 303 })
 }

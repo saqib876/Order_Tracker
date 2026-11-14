@@ -248,7 +248,7 @@ export default async function TopicsPage({
         </div>
 
         {(one('mehfooz') || one('bana') || one('hataya') || one('badla') || one('safai')) && (
-          <div className="adm-flash">
+          <div className="adm-flash" id="khabar">
             {one('mehfooz') && (
               <>
                 <b>{one('mehfooz')}</b> — jo likha tha wo mehfooz ho gaya.
@@ -277,7 +277,11 @@ export default async function TopicsPage({
             )}
           </div>
         )}
-        {one('khata') && <p className="adm-error">{one('khata')}</p>}
+        {one('khata') && (
+          <p className="adm-error" id="khabar">
+            {one('khata')}
+          </p>
+        )}
 
         {/* ── Naya topic ───────────────────────────────────────────────── */}
         {nayaBanana ? (

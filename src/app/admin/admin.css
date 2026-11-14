@@ -1203,3 +1203,10 @@ a.adm-item-name {
 a.adm-item-name:hover {
   color: var(--brand);
 }
+
+/* Kaam ke baad safha yahan aa kar rukta hai — upar ki sticky patti
+   paigham ko dhaank na le, is liye thori jagah chhor dete hain. */
+.adm-flash,
+.adm-error {
+  scroll-margin-top: 86px;
+}
