@@ -225,6 +225,15 @@ export async function topicList(): Promise<{ list: TopicNamuna[]; version: strin
       .map((s) => s.trim())
       .filter(Boolean)
       .slice(0, NAMUNE_PER_TOPIC)
+
+    // Jis topic mein ek bhi sawaal na ho, wo AI ko nahi dikhaya jata.
+    //
+    // Aise topics sirf jawab rakhne ke liye bante hain (misal: "Order
+    // Details Nahi Mili To Ye Ans Send Ho Ga") — unhein code apni jagah
+    // khud bhejta hai. AI ko dikha dein to wo sirf naam parh kar unhein
+    // chun sakta hai, aur ghalat jawab chala jata hai.
+    if (!questions.length) continue
+
     list.push({ topic, questions })
   }
   list.sort((a, b) => a.topic.localeCompare(b.topic))
