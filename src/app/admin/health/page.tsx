@@ -20,6 +20,8 @@ import type { ReactNode } from 'react'
 import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { sehatLo } from '@/lib/sehat'
+import { dohreSawaal, sawaalDhoondo } from '@/lib/sawaalSafai'
+import type { SawaalJagah, TopicChota } from '@/lib/sawaalSafai'
 import { ThemeBoot, ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
@@ -128,6 +130,68 @@ function KholoScript() {
   return <script dangerouslySetInnerHTML={{ __html: code }} />
 }
 
+/**
+ * Ek sawaal, ek topic — aur us par do kaam: doosre topic mein bhej dena,
+ * ya is topic se nikaal dena.
+ */
+function SawaalRow({
+  j,
+  topics,
+  adminKey,
+  talash,
+}: {
+  j: SawaalJagah
+  topics: TopicChota[]
+  adminKey: string
+  talash: string
+}) {
+  return (
+    <div className="adm-sawaal">
+      <p className="adm-sawaal-matan">{j.asli}</p>
+      <div className="adm-sawaal-niche">
+        <span className="adm-sawaal-kab">
+          abhi yahan hai: <b>{j.topic}</b>
+          {!j.chalu && ' (band topic)'}
+        </span>
+
+        <form action="/api/admin/sawaal-fix" method="POST" className="adm-sawaal-form">
+          <input type="hidden" name="key" value={adminKey} />
+          <input type="hidden" name="kaam" value="bhejo" />
+          <input type="hidden" name="matan" value={j.asli} />
+          <input type="hidden" name="se_topic" value={j.topicId} />
+          <input type="hidden" name="q" value={talash} />
+          <select name="ko_topic" className="adm-chota-select" defaultValue="" required>
+            <option value="" disabled>
+              Is topic mein bhejein...
+            </option>
+            {topics
+              .filter((t) => t.chalu && t.id !== j.topicId)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.topic}
+                </option>
+              ))}
+          </select>
+          <button type="submit" className="adm-chota-btn">
+            Move
+          </button>
+        </form>
+
+        <form action="/api/admin/sawaal-fix" method="POST" className="adm-sawaal-form">
+          <input type="hidden" name="key" value={adminKey} />
+          <input type="hidden" name="kaam" value="hatao" />
+          <input type="hidden" name="matan" value={j.asli} />
+          <input type="hidden" name="se_topic" value={j.topicId} />
+          <input type="hidden" name="q" value={talash} />
+          <button type="submit" className="adm-chota-btn adm-chota-bad">
+            Remove
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default async function HealthPage({
   searchParams,
 }: {
@@ -163,7 +227,18 @@ export default async function HealthPage({
     )
   }
 
+  const talash = one('q').trim()
   const s = await sehatLo()
+  const [dohre, dhoonda] = await Promise.all([
+    dohreSawaal(),
+    talash ? sawaalDhoondo(talash) : Promise.resolve({ mile: [] as SawaalJagah[], topics: [] }),
+  ])
+  const safai = {
+    dohre: dohre.dohre,
+    topics: dohre.topics,
+    kulSawaal: dohre.kulSawaal,
+    mile: dhoonda.mile,
+  }
   const k = encodeURIComponent(adminKey)
 
   const masle = s.khulasa.filter((x) => !x.theek)
@@ -199,6 +274,20 @@ export default async function HealthPage({
           jayega, dobara click par band.
         </p>
 
+        {(one('nikla') || one('bheja')) && (
+          <p className="adm-flash">
+            {one('nikla') && (
+              <>
+                Sawaal <b>{one('nikla')}</b> se nikaal diya gaya.
+              </>
+            )}
+            {one('bheja') && (
+              <>
+                Sawaal <b>{one('bheja')}</b> mein bhej diya gaya.
+              </>
+            )}
+          </p>
+        )}
         {(one('jura') || one('hataya')) && (
           <p className="adm-flash">
             {one('jura') && (
@@ -264,14 +353,25 @@ export default async function HealthPage({
           <div className="adm-card" data-tone="quiet">
             <h2 className="adm-h2">Dekhne wali baatein</h2>
             <div className="adm-list adm-khulasa">
-              {masle.map((x, i) => (
-                <div className="adm-item" key={i} data-off="1">
-                  <span className="adm-dot" style={{ background: '#f43f5e' }} aria-hidden />
-                  <span className="adm-item-name" style={{ fontWeight: 500 }}>
-                    {x.baat}
-                  </span>
-                </div>
-              ))}
+              {masle.map((x, i) =>
+                x.jagah ? (
+                  <a className="adm-item adm-masla" key={i} href={`#${x.jagah}`}>
+                    <span className="adm-dot" style={{ background: '#f43f5e' }} aria-hidden />
+                    <span className="adm-item-name" style={{ fontWeight: 600 }}>
+                      {x.baat}
+                      <span className="adm-item-sub">Kholne ke liye click karein</span>
+                    </span>
+                    <span className="adm-masla-btn">Dekhein ›</span>
+                  </a>
+                ) : (
+                  <div className="adm-item" key={i} data-off="1">
+                    <span className="adm-dot" style={{ background: '#f43f5e' }} aria-hidden />
+                    <span className="adm-item-name" style={{ fontWeight: 600 }}>
+                      {x.baat}
+                    </span>
+                  </div>
+                )
+              )}
             </div>
           </div>
         ) : (
@@ -548,77 +648,100 @@ export default async function HealthPage({
         )}
 
         <Khana
-          id="naye-sawaal"
-          naam="Naye sawaal"
+          id="safai"
+          naam="Sawaalon ki safai"
           tafseel={
-            s.excel.orderWale === 0
-              ? 'Jin ka bot jawab nahi de saka — yahin se kisi topic mein daal dein'
-              : `${s.excel.orderWale} sawaal order tracking wale lag rahe hain`
+            safai.dohre.length
+              ? `${safai.dohre.length} sawaal ek se zyada topics mein pade hain`
+              : 'Koi sawaal do topics mein nahi — yahan se dhoond kar theek bhi kar sakte hain'
           }
-          ginti={s.nayeSawaal.length}
-          rang={s.excel.orderWale === 0 ? 'acha' : 'theek'}
+          ginti={safai.dohre.length}
+          rang={safai.dohre.length ? 'theek' : 'acha'}
+          khula={Boolean(talash) || safai.dohre.length > 0}
         >
+          {/* ── Dhoondne wala khana ── */}
+          <form method="GET" action="/admin/health" className="adm-talash">
+            <input type="hidden" name="key" value={adminKey} />
+            <input
+              type="text"
+              name="q"
+              defaultValue={talash}
+              className="adm-input"
+              placeholder="Koi sawaal dhoondein — jaise: delivery charges"
+            />
+            <button type="submit" className="adm-btn-go">
+              Dhoondein
+            </button>
+            {talash && (
+              <Link href={`/admin/health?key=${k}#safai`} className="adm-btn-ghost">
+                Saaf karein
+              </Link>
+            )}
+          </form>
+
+          {talash && (
+            <>
+              <h3 className="adm-h3">
+                &quot;{talash}&quot; — {safai.mile.length} sawaal mile
+              </h3>
+              {safai.mile.length === 0 ? (
+                <p className="adm-khali">Is se milta koi sawaal kisi topic mein nahi hai.</p>
+              ) : (
+                <div className="adm-list">
+                  {safai.mile.map((j, i) => (
+                    <SawaalRow
+                      key={j.topicId + i}
+                      j={j}
+                      topics={safai.topics}
+                      adminKey={adminKey}
+                      talash={talash}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Ek hi sawaal, kai topics ── */}
+          <h3 className="adm-h3">Ek hi sawaal, kai topics</h3>
           <p className="adm-p">
-            Ye wo sawaal hain jin ka bot jawab nahi de saka. Har sawaal ke saamne se seedha kisi
-            topic mein daal dein — agli dafa bot usay <b>lafzon se</b> pehchan lega, yani AI ki
-            zaroorat bhi nahi paregi. Jo sawaal kaam ka na ho, usay hata dein.
+            Jab ek hi sawaal do topics mein pada ho to bot ka milan batt jata hai aur kabhi ghalat
+            topic jeet jata hai. Jis topic mein us ka kaam nahi, wahan se nikaal dein.
           </p>
 
-          {s.nayeSawaal.length === 0 ? (
-            <p className="adm-khali">Pichle 7 din mein koi naya sawaal nahi aaya.</p>
+          {safai.dohre.length === 0 ? (
+            <p className="adm-khali">
+              Koi sawaal do topics mein nahi mila — {safai.kulSawaal} chalu sawaal saaf hain.
+            </p>
           ) : (
-            <div className="adm-list">
-              {s.nayeSawaal.map((q) => (
-                <div className="adm-sawaal" key={q.id} data-order={q.orderWala ? '1' : undefined}>
-                  <p className="adm-sawaal-matan">{q.matan}</p>
-                  <div className="adm-sawaal-niche">
-                    <span className="adm-sawaal-kab">
-                      {waqt(q.kab)}
-                      {q.orderWala && ' · order tracking wala lagta hai'}
-                    </span>
-
-                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
-                      <input type="hidden" name="key" value={adminKey} />
-                      <input type="hidden" name="id" value={q.id} />
-                      <input type="hidden" name="matan" value={q.matan} />
-                      <input type="hidden" name="kaam" value="joro" />
-                      <select name="topic_id" className="adm-chota-select" defaultValue="" required>
-                        <option value="" disabled>
-                          Topic chunein...
-                        </option>
-                        {s.chaluTopics.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.topic}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="submit" className="adm-chota-btn">
-                        Add
-                      </button>
-                    </form>
-
-                    <form action="/api/admin/sawaal-action" method="POST" className="adm-sawaal-form">
-                      <input type="hidden" name="key" value={adminKey} />
-                      <input type="hidden" name="id" value={q.id} />
-                      <input type="hidden" name="matan" value={q.matan} />
-                      <input type="hidden" name="kaam" value="hatao" />
-                      <button type="submit" className="adm-chota-btn adm-chota-bad">
-                        Remove
-                      </button>
-                    </form>
-                  </div>
+            safai.dohre.map((d) => (
+              <div className="adm-dohra" key={d.key}>
+                <p className="adm-sawaal-matan">{d.matan}</p>
+                <span className="adm-item-sub">
+                  {d.jagahein.length} topics mein maujood hai — ek rakhein, baqi se nikaal dein
+                </span>
+                <div className="adm-list" style={{ marginTop: 8 }}>
+                  {d.jagahein.map((j, i) => (
+                    <SawaalRow
+                      key={j.topicId + i}
+                      j={j}
+                      topics={safai.topics}
+                      adminKey={adminKey}
+                      talash={talash}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
 
           <p className="adm-hint">
-            Aaj ke naye sawaal: <b>{s.sb.naySawaal24}</b> · Jama shuda kul:{' '}
-            <b>{s.tables['unmatched_messages']?.rows ?? 0}</b> · upar sirf taza{' '}
-            {s.nayeSawaal.length} dikhaye gaye hain.{' '}
+            Kul chalu sawaal: <b>{safai.kulSawaal}</b>. Naye sawaal har hafte AI khud parh kar
+            tajweez banata hai — wo{' '}
             <Link className="adm-a" href={`/admin/qna?key=${k}`}>
-              Poori list par AI ki tajweez chalayein
-            </Link>
+              Dashboard
+            </Link>{' '}
+            par approve hote hain.
           </p>
         </Khana>
 
