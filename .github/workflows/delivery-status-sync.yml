@@ -1,0 +1,46 @@
+# .github/workflows/delivery-status-sync.yml
+#
+# CallCourier ka live status har 30 minute Shopify ke Delivery status
+# column mein push karta hai.
+#
+# Repo mein do cheezein chahiye:
+#   1. scripts/callcourier-delivery-sync.js
+#   2. Settings > Secrets and variables > Actions > SHOPIFY_TOKEN
+
+name: Delivery status sync
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Actions tab se haath se bhi chala sakte hain
+
+concurrency:
+  group: delivery-status-sync
+  cancel-in-progress: false # ek run chal raha ho to doosra uske baad
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync delivery status
+        run: node scripts/callcourier-delivery-sync.js
+        env:
+          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          SHOPIFY_STORE: be6fc4-ea.myshopify.com
+          COURIER_API: https://order-tracker-sigma.vercel.app/api/courier
+
+          # 21 din kaafi hai — is se purana parcel transit mein nahi hota
+          DAYS: '21'
+
+          # full = jo bhi status chhoot gaye ho sab likho (behtar timeline)
+          MODE: full
+
+          CONCURRENCY: '3'
