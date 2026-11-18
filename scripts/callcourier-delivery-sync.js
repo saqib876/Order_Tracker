@@ -54,7 +54,15 @@ const CFG = {
     .split(',')
     .map((s) => s.trim().replace(/^#/, ''))
     .filter(Boolean),
+
+  // jo parcel deliver ho chuka uska status ab kabhi nahi badlega — usay
+  // dobara poochhna courier par bekaar ka bojh hai. SKIP_FINAL=0 se poora
+  // sweep ho jata hai (kabhi mapping badle to kaam aata hai).
+  skipFinal: process.env.SKIP_FINAL !== '0',
 };
+
+// in par pahunch kar parcel ka safar khatam
+const FINAL_STATUSES = new Set(['DELIVERED']);
 
 // ------------------------------------------------------- status mapping
 
@@ -130,7 +138,16 @@ async function gql(query, variables) {
     return gql(query, variables);
   }
 
-  const json = await res.json();
+  const body = await res.text();
+  let json;
+  try {
+    json = JSON.parse(body);
+  } catch (e) {
+    throw new Error(
+      `Shopify ne JSON nahi diya (HTTP ${res.status}): ` + body.slice(0, 80)
+    );
+  }
+
   if (json.errors) {
     throw new Error('Shopify GraphQL: ' + JSON.stringify(json.errors));
   }
@@ -171,6 +188,7 @@ async function fetchShipments() {
 
   const out = [];
   let cursor = null;
+  let settled = 0;
 
   do {
     const data = await gql(ORDERS_QUERY, { cursor, q });
@@ -186,6 +204,11 @@ async function fetchShipments() {
       for (const f of order.fulfillments) {
         const tracking = (f.trackingInfo[0] || {}).number;
         if (!tracking) continue; // bina tracking ke kuch nahi kar sakte
+
+        if (CFG.skipFinal && FINAL_STATUSES.has(f.displayStatus)) {
+          settled++;
+          continue;
+        }
 
         out.push({
           order: order.name,
@@ -203,6 +226,10 @@ async function fetchShipments() {
     cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
   } while (cursor);
 
+  if (settled) {
+    console.log(`${settled} parcel pehle hi deliver ho chuke — skip`);
+  }
+
   return out;
 }
 
@@ -212,7 +239,16 @@ async function fetchCourier(tracking) {
   const res = await fetch(`${CFG.courierApi}?cn=${encodeURIComponent(tracking)}`);
   if (!res.ok) throw new Error(`courier ${res.status}`);
 
-  const rows = await res.json();
+  // courier sust ho to JSON ki jagah "stream timeout" jaisa text aa jata hai —
+  // us par poora run nahi marna chahiye
+  const body = await res.text();
+  let rows;
+  try {
+    rows = JSON.parse(body);
+  } catch (e) {
+    throw new Error('courier ne JSON nahi diya: ' + body.slice(0, 60));
+  }
+
   if (!Array.isArray(rows)) return [];
 
   return rows
