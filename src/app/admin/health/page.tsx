@@ -296,7 +296,7 @@ export default async function HealthPage({
           </span>
         </nav>
 
-        <h1 className="adm-title">Bot ki Health</h1>
+        <h1 className="adm-title">Bot Health</h1>
         <p className="adm-sub">
           {waqt(s.waqt)} tak ka haal (Pakistan ka waqt). Har section par click karein — khul
           jayega, dobara click par band.
@@ -360,7 +360,7 @@ export default async function HealthPage({
             <span>{s.kaam.darje}</span>
           </div>
           <div className="adm-score-note">
-            <h2 className="adm-h2">Bot kitna theek chal raha hai</h2>
+            <h2 className="adm-h2">Overall Performance</h2>
             <p className="adm-p">
               Paanch cheezon ka ausat — har ek neeche alag se likhi hai. Pichle 24 ghanton ke{' '}
               <b>{s.kaam.faisle}</b> faislon par bana hai.
@@ -410,7 +410,7 @@ export default async function HealthPage({
         {/* ── Gharbar: sirf tab jab waqai koi masla ho ──────────────────── */}
         {masle.length > 0 ? (
           <div className="adm-card" data-tone="quiet">
-            <h2 className="adm-h2">Dekhne wali baatein</h2>
+            <h2 className="adm-h2">Needs Your Attention</h2>
             <div className="adm-list adm-khulasa">
               {masle.map((x, i) =>
                 x.jagah ? (
@@ -474,7 +474,7 @@ export default async function HealthPage({
         {anjaanKul > 0 && (
           <Khana
             id="anjaan"
-          naam="Pehchana nahi gaya"
+          naam="Unrecognized Replies"
             tafseel="Ye jawab kisi maujooda topic se nahi milte — sab se pehle yahi dekhein"
             ginti={anjaanKul}
             rang="bura"
@@ -507,7 +507,7 @@ export default async function HealthPage({
 
         <Khana
           id="jawab"
-          naam="Aaj kaun sa jawab kitni dafa gaya"
+          naam="Replies Sent Today"
           tafseel="Kis topic ke jawab gaye, kitne customers ko"
           ginti={s.jawabBreakdown.length}
         >
@@ -556,7 +556,7 @@ export default async function HealthPage({
 
         <Khana
           id="ai"
-          naam="AI kin kaamon mein madad kar raha hai"
+          naam="AI Usage"
           tafseel="AI har message par nahi chalta — sirf jahan lafz kaam na aayein"
           ginti={s.sb.aiCalls24}
         >
@@ -583,7 +583,7 @@ export default async function HealthPage({
 
         <Khana
           id="customers"
-          naam="Kis customer ko kitne jawab gaye"
+          naam="Replies Per Customer"
           tafseel={`Ek se zyada jawab paane wale customers — ${s.settings.MAX_REPLIES_PER_DAY} par bot khud ruk jata hai`}
           ginti={s.zyadaJawab.length}
           rang={s.hadParLog > 0 ? 'theek' : undefined}
@@ -653,7 +653,7 @@ export default async function HealthPage({
 
         <Khana
           id="raaste"
-          naam="Jawab ke raaste"
+          naam="Reply Routes"
           tafseel="Do jawab jinhein bot topic ke NAAM se bulata hai"
           ginti={s.raaste.filter((r) => r.mila).length + '/' + s.raaste.length}
           rang={s.raaste.every((r) => r.mila) ? 'acha' : 'bura'}
@@ -684,7 +684,7 @@ export default async function HealthPage({
 
         <Khana
           id="echo"
-          naam="Quick reply ki list"
+          naam="Quick Reply List"
           tafseel="Jin jumlon par bot kabhi khamosh nahi hoga"
           ginti={s.matanList.length}
         >
@@ -840,7 +840,7 @@ export default async function HealthPage({
         {s.khamoshi.length > 0 && (
           <Khana
             id="khamoshi"
-          naam="Abhi in par bot khamosh hai"
+          naam="Paused Customers"
             tafseel="Tracking phir bhi jati rahegi — sirf aam jawab ruke hue hain"
             ginti={s.khamoshi.length}
           >
@@ -860,7 +860,7 @@ export default async function HealthPage({
         {s.excel.trackingWale.length > 0 && (
           <Khana
             id="tracking-sawaal"
-            naam="Tracking wale sawaal naye sawaalon mein"
+            naam="Tracking Questions To Fix"
             tafseel="Ye tracking ke sawaal lagte hain, lekin naye sawaalon ki list mein chale gaye"
             ginti={s.excel.trackingWale.length}
             rang="theek"
@@ -914,7 +914,7 @@ export default async function HealthPage({
 
         <Khana
           id="safai"
-          naam="Sawaalon ki safai"
+          naam="Question Cleanup"
           tafseel={
             safai.dohre.length
               ? `${safai.dohre.length} sawaal ek se zyada topics mein pade hain`
@@ -968,7 +968,7 @@ export default async function HealthPage({
           )}
 
           {/* ── Ek hi sawaal, kai topics ── */}
-          <h3 className="adm-h3">Ek hi sawaal, kai topics</h3>
+          <h3 className="adm-h3">Duplicate Questions</h3>
           <p className="adm-p">
             Jab ek hi sawaal do topics mein pada ho to bot ka milan batt jata hai aur kabhi ghalat
             topic jeet jata hai. Jis topic mein us ka kaam nahi, wahan se nikaal dein.
@@ -1012,7 +1012,7 @@ export default async function HealthPage({
 
         <Khana
           id="safar"
-          naam="Rozana ka safar"
+          naam="Daily Progress"
           tafseel="Har din ka natija — har raat khud mehfooz hota hai"
           ginti={s.safar.length}
         >
@@ -1058,12 +1058,12 @@ export default async function HealthPage({
 
         <Khana
           id="nizam"
-          naam="Nizam ka andar ka haal"
+          naam="System Status"
           tafseel="Supabase ki tables aur settings — aam taur par haath lagane ki zaroorat nahi"
           ginti={Object.keys(s.tables).length}
           rang={Object.values(s.tables).every((t) => t.thik) ? 'acha' : 'bura'}
         >
-          <h3 className="adm-h3">Naye khane</h3>
+          <h3 className="adm-h3">New Columns</h3>
           <div className="adm-mini">
             {Object.entries(s.nayeKhane).map(([naam, ok]) => (
               <div key={naam}>

@@ -235,11 +235,12 @@ async function jawabKeNaam(): Promise<Map<string, { naam: string; qism: JawabQis
  * BOT KI KAARKARDAGI — roznamche (bot_faisla) se nikali gayi.
  *
  * Har paimana ek sawaal ka jawab hai jo aap poochna chahte hain:
- *   Samajh      — kitne sawaal samajh aaye?
- *   Durusti     — jo bheja wo sahi jagah se tha?
- *   Tracking    — order dhoondne mein kitni kaamyabi?
- *   Muft kaam   — kitna kaam bina AI ke hua (yani bina kharche ke)?
- *   Waqt        — guzra aur aane wala waqt theek pehchana?
+ *   Understanding     — kitne messages ka durust faisla hua?
+ *   Reply Accuracy    — jo bheja wo kisi maloom raste se tha?
+ *   Order Tracking    — order dhoondne mein kitni kaamyabi?
+ *   Free Replies      — kitna kaam bina AI ke hua (yani bina kharche ke)?
+ *   Complaint Timing  — shikayatein delivery se pehle ki thin ya baad ki?
+ *                       (ye sirf khabar hai, score nahi)
  *
  * Har paimane ke sath "bunyad" bhi hai: wo kitne faislon par bana. Bunyad
  * chhoti ho to number par zyada bharosa nahi karna chahiye.
@@ -289,7 +290,7 @@ async function kaarkardagiNikalo(
 
   const paimane: Paimana[] = [
     {
-      naam: 'Samajh',
+      naam: 'Understanding',
       fisad: hissa(samjha + sochKarKhamosh, kul),
       bunyad: kul,
       matlab:
@@ -302,7 +303,7 @@ async function kaarkardagiNikalo(
         'par girta hai jin ka bot ko koi matlab hi samajh na aaya.',
     },
     {
-      naam: 'Durusti',
+      naam: 'Reply Accuracy',
       fisad: hissa(kulJawab - anjaanJawab, kulJawab),
       bunyad: kulJawab,
       matlab:
@@ -315,7 +316,7 @@ async function kaarkardagiNikalo(
         'sab se pehla nishan hai.',
     },
     {
-      naam: 'Tracking',
+      naam: 'Order Tracking',
       fisad: hissa(tracking, tracking + trackingNa),
       bunyad: tracking + trackingNa,
       matlab: `${tracking} dafa live status mila, ${trackingNa} dafa order nahi mila`,
@@ -324,7 +325,7 @@ async function kaarkardagiNikalo(
         'dhoond kar live status bhej deta hai. Na mile to track link wala jawab jata hai.',
     },
     {
-      naam: 'Muft kaam',
+      naam: 'Free Replies',
       fisad: hissa(lafzSe, lafzSe + aiSe),
       bunyad: lafzSe + aiSe,
       matlab: `${lafzSe} lafzon se, ${aiSe} AI ki madad se`,
@@ -333,7 +334,7 @@ async function kaarkardagiNikalo(
         'jata hai jahan lafz kaam na aayein. Ye number jitna ooncha, utna behtar.',
     },
     {
-      naam: 'Waqt ki samajh',
+      naam: 'Complaint Timing',
       fisad: hissa(manualPakka, manual),
       bunyad: manual,
       // Is ka ooncha hona acha nahi, neecha hona bura nahi — ye sirf
@@ -359,14 +360,14 @@ async function kaarkardagiNikalo(
 
   const darje =
     kulFisad >= 85
-      ? 'Bohat acha'
+      ? 'Very Good'
       : kulFisad >= 70
-      ? 'Theek'
+      ? 'Good'
       : kulFisad >= 50
-      ? 'Behtar ho sakta hai'
+      ? 'Needs Improvement'
       : kul === 0
-      ? 'Abhi koi khabar nahi'
-      : 'Dekhne ki zaroorat hai'
+      ? 'No Data Yet'
+      : 'Needs Attention'
 
   // AI kin kaamon mein madad kar raha hai
   const aiKaam = new Map<string, number>()
