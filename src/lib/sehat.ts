@@ -13,7 +13,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { looksLikeOrderIntent } from '@/lib/orderIntent'
 import { orderIntentLoad } from '@/lib/orderIntentDb'
 import { MANUAL_REASON_REPLY, MANUAL_REASON_LABEL } from '@/lib/intents'
-import { AVAILABLE_LINE, ORDER_INFO_MAANGO, ORDER_NAHI_MILA } from '@/lib/replyText'
+import {
+  AVAILABLE_LINE,
+  ORDER_INFO_MAANGO,
+  ORDER_NAHI_MILA,
+  statusJawabLagta,
+} from '@/lib/replyText'
 import { GREETING_TOPIC, answerForTopic, getTopicAnswer } from '@/lib/whatsapp'
 import { MODEL_GUIDE_TOPIC, TRACKING_UNKNOWN_TOPIC } from '@/lib/topicNames'
 
@@ -193,15 +198,23 @@ async function jawabKeNaam(): Promise<Map<string, { naam: string; qism: JawabQis
     .limit(500)
 
   let salaam = ''
+  let orderGuide = ''
   for (const t of topics || []) {
     const naam = String(t.topic || '')
     rakho(String(t.answer || ''), naam, 'topic')
     if (naam === GREETING_TOPIC) salaam = String(t.answer || '')
+    if (naam === MODEL_GUIDE_TOPIC) orderGuide = String(t.answer || '')
   }
 
   // 2) Code ke andar likhe hue jawab
   rakho(AVAILABLE_LINE, 'Model available hai', 'system')
   if (salaam) rakho(`${AVAILABLE_LINE}\n\n${salaam}`, 'Model available + salaam', 'system')
+  // Model poochhne par ab "Yes Available" ke sath order guide jati hai —
+  // dono ek hi message mein, is liye jurra hua matan bhi darj karna parta
+  // hai, warna wo "pehchana nahi gaya" mein chala jata hai.
+  if (orderGuide) {
+    rakho(`${AVAILABLE_LINE}\n\n${orderGuide}`, 'Model available + order guide', 'system')
+  }
   rakho(ORDER_INFO_MAANGO, 'Order number maanga', 'system')
   rakho(ORDER_NAHI_MILA, 'Order nahi mila — number dobara maanga', 'system')
 
@@ -443,9 +456,14 @@ export async function sehatLo(): Promise<Sehat> {
         .sort((a, b) => String(b.sent_at || '').localeCompare(String(a.sent_at || '')))
         .map((r) => {
           const mila = naqsha.get(String(r.reply_hash || ''))
+          const status = !mila && statusJawabLagta(String(r.sample || ''))
           return {
-            naam: mila ? mila.naam : 'Tracking ya pehchana nahi gaya',
-            qism: mila ? mila.qism : 'anjaan',
+            naam: mila
+              ? mila.naam
+              : status
+              ? 'Tracking — order ka status'
+              : 'Tracking ya pehchana nahi gaya',
+            qism: mila ? mila.qism : status ? 'tracking' : 'anjaan',
             kab: String(r.sent_at || ''),
             namuna: String(r.sample || '').slice(0, 120),
           }
@@ -455,10 +473,20 @@ export async function sehatLo(): Promise<Sehat> {
   const hadPar = Number(process.env.MAX_REPLIES_PER_DAY) || 4
   const hadParLog = Array.from(perLog.values()).filter((n) => n >= hadPar).length
 
+  // Kis hash ka matan kya tha — status wale jawab pehchanne ke liye
+  const namunaKaHash = new Map<string, string>()
+  for (const r of jawab) {
+    const h = String(r.reply_hash || '')
+    if (!namunaKaHash.has(h) && r.sample) namunaKaHash.set(h, String(r.sample))
+  }
+
   const jane: JawabQism[] = []
   const anjaanHash = new Set<string>()
   let anjaanN = 0
   const anjaanLog = new Set<string>()
+  // Live status wale jawab — ye bot khud banata hai, har order ka alag
+  let statusN = 0
+  const statusLog = new Set<string>()
   Array.from(perHashN.entries()).forEach(([h, n]) => {
     const mila = naqsha.get(h)
     if (mila) {
@@ -469,6 +497,11 @@ export async function sehatLo(): Promise<Sehat> {
         customers: (perHash.get(h) || new Set()).size,
         hissa: 0,
       })
+    } else if (statusJawabLagta(namunaKaHash.get(h) || '')) {
+      // Matan se saaf pata chal raha hai ke ye order ka status hai —
+      // ise "pehchana nahi gaya" mein daalne ki koi tuk nahi.
+      statusN += n
+      for (const p of Array.from(perHash.get(h) || new Set<string>())) statusLog.add(p)
     } else {
       anjaanN += n
       for (const p of Array.from(perHash.get(h) || new Set<string>())) anjaanLog.add(p)
@@ -476,19 +509,20 @@ export async function sehatLo(): Promise<Sehat> {
     }
   })
 
-  // Anjaan hashon mein sab se pehle TRACKING hai — har order ka jawab alag
-  // hota hai is liye us ka hash hamesha naya hota hai.
-  const trackingHissa = Math.min(tracking24, anjaanN)
+  // Baqi tracking wo hai jis ka matan mehfooz nahi tha — us ka andaza
+  // tracking ki ginti se lagta hai.
+  const binaMatanTracking = Math.min(Math.max(tracking24 - statusN, 0), anjaanN)
+  const trackingHissa = statusN + binaMatanTracking
   if (trackingHissa > 0) {
     jane.push({
       naam: 'Tracking — order ka status',
       qism: 'tracking',
       kitne: trackingHissa,
-      customers: Math.min(anjaanLog.size, trackingHissa),
+      customers: statusLog.size + Math.min(anjaanLog.size, binaMatanTracking),
       hissa: 0,
     })
   }
-  const bache = anjaanN - trackingHissa
+  const bache = anjaanN - binaMatanTracking
   if (bache > 0) {
     jane.push({
       naam: 'Pehchana nahi gaya (purana ya badla hua jawab)',

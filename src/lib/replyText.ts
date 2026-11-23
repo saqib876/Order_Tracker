@@ -11,6 +11,26 @@
 /** Model maujood hai — is ke sath aksar greeting bhi jati hai */
 export const AVAILABLE_LINE = '*Yes Available*'
 
+/**
+ * Live status wala jawab pehchanta hai.
+ *
+ * Har order ka status message alag hota hai (order number, tareekh, step
+ * sab badalte hain), is liye us ka matan kabhi kisi topic se nahi milta.
+ * Pehle ye Sehat ke safhe par "Pehchana nahi gaya" mein aa jate the, halanke
+ * ye bot ka apna banaya hua bilkul durust jawab hai.
+ *
+ * Shakal buildStatusReply() se aati hai:
+ *   📦 *Order #52798 Update*
+ *   Order Confirm Date: 23 Nov 2026
+ *   Status: ... (Step 3/4)
+ */
+export function statusJawabLagta(matan: string): boolean {
+  const m = String(matan || '')
+  if (!m) return false
+  if (/\*Order #\d+ Update\*/.test(m)) return true
+  return m.includes('Order Confirm Date:') && m.includes('Status:')
+}
+
 /** Order ki pehchan maangne wala message */
 export const ORDER_INFO_MAANGO = [
   'Please Apna ( Text Msg Ma Type Kr K Send Kr Dain )',
