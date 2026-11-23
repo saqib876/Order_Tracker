@@ -1957,3 +1957,62 @@ a.adm-masla:hover {
   background: var(--card-2);
   color: var(--ink-3);
 }
+
+/* Quick reply mein naya jumla chunne wala khana */
+.adm-chunao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+
+.adm-chota-select {
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.adm-chota-select:focus {
+  outline: 2px solid var(--accent-soft, var(--line-strong));
+  outline-offset: 1px;
+}
+
+/* Chhoti si chhupi hui list — jaise "mera apna message" wale jumle */
+.adm-fold-chota {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.adm-fold-chota > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  list-style: none;
+  user-select: none;
+}
+
+.adm-fold-chota > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adm-fold-chota > summary::before {
+  content: '▸ ';
+  color: var(--ink-3);
+}
+
+.adm-fold-chota[open] > summary::before {
+  content: '▾ ';
+}
+
+.adm-fold-chota > summary:hover {
+  color: var(--ink);
+}

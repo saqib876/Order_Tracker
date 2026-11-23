@@ -125,7 +125,12 @@ export interface Sehat {
     topicGinti: { naam: string; qism: string; kitne: number }[]
   }[]
   hadParLog: number
+  /** Quick reply ki mehfooz list — sirf wo jin par aap ne haan kaha */
   matanList: Matan[]
+  /** Jin par abhi faisla nahi hua — inhi mein se naya matan chuna ja sakta hai */
+  matanChunne: Matan[]
+  /** Jin ko aap ne "mera message" kaha — chhupe rehte hain */
+  meraList: Matan[]
   echo: { kul: number; matanWale: number; sirfKhabar: number }
   khamoshi: { phone: string; kabTak: string }[]
   excel: {
@@ -516,26 +521,61 @@ export async function sehatLo(): Promise<Sehat> {
   // Aap ne khud jin matan ka faisla kar rakha hai
   const { data: faisleRows } = await supabaseAdmin
     .from('wa_matan_faisla')
-    .select('text_hash,quick')
+    .select('text_hash,quick,sample,decided_at')
     .limit(500)
 
   const apneFaisle = new Map<string, boolean>()
   for (const r of faisleRows || []) apneFaisle.set(String(r.text_hash), Boolean(r.quick))
 
-  const matanList: Matan[] = Array.from(jama.entries())
-    .sort((a, b) => b[1].log.size - a[1].log.size)
-    .slice(0, 25)
-    .map(([hash, m]) => {
-      const mera = apneFaisle.has(hash) ? apneFaisle.get(hash) : undefined
+  // 1) Quick reply ki mehfooz list — sirf wo matan jin par AAP ne haan kaha.
+  //    Ye list bot khud nahi barhata. Jo aap daalenge wohi yahan rahega.
+  const matanList: Matan[] = (faisleRows || [])
+    .filter((r) => Boolean(r.quick))
+    .map((r) => {
+      const h = String(r.text_hash)
+      const dekha = jama.get(h)
       return {
-        hash,
-        matan: m.namuna || '(matan mehfooz nahi)',
-        customers: m.log.size,
-        quickReply: mera !== undefined ? mera : m.log.size >= QUICK_REPLY_MIN_CUSTOMERS,
-        aakhriDafa: m.aakhri,
-        faisla: mera === undefined ? null : mera ? ('quick' as const) : ('mera' as const),
+        hash: h,
+        matan: String(r.sample || dekha?.namuna || '(matan mehfooz nahi)'),
+        customers: dekha ? dekha.log.size : 0,
+        quickReply: true,
+        aakhriDafa: dekha?.aakhri || String(r.decided_at || ''),
+        faisla: 'quick' as const,
       }
     })
+    .sort((a, b) => b.customers - a.customers)
+
+  // 2) Jin ko aap ne "mera message" kaha — ye list se bilkul ghaib rehte hain.
+  //    Sirf ghalti sudharne ke liye ek chhupi hui list mein milte hain.
+  const meraList: Matan[] = (faisleRows || [])
+    .filter((r) => !r.quick)
+    .map((r) => {
+      const h = String(r.text_hash)
+      const dekha = jama.get(h)
+      return {
+        hash: h,
+        matan: String(r.sample || dekha?.namuna || '(matan mehfooz nahi)'),
+        customers: dekha ? dekha.log.size : 0,
+        quickReply: false,
+        aakhriDafa: dekha?.aakhri || String(r.decided_at || ''),
+        faisla: 'mera' as const,
+      }
+    })
+
+  // 3) Jin par abhi koi faisla nahi hua — inhi mein se aap naya matan quick
+  //    reply ki list mein daal sakte hain.
+  const matanChunne: Matan[] = Array.from(jama.entries())
+    .filter(([h, m]) => !apneFaisle.has(h) && Boolean(m.namuna))
+    .sort((a, b) => b[1].log.size - a[1].log.size)
+    .slice(0, 40)
+    .map(([hash, m]) => ({
+      hash,
+      matan: m.namuna,
+      customers: m.log.size,
+      quickReply: m.log.size >= QUICK_REPLY_MIN_CUSTOMERS,
+      aakhriDafa: m.aakhri,
+      faisla: null,
+    }))
 
   // ── Abhi kis par khamoshi ──────────────────────────────────────────────
   // ── Excel ki list saaf hai? ────────────────────────────────────────────
@@ -694,11 +734,11 @@ export async function sehatLo(): Promise<Sehat> {
     }
   }
 
-  const pehchane = matanList.filter((m) => m.quickReply).length
+  const pehchane = matanList.length
   khulasa.push({
     baat: pehchane
-      ? `${pehchane} matan ko bot ne quick reply maan liya — un par kabhi khamosh nahi hoga.`
-      : 'Abhi koi matan quick reply nahi mana gaya — har matan ko 3 alag customers tak jana baqi hai.',
+      ? `${pehchane} matan aap ne quick reply ki list mein daal rakhe hain — un par bot kabhi khamosh nahi hoga.`
+      : 'Quick reply ki list abhi khali hai — jo jumle aap bar bar bhejte hain, wo yahan daal dein.',
     theek: pehchane > 0,
         jagah: 'echo',
   })
@@ -795,6 +835,8 @@ export async function sehatLo(): Promise<Sehat> {
     zyadaJawab,
     hadParLog,
     matanList,
+    matanChunne,
+    meraList,
     echo: {
       kul: rows.length,
       matanWale: matanWale.length,

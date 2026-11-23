@@ -37,9 +37,22 @@ export async function POST(req: NextRequest) {
 
   const hash = String(form.get('hash') || '').trim()
   const quick = String(form.get('quick') || '')
-  const sample = String(form.get('sample') || '').slice(0, 200)
+  let sample = String(form.get('sample') || '').slice(0, 200)
 
   if (!hash) return wapas(req, adminKey, { khata: 'Matan nahi mila' })
+
+  // Niche wale "add" wale khane se sirf nishan aata hai — matan khud dhoond lein,
+  // taake list mein poora jumla nazar aaye aur baad mein bhi mehfooz rahe.
+  if (!sample) {
+    const { data } = await supabaseAdmin
+      .from('wa_recent_reply')
+      .select('sample')
+      .eq('text_hash', hash)
+      .not('sample', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    sample = String(data?.sample || '').slice(0, 200)
+  }
 
   // Faisla hata dena — bot phir apne andaze par chalega
   if (quick === '') {

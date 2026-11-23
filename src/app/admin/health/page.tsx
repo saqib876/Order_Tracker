@@ -294,15 +294,18 @@ export default async function HealthPage({
           <p className="adm-flash">
             {one('faisla') === 'quick' && (
               <>
-                Theek hai — ab is matan par bot <b>chalta rahega</b>.
+                Quick reply ki list mein daal diya — ab is jumle par bot <b>chalta rahega</b>.
               </>
             )}
             {one('faisla') === 'mera' && (
               <>
-                Theek hai — ab is matan par bot <b>khamosh</b> ho jayega.
+                Theek hai — ye aap ka apna message hai. Ab ye list mein <b>nahi</b> aayega aur is
+                par bot <b>khamosh</b> ho jayega.
               </>
             )}
-            {one('faisla') === 'khud' && <>Faisla hata diya — ab bot apne andaze par chalega.</>}
+            {one('faisla') === 'khud' && (
+              <>List se hata diya — ab bot is par apne andaze par chalega.</>
+            )}
           </p>
         )}
         {one('tracking') && (
@@ -648,25 +651,17 @@ export default async function HealthPage({
 
         <Khana
           id="echo"
-          naam="Aap ke bheje hue message"
-          tafseel="Quick reply pehchana gaya ya nahi"
-          ginti={s.echo.matanWale}
+          naam="Quick reply ki list"
+          tafseel="Jin jumlon par bot kabhi khamosh nahi hoga"
+          ginti={s.matanList.length}
         >
           <p className="adm-p">
-            Ek hi matan 3 ya zyada customers ko jaye to bot use <b>quick reply</b> samajh leta hai
-            aur chalta rehta hai. Sirf ek customer ko jaye to wo samajhta hai ke aap khud baat kar
-            rahe hain, aur us number par khamosh ho jata hai.
-          </p>
-          <p className="adm-p">
-            Ye andaza aksar theek hota hai, lekin aap khud bhi bata sakte hain — aur{' '}
-            <b>aap ka faisla bot ke andaze par bhaari hai</b>. Jo quick reply abhi 3 customers tak
-            nahi pohoncha, us par abhi se <b>Quick reply hai</b> daba dein; aur koi jumla ghalti se
-            quick reply gina ja raha ho to <b>Mera message hai</b>.
+            Ye wo jumle hain jo <b>aap ne khud</b> is list mein daale hain. In par bot hamesha
+            chalta rahega. Ye list khud se nahi barhti — jo aap daalenge bas wohi yahan rahega.
           </p>
           {s.matanList.length === 0 ? (
             <p className="adm-khali">
-              Abhi tak koi matan nahi mila. Ya to koi message bahar nahi gaya, ya Meta par
-              smb_message_echoes ka tick nahi laga.
+              List abhi khali hai. Niche wale khane se apna pehla quick reply chun lein.
             </p>
           ) : (
             <div className="adm-list">
@@ -675,67 +670,114 @@ export default async function HealthPage({
                   <p className="adm-sawaal-matan">
                     <span
                       className="adm-dot"
-                      style={{
-                        background: m.quickReply ? '#10b981' : '#f59e0b',
-                        display: 'inline-block',
-                        marginRight: 8,
-                      }}
+                      style={{ background: '#10b981', display: 'inline-block', marginRight: 8 }}
                       aria-hidden
                     />
                     {m.matan}
                   </p>
                   <div className="adm-sawaal-niche">
                     <span className="adm-sawaal-kab">
-                      <b>{m.customers}</b> customers ·{' '}
-                      {m.faisla === 'quick'
-                        ? 'AAP ne kaha: quick reply — bot chalta rahega'
-                        : m.faisla === 'mera'
-                        ? 'AAP ne kaha: aap ki apni likhai — bot khamosh ho jayega'
-                        : m.quickReply
-                        ? 'bot ka andaza: quick reply — bot chalta rahega'
-                        : 'bot ka andaza: aap ki apni likhai — 3 customers par pehchan lega'}
+                      {m.customers > 0 ? (
+                        <>
+                          <b>{m.customers}</b> customers ·{' '}
+                        </>
+                      ) : null}
+                      AAP ne quick reply kaha — bot chalta rahega
                     </span>
 
-                    {m.faisla !== 'quick' && (
-                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
-                        <input type="hidden" name="key" value={adminKey} />
-                        <input type="hidden" name="hash" value={m.hash} />
-                        <input type="hidden" name="sample" value={m.matan} />
-                        <input type="hidden" name="quick" value="1" />
-                        <button type="submit" className="adm-chota-btn">
-                          Quick reply hai
-                        </button>
-                      </form>
-                    )}
-
-                    {m.faisla !== 'mera' && (
-                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
-                        <input type="hidden" name="key" value={adminKey} />
-                        <input type="hidden" name="hash" value={m.hash} />
-                        <input type="hidden" name="sample" value={m.matan} />
-                        <input type="hidden" name="quick" value="0" />
-                        <button type="submit" className="adm-chota-btn adm-chota-bad">
-                          Mera message hai
-                        </button>
-                      </form>
-                    )}
-
-                    {m.faisla && (
-                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
-                        <input type="hidden" name="key" value={adminKey} />
-                        <input type="hidden" name="hash" value={m.hash} />
-                        <input type="hidden" name="sample" value={m.matan} />
-                        <input type="hidden" name="quick" value="" />
-                        <button type="submit" className="adm-chota-btn adm-chota-saada">
-                          Faisla hata dein
-                        </button>
-                      </form>
-                    )}
+                    <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
+                      <input type="hidden" name="key" value={adminKey} />
+                      <input type="hidden" name="hash" value={m.hash} />
+                      <input type="hidden" name="sample" value={m.matan} />
+                      <input type="hidden" name="quick" value="" />
+                      <button type="submit" className="adm-chota-btn adm-chota-saada">
+                        List se hata dein
+                      </button>
+                    </form>
                   </div>
                 </div>
               ))}
             </div>
           )}
+
+          <div className="adm-andar">
+            <p className="adm-p">
+              <b>Naya jumla daalein</b>
+            </p>
+            {s.matanChunne.length === 0 ? (
+              <p className="adm-hint">
+                Abhi koi naya jumla saamne nahi aaya — jo message aap ke number se bahar jayega, wo
+                yahan chunne ke liye aa jayega.
+              </p>
+            ) : (
+              <form action="/api/admin/matan-faisla" method="POST" className="adm-chunao">
+                <input type="hidden" name="key" value={adminKey} />
+                <select name="hash" className="adm-chota-select" defaultValue="" required>
+                  <option value="" disabled>
+                    Jumla chunein...
+                  </option>
+                  {s.matanChunne.map((m) => (
+                    <option value={m.hash} key={m.hash}>
+                      {m.matan.slice(0, 70)} — {m.customers} customers
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" name="quick" value="1" className="adm-chota-btn">
+                  Quick reply mein daal dein
+                </button>
+                <button
+                  type="submit"
+                  name="quick"
+                  value="0"
+                  className="adm-chota-btn adm-chota-bad"
+                >
+                  Ye mera apna message hai
+                </button>
+              </form>
+            )}
+            <p className="adm-hint">
+              Ye wo jumle hain jo aap ke number se bahar gaye aur jin par abhi koi faisla nahi hua.
+              Jis par aap <b>&quot;Ye mera apna message hai&quot;</b> daba dein, wo yahan se hamesha
+              ke liye ghaib ho jayega. Jab tak kisi jumle par faisla na ho, bot purana tareeqa hi
+              chalata hai — {s.settings.QUICK_REPLY_MIN_CUSTOMERS} ya zyada customers tak jaye to use
+              quick reply maan leta hai.
+            </p>
+          </div>
+
+          {s.meraList.length > 0 && (
+            <details className="adm-fold-chota">
+              <summary>
+                Jin ko aap ne &quot;mera apna message&quot; kaha — {s.meraList.length} (ye list mein
+                nahi aate)
+              </summary>
+              <div className="adm-list" style={{ marginTop: 10 }}>
+                {s.meraList.map((m, i) => (
+                  <div className="adm-sawaal" key={i}>
+                    <p className="adm-sawaal-matan">{m.matan}</p>
+                    <div className="adm-sawaal-niche">
+                      <span className="adm-sawaal-kab">
+                        AAP ne kaha: ye aap ki apni likhai hai — bot khamosh ho jata hai
+                      </span>
+                      <form
+                        action="/api/admin/matan-faisla"
+                        method="POST"
+                        className="adm-sawaal-form"
+                      >
+                        <input type="hidden" name="key" value={adminKey} />
+                        <input type="hidden" name="hash" value={m.hash} />
+                        <input type="hidden" name="sample" value={m.matan} />
+                        <input type="hidden" name="quick" value="1" />
+                        <button type="submit" className="adm-chota-btn">
+                          Ye to quick reply hai
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
           {s.echo.sirfKhabar > 0 && (
             <p className="adm-hint">
               {s.echo.sirfKhabar} message aise the jin ka matan nahi mila (tasveer, ya sirf status
