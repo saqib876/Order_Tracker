@@ -384,9 +384,16 @@ export default async function HealthPage({
 
         <div className="adm-paimane">
           {s.kaam.paimane.map((x, i) => (
-            <div className="adm-paimana" key={i} data-grade={gradeKa(x.fisad)}>
+            <div
+              className="adm-paimana"
+              key={i}
+              data-grade={x.sirfKhabar ? 'khabar' : gradeKa(x.fisad)}
+            >
               <div className="adm-paimana-top">
-                <span className="adm-paimana-naam">{x.naam}</span>
+                <span className="adm-paimana-naam">
+                  {x.naam}
+                  {x.sirfKhabar && <span className="adm-paimana-tag">sirf khabar</span>}
+                </span>
                 <span className="adm-paimana-n">{x.bunyad === 0 ? '—' : x.fisad + '%'}</span>
               </div>
               <span className="adm-meter">

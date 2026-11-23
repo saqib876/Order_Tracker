@@ -2033,3 +2033,27 @@ a.adm-masla:hover {
   overflow-x: auto;
   user-select: all;
 }
+
+/* Sirf khabar dene wala paimana — ye overall health mein nahi ginta,
+   is liye na hara na laal, bilkul neutral dikhta hai. */
+.adm-paimana[data-grade='khabar'] .adm-paimana-n {
+  color: var(--ink-3);
+}
+
+.adm-paimana[data-grade='khabar'] .adm-meter i {
+  background: var(--line-strong);
+}
+
+.adm-paimana-tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}

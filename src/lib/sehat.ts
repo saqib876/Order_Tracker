@@ -64,6 +64,11 @@ export interface Paimana {
   tafseel: string
   /** Kitne faislon par ye paimana bana — kam ho to bharosa bhi kam */
   bunyad: number
+  /**
+   * Ye paimana sirf khabar deta hai, achai burai ka faisla nahi karta —
+   * is liye ye overall health ke ausat mein shaamil nahi hota.
+   */
+  sirfKhabar?: boolean
 }
 
 export interface Kaarkardagi {
@@ -257,6 +262,21 @@ async function kaarkardagiNikalo(
   const khamosh = ginti((r) => r.qism === 'khamosh')
   const samjha = kul - khamosh
 
+  // Khamoshi do tarah ki hoti hai, aur dono ek jaisi nahi:
+  //
+  //   1. Soch samajh kar chup rehna — aap khud baat kar rahe hain, ya
+  //      order number pehle maang chuke hain, ya AI ne kamzor milan radd
+  //      kar diya. Ye bilkul DURUST faisla hai, ghalti nahi.
+  //   2. "Samajh hi nahi aaya" — koi topic mila hi nahi.
+  //
+  // Pehle dono ko ek saath ginti mein daal kar "Samajh" girta tha, halanke
+  // bot theek kaam kar raha hota tha.
+  const NA_SAMJHA_WAJAH = ['kisi topic se milan nahi hua', 'order ki koi pehchan nahi mili']
+  const naSamjha = ginti(
+    (r) => r.qism === 'khamosh' && NA_SAMJHA_WAJAH.includes(String(r.wajah || ''))
+  )
+  const sochKarKhamosh = Math.max(khamosh - naSamjha, 0)
+
   const tracking = ginti((r) => r.qism === 'tracking')
   const trackingNa = ginti((r) => r.qism === 'tracking_na_mila')
   const lafzSe = ginti((r) => r.zariya === 'lafz' && r.qism !== 'khamosh')
@@ -270,12 +290,16 @@ async function kaarkardagiNikalo(
   const paimane: Paimana[] = [
     {
       naam: 'Samajh',
-      fisad: hissa(samjha, kul),
+      fisad: hissa(samjha + sochKarKhamosh, kul),
       bunyad: kul,
-      matlab: `${samjha} mein se ${kul} messages ka jawab bana`,
+      matlab:
+        `${kul} messages mein se ${samjha} ka jawab bana, ${sochKarKhamosh} par bot ` +
+        `jaan boojh kar chup raha` +
+        (naSamjha ? `, aur ${naSamjha} ki koi samajh nahi aayi` : ''),
       tafseel:
-        'Jitne messages aaye un mein se kitnon ka bot ne jawab nikala. Baqi par wo ' +
-        'jaan boojh kar khamosh raha — khamoshi muft hai, ghalat jawab mehnga.',
+        'Jawab dena aur soch kar chup rehna — dono durust faisle hain (aap khud baat ' +
+        'kar rahe hon, ya sawaal pehle poocha ja chuka ho). Ye number sirf un messages ' +
+        'par girta hai jin ka bot ko koi matlab hi samajh na aaya.',
     },
     {
       naam: 'Durusti',
@@ -312,15 +336,23 @@ async function kaarkardagiNikalo(
       naam: 'Waqt ki samajh',
       fisad: hissa(manualPakka, manual),
       bunyad: manual,
-      matlab: `${manual} manual check mein se ${manualPakka} par yaqeen tha ke order mil chuka hai`,
+      // Is ka ooncha hona acha nahi, neecha hona bura nahi — ye sirf
+      // batata hai ke shikayatein kis waqt ki thin. Is liye ye overall
+      // health ke ausat mein nahi ginta.
+      sirfKhabar: true,
+      matlab:
+        `${manual} shikayat manual check mein gayi — ${manualPakka} order milne ke BAAD ki, ` +
+        `${Math.max(manual - manualPakka, 0)} us se pehle ki`,
       tafseel:
-        'Shikayat sirf us waqt manual check mein jani chahiye jab order mil chuka ho. ' +
-        'Baqi par bot ehtiyatan manual check hi chunta hai — taake koi baat chhoot na jaye.',
+        'Ye achai burai ka paimana nahi, sirf khabar hai: aaj ki shikayatein delivery ' +
+        'se pehle ki thin ya baad ki. Bot shak ki soorat mein manual check hi chunta ' +
+        'hai, taake koi baat chhoot na jaye — is liye ye overall health mein nahi ginta.',
     },
   ]
 
-  // Jin paimanon ki bunyad hi nahi bani, wo kul hisaab bigarte hain
-  const ginne = paimane.filter((x) => x.bunyad > 0)
+  // Kul hisaab mein wohi paimane ginte hain jin ki bunyad bani ho, aur jo
+  // waqai achai burai batate hon — sirf khabar dene wale nahi.
+  const ginne = paimane.filter((x) => x.bunyad > 0 && !x.sirfKhabar)
   const kulFisad = ginne.length
     ? Math.round(ginne.reduce((a, x) => a + x.fisad, 0) / ginne.length)
     : 0
