@@ -2016,3 +2016,20 @@ a.adm-masla:hover {
 .adm-fold-chota > summary:hover {
   color: var(--ink);
 }
+
+/* Safhe par dikhaya gaya SQL — copy karne ke liye */
+.adm-sql {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  user-select: all;
+}

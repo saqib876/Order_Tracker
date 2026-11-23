@@ -27,13 +27,20 @@ function wapas(req: NextRequest, adminKey: string, params: Record<string, string
 /**
  * Table hi na bani ho to Supabase ka apna paigham samajh nahi aata.
  * Us ki jagah seedha bata dete hain ke kya karna hai.
+ *
+ * Dhyan rahe: "schema cache" wali khata do soorton mein aati hai — table
+ * waqai na bani ho, YA ban chuki ho magar Supabase ke API ko abhi pata na
+ * chala ho. Doosri soorat mein sirf ek line chalani parti hai, is liye
+ * dono baatein saath likhte hain.
  */
 function khataSaaf(message: string): string {
   const m = String(message || '')
   if (m.includes('wa_matan_faisla') && (m.includes('schema cache') || m.includes('does not exist'))) {
     return (
-      'Database mein wa_matan_faisla table abhi bani nahi. Supabase ke SQL editor mein ' +
-      'qna_v2.sql ka section 18 chala dein, phir ye button kaam karne lag jayega.'
+      'Supabase ko wa_matan_faisla table nahi mil rahi. SQL editor mein qna_v2.sql ka ' +
+      'section 18 chala dein. Agar wo pehle hi chala chuke hain to table ban chuki hai, ' +
+      "bas Supabase ke API ko khabar nahi — us soorat mein sirf ye ek line chalayein: " +
+      "notify pgrst, 'reload schema';"
     )
   }
   return m

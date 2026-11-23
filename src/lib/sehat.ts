@@ -131,6 +131,8 @@ export interface Sehat {
   matanChunne: Matan[]
   /** Jin ko aap ne "mera message" kaha — chhupe rehte hain */
   meraList: Matan[]
+  /** wa_matan_faisla table abhi Supabase par nahi mil rahi */
+  matanTableNahi: boolean
   echo: { kul: number; matanWale: number; sirfKhabar: number }
   khamoshi: { phone: string; kabTak: string }[]
   excel: {
@@ -519,10 +521,14 @@ export async function sehatLo(): Promise<Sehat> {
   }
 
   // Aap ne khud jin matan ka faisla kar rakha hai
-  const { data: faisleRows } = await supabaseAdmin
+  const { data: faisleRows, error: faislaKhata } = await supabaseAdmin
     .from('wa_matan_faisla')
     .select('text_hash,quick,sample,decided_at')
     .limit(500)
+
+  // Table hi na mile to button dabane se pehle hi saaf bata dete hain,
+  // taake khata dhoondni na pare.
+  const matanTableNahi = Boolean(faislaKhata)
 
   const apneFaisle = new Map<string, boolean>()
   for (const r of faisleRows || []) apneFaisle.set(String(r.text_hash), Boolean(r.quick))
@@ -837,6 +843,7 @@ export async function sehatLo(): Promise<Sehat> {
     matanList,
     matanChunne,
     meraList,
+    matanTableNahi,
     echo: {
       kul: rows.length,
       matanWale: matanWale.length,

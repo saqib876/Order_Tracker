@@ -108,6 +108,24 @@ function Khana({
 }
 
 /**
+ * Quick reply ki list jis table par chalti hai. Table na mile to yahi SQL
+ * safhe par dikha dete hain, taake dhoondna na pare.
+ *
+ * Aakhri "notify" wali line us soorat ke liye hai jab table ban to chuki ho
+ * magar Supabase ke API ko abhi khabar na hui ho.
+ */
+const SQL_MATAN_FAISLA = `create table if not exists wa_matan_faisla (
+  text_hash   text primary key,
+  quick       boolean not null,
+  sample      text,
+  decided_at  timestamptz not null default now()
+);
+
+alter table wa_matan_faisla enable row level security;
+
+notify pgrst, 'reload schema';`
+
+/**
  * Upar wali "dekhne wali baatein" par click karne se wo section khul jata
  * hai. <details> khud ba khud nahi khulta, is liye ye chhota sa script
  * hash dekh kar use khol deta hai aur wahan le jata hai.
@@ -667,6 +685,24 @@ export default async function HealthPage({
             Ye wo jumle hain jo <b>aap ne khud</b> is list mein daale hain. In par bot hamesha
             chalta rahega. Ye list khud se nahi barhti — jo aap daalenge bas wohi yahan rahega.
           </p>
+
+          {s.matanTableNahi && (
+            <div className="adm-masla">
+              <p className="adm-p">
+                <b>Ye list abhi mehfooz nahi ho sakti</b> — Supabase ko <code>wa_matan_faisla</code>{' '}
+                table nahi mil rahi, is liye neeche ke button faisla save nahi kar payenge.
+              </p>
+              <p className="adm-p">
+                Supabase ke <b>SQL Editor</b> mein ye chala dein, phir ye page refresh karein:
+              </p>
+              <pre className="adm-sql">{SQL_MATAN_FAISLA}</pre>
+              <p className="adm-hint">
+                Agar aap ye SQL pehle hi chala chuke hain to table ban chuki hai — bas Supabase ke
+                API ko khabar nahi hui. Us soorat mein sirf <code>notify pgrst, &apos;reload
+                schema&apos;;</code> wali line hi kaafi hai.
+              </p>
+            </div>
+          )}
           {s.matanList.length === 0 ? (
             <p className="adm-khali">
               List abhi khali hai. Niche wale khane se apna pehla quick reply chun lein.
