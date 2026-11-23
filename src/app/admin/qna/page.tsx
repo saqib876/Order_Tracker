@@ -360,7 +360,16 @@ export default async function QnaPage({
                     </label>
                     <div className="adm-q">
                       {x.questions.map((q, i) => (
-                        <div key={i}>{q}</div>
+                        <label className="adm-q-line" key={i}>
+                          <input
+                            type="checkbox"
+                            name={`q_${x.id}`}
+                            value={q}
+                            className="adm-cb"
+                            defaultChecked
+                          />
+                          <span>{q}</span>
+                        </label>
                       ))}
                     </div>
                     <label className="adm-label">
@@ -381,7 +390,7 @@ export default async function QnaPage({
               <>
                 <h3 className="adm-h3">Purane topics mein naye sawaal ({nayeSawaal.length})</h3>
                 <p className="adm-hint" style={{ marginBottom: 10 }}>
-                  Ye jumle customers ne apne andaz mein likhe the. Topic mein jur gaye to agli dafa
+                  Ye jumle customers ne apne andaz mein likhe the. Har jumle ka apna tick hai — jo theek na lage us ka tick hata dein. Topic mein jur gaye to agli dafa
                   bot inhein <b>lafzon se hi</b> pehchan lega — AI ki zaroorat nahi, yani muft aur
                   foran.
                 </p>
@@ -398,7 +407,16 @@ export default async function QnaPage({
                     </label>
                     <div className="adm-q">
                       {x.questions.map((q, i) => (
-                        <div key={i}>{q}</div>
+                        <label className="adm-q-line" key={i}>
+                          <input
+                            type="checkbox"
+                            name={`q_${x.id}`}
+                            value={q}
+                            className="adm-cb"
+                            defaultChecked
+                          />
+                          <span>{q}</span>
+                        </label>
                       ))}
                     </div>
                   </div>
@@ -415,7 +433,11 @@ export default async function QnaPage({
               </button>
             </div>
             <p className="adm-hint">
-              <b>Radd</b> ka matlab hamesha ke liye — wo baatein aainda kabhi tajweez nahi hongi.
+              Har sawaal ka apna tick hai. Jo sawaal aap ko us topic ka na lage, us ka tick hata
+              dein — wo add nahi hoga, aur aainda dobara tajweez bhi nahi hoga.
+              <br />
+              <b>Radd</b> ka matlab hamesha ke liye — us tajweez ki saari baatein aainda kabhi
+              tajweez nahi hongi.
             </p>
           </form>
         )}

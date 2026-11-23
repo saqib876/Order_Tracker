@@ -6,6 +6,12 @@
  *     faisla  "approve" ya "reject"
  *     pick    chuni hui tajweez ki id (kai dafa aa sakti hai)
  *     ans_<id>  naye topic ka jawab (jo aap ne wahin likha)
+ *     q_<id>    us tajweez ke wo sawaal jin par tick laga hai
+ *
+ * Har sawaal ka apna tick hai. Jis par tick na ho wo add nahi hota, aur
+ * "qna_ignored" mein chala jata hai — yani aainda dobara tajweez bhi nahi
+ * hoga. Is tarah ek ghalat sawaal poori tajweez radd kiye baghair nikal
+ * jata hai.
  *
  * Approve par:
  *   naya_sawaal  → tajweez ke sawaal us maujooda topic mein jur jate hain
@@ -83,9 +89,30 @@ export async function POST(req: NextRequest) {
   let banay = 0
   const rukay: string[] = []
 
+  // Jin sawaalon ka tick hata diya gaya — wo add nahi honge aur aainda
+  // tajweez bhi nahi honge
+  const chhoray = new Set<string>()
+
   for (const r of rows || []) {
     const topic = String(r.topic)
-    const sawaal = ((r.questions as string[]) || []).map((q) => String(q).trim()).filter(Boolean)
+    const sabSawaal = ((r.questions as string[]) || []).map((q) => String(q).trim()).filter(Boolean)
+
+    // Form se wo sawaal jin par tick laga hai. Purana form (bina tick ke)
+    // ho to sab le lete hain.
+    const tickWale = form
+      .getAll('q_' + r.id)
+      .map((v) => String(v).trim())
+      .filter(Boolean)
+
+    const sawaal = tickWale.length ? sabSawaal.filter((q) => tickWale.includes(q)) : sabSawaal
+
+    for (const q of sabSawaal) {
+      if (!sawaal.includes(q)) {
+        const kk = ignoreKey(q)
+        if (kk) chhoray.add(kk)
+      }
+    }
+
     if (!sawaal.length) continue
 
     if (r.kind === 'naya_topic') {
@@ -180,6 +207,16 @@ export async function POST(req: NextRequest) {
     '[qna-approve] naye topics: ' + banay + ', sawaal jure: ' + juray +
       (rukay.length ? ', ruke: ' + rukay.join('; ') : '')
   )
+
+  if (chhoray.size) {
+    await supabaseAdmin
+      .from('qna_ignored')
+      .upsert(
+        Array.from(chhoray).map((text_norm) => ({ text_norm })),
+        { onConflict: 'text_norm', ignoreDuplicates: true }
+      )
+    console.log('[qna] ' + chhoray.size + ' sawaal tick na hone ki wajah se chhore gaye')
+  }
 
   return wapas(req, adminKey, {
     banay: String(banay),

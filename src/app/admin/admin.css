@@ -1923,3 +1923,30 @@ a.adm-masla:hover {
 .adm-nukat li {
   margin-bottom: 5px;
 }
+
+/* AI ki tajweez — har sawaal ka apna tick */
+.adm-q-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.adm-q-line .adm-cb {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+}
+
+.adm-q-line span {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.adm-q-line:has(.adm-cb:not(:checked)) span {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
