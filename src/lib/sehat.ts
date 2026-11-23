@@ -33,10 +33,13 @@ export interface JawabQism {
 }
 
 export interface Matan {
+  hash: string
   matan: string
   customers: number
   quickReply: boolean
   aakhriDafa: string
+  /** Aap ka apna faisla — 'quick' | 'mera' | null (yani bot khud tay kare) */
+  faisla: 'quick' | 'mera' | null
 }
 
 /** Code jin topics ko naam se bulata hai — wo mil rahe hain ya nahi */
@@ -510,15 +513,29 @@ export async function sehatLo(): Promise<Sehat> {
       })
   }
 
-  const matanList: Matan[] = Array.from(jama.values())
-    .sort((a, b) => b.log.size - a.log.size)
-    .slice(0, 15)
-    .map((m) => ({
-      matan: m.namuna || '(matan mehfooz nahi)',
-      customers: m.log.size,
-      quickReply: m.log.size >= QUICK_REPLY_MIN_CUSTOMERS,
-      aakhriDafa: m.aakhri,
-    }))
+  // Aap ne khud jin matan ka faisla kar rakha hai
+  const { data: faisleRows } = await supabaseAdmin
+    .from('wa_matan_faisla')
+    .select('text_hash,quick')
+    .limit(500)
+
+  const apneFaisle = new Map<string, boolean>()
+  for (const r of faisleRows || []) apneFaisle.set(String(r.text_hash), Boolean(r.quick))
+
+  const matanList: Matan[] = Array.from(jama.entries())
+    .sort((a, b) => b[1].log.size - a[1].log.size)
+    .slice(0, 25)
+    .map(([hash, m]) => {
+      const mera = apneFaisle.has(hash) ? apneFaisle.get(hash) : undefined
+      return {
+        hash,
+        matan: m.namuna || '(matan mehfooz nahi)',
+        customers: m.log.size,
+        quickReply: mera !== undefined ? mera : m.log.size >= QUICK_REPLY_MIN_CUSTOMERS,
+        aakhriDafa: m.aakhri,
+        faisla: mera === undefined ? null : mera ? ('quick' as const) : ('mera' as const),
+      }
+    })
 
   // ── Abhi kis par khamoshi ──────────────────────────────────────────────
   // ── Excel ki list saaf hai? ────────────────────────────────────────────

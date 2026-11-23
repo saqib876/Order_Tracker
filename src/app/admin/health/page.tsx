@@ -290,6 +290,21 @@ export default async function HealthPage({
             )}
           </p>
         )}
+        {one('faisla') && (
+          <p className="adm-flash">
+            {one('faisla') === 'quick' && (
+              <>
+                Theek hai — ab is matan par bot <b>chalta rahega</b>.
+              </>
+            )}
+            {one('faisla') === 'mera' && (
+              <>
+                Theek hai — ab is matan par bot <b>khamosh</b> ho jayega.
+              </>
+            )}
+            {one('faisla') === 'khud' && <>Faisla hata diya — ab bot apne andaze par chalega.</>}
+          </p>
+        )}
         {one('tracking') && (
           <p className="adm-flash">
             Sawaal tracking wali list mein darj ho gaya — aage se aise message pehchane
@@ -638,9 +653,15 @@ export default async function HealthPage({
           ginti={s.echo.matanWale}
         >
           <p className="adm-p">
-            Ek hi matan 3 ya zyada customers ko jaye to wo <b>quick reply</b> hai aur bot chalta
-            rehta hai. Sirf ek customer ko jaye to bot samajhta hai ke aap khud baat kar rahe hain
-            aur khamosh ho jata hai.
+            Ek hi matan 3 ya zyada customers ko jaye to bot use <b>quick reply</b> samajh leta hai
+            aur chalta rehta hai. Sirf ek customer ko jaye to wo samajhta hai ke aap khud baat kar
+            rahe hain, aur us number par khamosh ho jata hai.
+          </p>
+          <p className="adm-p">
+            Ye andaza aksar theek hota hai, lekin aap khud bhi bata sakte hain — aur{' '}
+            <b>aap ka faisla bot ke andaze par bhaari hai</b>. Jo quick reply abhi 3 customers tak
+            nahi pohoncha, us par abhi se <b>Quick reply hai</b> daba dein; aur koi jumla ghalti se
+            quick reply gina ja raha ho to <b>Mera message hai</b>.
           </p>
           {s.matanList.length === 0 ? (
             <p className="adm-khali">
@@ -650,21 +671,67 @@ export default async function HealthPage({
           ) : (
             <div className="adm-list">
               {s.matanList.map((m, i) => (
-                <div className="adm-item" key={i} data-off={m.quickReply ? undefined : '1'}>
-                  <span
-                    className="adm-dot"
-                    style={{ background: m.quickReply ? '#10b981' : '#f59e0b' }}
-                    aria-hidden
-                  />
-                  <span className="adm-item-name">
+                <div className="adm-sawaal" key={i}>
+                  <p className="adm-sawaal-matan">
+                    <span
+                      className="adm-dot"
+                      style={{
+                        background: m.quickReply ? '#10b981' : '#f59e0b',
+                        display: 'inline-block',
+                        marginRight: 8,
+                      }}
+                      aria-hidden
+                    />
                     {m.matan}
-                    <span className="adm-item-sub">
-                      {m.quickReply
-                        ? 'QUICK REPLY — bot chalta rahega'
-                        : 'abhi aap ki apni likhai samjha ja raha hai (3 customers par pehchan lega)'}
+                  </p>
+                  <div className="adm-sawaal-niche">
+                    <span className="adm-sawaal-kab">
+                      <b>{m.customers}</b> customers ·{' '}
+                      {m.faisla === 'quick'
+                        ? 'AAP ne kaha: quick reply — bot chalta rahega'
+                        : m.faisla === 'mera'
+                        ? 'AAP ne kaha: aap ki apni likhai — bot khamosh ho jayega'
+                        : m.quickReply
+                        ? 'bot ka andaza: quick reply — bot chalta rahega'
+                        : 'bot ka andaza: aap ki apni likhai — 3 customers par pehchan lega'}
                     </span>
-                  </span>
-                  <span className="adm-num">{m.customers}</span>
+
+                    {m.faisla !== 'quick' && (
+                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
+                        <input type="hidden" name="key" value={adminKey} />
+                        <input type="hidden" name="hash" value={m.hash} />
+                        <input type="hidden" name="sample" value={m.matan} />
+                        <input type="hidden" name="quick" value="1" />
+                        <button type="submit" className="adm-chota-btn">
+                          Quick reply hai
+                        </button>
+                      </form>
+                    )}
+
+                    {m.faisla !== 'mera' && (
+                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
+                        <input type="hidden" name="key" value={adminKey} />
+                        <input type="hidden" name="hash" value={m.hash} />
+                        <input type="hidden" name="sample" value={m.matan} />
+                        <input type="hidden" name="quick" value="0" />
+                        <button type="submit" className="adm-chota-btn adm-chota-bad">
+                          Mera message hai
+                        </button>
+                      </form>
+                    )}
+
+                    {m.faisla && (
+                      <form action="/api/admin/matan-faisla" method="POST" className="adm-sawaal-form">
+                        <input type="hidden" name="key" value={adminKey} />
+                        <input type="hidden" name="hash" value={m.hash} />
+                        <input type="hidden" name="sample" value={m.matan} />
+                        <input type="hidden" name="quick" value="" />
+                        <button type="submit" className="adm-chota-btn adm-chota-saada">
+                          Faisla hata dein
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

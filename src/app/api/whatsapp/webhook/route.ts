@@ -1044,6 +1044,18 @@ async function insaniJawabDekho(value: any): Promise<void> {
       continue
     }
 
+    // Pehle dekhte hain ke aap ne khud is matan ka faisla to nahi kar
+    // diya (Health ke safhe se). Aap ka faisla bot ke andaze par bhaari hai.
+    const aapKaFaisla = await matanKaFaisla(hash)
+    if (aapKaFaisla === true) {
+      console.log(`[wa] aap ne is matan ko quick reply kaha hua hai — bot chalta rahega`)
+      continue
+    }
+    if (aapKaFaisla === false) {
+      await khamoshLagao(phone, 'aap ne is matan ko apni likhai kaha hua hai')
+      continue
+    }
+
     // Yehi matan kitne ALAG customers ko ja chuka hai? Quick reply sab ko
     // jata hai; aap ki apni likhai sirf ek customer ko. Yehi farq hai.
     const { data: kahanGaya } = await supabaseAdmin
@@ -1108,6 +1120,24 @@ async function orderNaMilaJawab(phone: string): Promise<string | null> {
     (await getTopicAnswer(TRACKING_UNKNOWN_TOPIC)) ||
     TRACK_LINK_JAWAB
   )
+}
+
+/**
+ * Is matan ke bare mein aap ka apna faisla — agar kiya ho.
+ *
+ *   true   quick reply hai, bot chalta rahe
+ *   false  aap ki apni likhai hai, bot khamosh ho jaye
+ *   null   aap ne kuch nahi kaha — bot apne andaze par chale
+ */
+async function matanKaFaisla(hash: string): Promise<boolean | null> {
+  const { data, error } = await supabaseAdmin
+    .from('wa_matan_faisla')
+    .select('quick')
+    .eq('text_hash', hash)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return Boolean(data.quick)
 }
 
 /** Ye message bot ne khud bheja tha? */

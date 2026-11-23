@@ -368,3 +368,26 @@ create table if not exists order_intent_extra (
 );
 
 alter table order_intent_extra enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 18. wa_matan_faisla — aap ka apna faisla, kaun sa matan quick reply hai
+--
+-- Bot khud bhi andaza lagata hai: ek hi matan teen ya zyada customers ko
+-- jaye to wo quick reply hai. Ye aksar theek rehta hai, lekin kabhi kabhi
+-- nahi — koi quick reply abhi sirf ek do customers tak gaya ho, ya koi
+-- jumla ittefaqan kai logon ko chala gaya ho.
+--
+-- Is liye aap Health ke safhe se khud bhi bata sakte hain. Aap ka faisla
+-- bot ke andaze par bhaari hai.
+--
+--   quick = true   ye quick reply hai, bot chalta rahe
+--   quick = false  ye meri apni likhai hai, bot khamosh ho jaye
+-- ───────────────────────────────────────────────────────────────────────────
+create table if not exists wa_matan_faisla (
+  text_hash  text        primary key,
+  quick      boolean     not null,
+  sample     text,
+  decided_at timestamptz not null default now()
+);
+
+alter table wa_matan_faisla enable row level security;

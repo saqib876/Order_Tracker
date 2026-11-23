@@ -1950,3 +1950,10 @@ a.adm-masla:hover {
   opacity: 0.45;
   text-decoration: line-through;
 }
+
+/* Saada button — jaise "faisla hata dein" */
+.adm-chota-saada {
+  border-color: var(--line-strong);
+  background: var(--card-2);
+  color: var(--ink-3);
+}
