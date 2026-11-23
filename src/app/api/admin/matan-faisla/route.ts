@@ -24,6 +24,21 @@ function wapas(req: NextRequest, adminKey: string, params: Record<string, string
   return NextResponse.redirect(url, { status: 303 })
 }
 
+/**
+ * Table hi na bani ho to Supabase ka apna paigham samajh nahi aata.
+ * Us ki jagah seedha bata dete hain ke kya karna hai.
+ */
+function khataSaaf(message: string): string {
+  const m = String(message || '')
+  if (m.includes('wa_matan_faisla') && (m.includes('schema cache') || m.includes('does not exist'))) {
+    return (
+      'Database mein wa_matan_faisla table abhi bani nahi. Supabase ke SQL editor mein ' +
+      'qna_v2.sql ka section 18 chala dein, phir ye button kaam karne lag jayega.'
+    )
+  }
+  return m
+}
+
 export async function POST(req: NextRequest) {
   const adminKey = process.env.ADMIN_KEY
   if (!adminKey) {
@@ -57,7 +72,7 @@ export async function POST(req: NextRequest) {
   // Faisla hata dena — bot phir apne andaze par chalega
   if (quick === '') {
     const { error } = await supabaseAdmin.from('wa_matan_faisla').delete().eq('text_hash', hash)
-    if (error) return wapas(req, adminKey, { khata: error.message })
+    if (error) return wapas(req, adminKey, { khata: khataSaaf(error.message) })
     console.log('[matan] faisla hata diya: ' + sample.slice(0, 50))
     return wapas(req, adminKey, { faisla: 'khud' })
   }
@@ -72,7 +87,7 @@ export async function POST(req: NextRequest) {
     { onConflict: 'text_hash' }
   )
 
-  if (error) return wapas(req, adminKey, { khata: error.message })
+  if (error) return wapas(req, adminKey, { khata: khataSaaf(error.message) })
   console.log(`[matan] ${quick === '1' ? 'QUICK REPLY' : 'aap ki likhai'}: ${sample.slice(0, 50)}`)
   return wapas(req, adminKey, { faisla: quick === '1' ? 'quick' : 'mera' })
 }
