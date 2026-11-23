@@ -126,7 +126,15 @@ function KholoScript() {
     'if(d)d.open=true;',
     'el.scrollIntoView({block:"start",behavior:"smooth"});',
     '}',
-    'kholo();window.addEventListener("hashchange",kholo);',
+    // Kaam ho jane ka paigham URL mein pada reh jata tha, is liye har refresh
+    // par wohi purana paigham (ya purani khata) dobara nazar aa jati thi.
+    // Dikhane ke foran baad URL se nikal dete hain.
+    'function saafKaro(){try{',
+    'var u=new URL(location.href);var naam=["khata","faisla","jura","hataya","tracking","nikla","bheja"];',
+    'var badla=false;for(var i=0;i<naam.length;i++){if(u.searchParams.has(naam[i])){u.searchParams.delete(naam[i]);badla=true}}',
+    'if(badla)history.replaceState(null,"",u.pathname+u.search+location.hash);',
+    '}catch(e){}}',
+    'kholo();saafKaro();window.addEventListener("hashchange",kholo);',
     '})()',
   ].join('')
   return <script dangerouslySetInnerHTML={{ __html: code }} />
