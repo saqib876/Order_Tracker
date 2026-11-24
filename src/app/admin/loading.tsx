@@ -1,12 +1,14 @@
 /**
  * Safha khulte waqt jo nazar aata hai.
  *
- * Ye safhay har dafa database se taza data late hain, is liye khulne mein
- * ek lamha lagta hai. Pehle us dauran screen par kuch nahi badalta tha —
- * lagta tha ke click hua hi nahi, aur user dobara daba deta tha.
+ * Ye safhay har dafa database se taza hisaab lagate hain, is liye khulne
+ * mein ek lamha lagta hai. Us dauran screen par kuch na badle to lagta hai
+ * ke click hua hi nahi.
  *
- * Ab click karte hi ye dikh jata hai: patti, unwan, aur khali dabbe. Us ke
- * baad asli safha un ki jagah le leta hai.
+ * Pehle yahan bare bare khali dabbe blink karte the — dekhne mein bhaddi
+ * lagti thi. Ab dhancha asli safhe jaisa hai (upar ka haal, paanch chhote
+ * paimane, aur band sections ki pattiyan) aur un par ek halki si roshni
+ * guzarti hai. Is tarah intezaar bhara hua lagta hai, khali nahi.
  */
 
 import './admin.css'
@@ -23,25 +25,39 @@ export default function Loading() {
             Myzan Bot
           </span>
           <span className="adm-nav">
-            <span className="adm-loading-pill" />
+            <span className="adm-sk adm-sk-pill" />
           </span>
         </nav>
 
-        <div className="adm-skel adm-skel-title" />
-        <div className="adm-skel adm-skel-sub" />
+        {/* Upar ka unwan */}
+        <div className="adm-sk adm-sk-title" />
+        <div className="adm-sk adm-sk-sub" />
 
-        <div className="adm-stats">
-          <div className="adm-stat adm-skel-box" />
-          <div className="adm-stat adm-skel-box" />
-          <div className="adm-stat adm-skel-box" />
-          <div className="adm-stat adm-skel-box" />
+        {/* Bara wala haal — bayein taraf number, dayein taraf do lines */}
+        <div className="adm-sk-hero">
+          <div className="adm-sk adm-sk-score" />
+          <div className="adm-sk-hero-text">
+            <div className="adm-sk adm-sk-line adm-sk-line-1" />
+            <div className="adm-sk adm-sk-line adm-sk-line-2" />
+          </div>
         </div>
 
-        <div className="adm-skel adm-skel-row" />
-        <div className="adm-skel adm-skel-row" />
-        <div className="adm-skel adm-skel-row" />
+        {/* Paanch paimane */}
+        <div className="adm-sk-grid">
+          <div className="adm-sk adm-sk-card" />
+          <div className="adm-sk adm-sk-card" />
+          <div className="adm-sk adm-sk-card" />
+          <div className="adm-sk adm-sk-card" />
+          <div className="adm-sk adm-sk-card" />
+        </div>
 
-        <p className="adm-hint" style={{ marginTop: 14 }}>
+        {/* Band pare hue sections */}
+        <div className="adm-sk adm-sk-strip" />
+        <div className="adm-sk adm-sk-strip" />
+        <div className="adm-sk adm-sk-strip" />
+
+        <p className="adm-sk-keh">
+          <span className="adm-sk-ghoom" aria-hidden />
           Taza hisaab lagaya ja raha hai...
         </p>
       </div>

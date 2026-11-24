@@ -1781,62 +1781,6 @@ a.adm-masla:hover {
  * hai jab tak safha nahi aa jata, phir gayab ho jati hai.
  * ───────────────────────────────────────────────────────────────────── */
 
-.adm-skel {
-  border-radius: 11px;
-  background: var(--card-2);
-  animation: adm-chamak 1.2s ease-in-out infinite;
-}
-
-.adm-skel-title {
-  width: 230px;
-  height: 36px;
-  margin: 10px 0 10px;
-}
-
-.adm-skel-sub {
-  width: min(420px, 80%);
-  height: 15px;
-  margin-bottom: 18px;
-}
-
-.adm-skel-box {
-  border: 1px solid var(--line);
-  min-height: 78px;
-  animation: adm-chamak 1.2s ease-in-out infinite;
-}
-
-.adm-skel-row {
-  height: 62px;
-  margin-bottom: 10px;
-}
-
-.adm-loading-pill {
-  display: inline-block;
-  width: 180px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--card-2);
-  animation: adm-chamak 1.2s ease-in-out infinite;
-}
-
-@keyframes adm-chamak {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .adm-skel,
-  .adm-skel-box,
-  .adm-loading-pill {
-    animation: none;
-  }
-}
-
 /* Jab kisi section par le jaya jaye to upar ki patti us ko dhaank na le */
 .adm-fold {
   scroll-margin-top: 86px;
@@ -2056,4 +2000,160 @@ a.adm-masla:hover {
   font-weight: 600;
   letter-spacing: 0.02em;
   vertical-align: middle;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Loading ka dhancha
+ *
+ * Purane dabbe poori opacity badal kar blink karte the — bhari aur bhaddi
+ * harkat. Ab dabba apni jagah saakin rehta hai aur us ke upar ek patli si
+ * roshni guzarti hai. Roshni transform se chalti hai, is liye sasti hai.
+ * ───────────────────────────────────────────────────────────────────────── */
+.adm-sk {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--card-2);
+}
+
+.adm-sk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--sk-chamak) 50%,
+    transparent 100%
+  );
+  animation: adm-sk-guzar 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes adm-sk-guzar {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+:root,
+:root[data-theme='dark'] {
+  --sk-chamak: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='light'] {
+  --sk-chamak: rgba(15, 23, 42, 0.05);
+}
+
+.adm-sk-pill {
+  display: inline-block;
+  width: 170px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.adm-sk-title {
+  width: 190px;
+  height: 30px;
+  margin: 14px 0 9px;
+}
+
+.adm-sk-sub {
+  width: min(380px, 72%);
+  height: 13px;
+  margin-bottom: 18px;
+  border-radius: 7px;
+}
+
+/* Upar wala bara haal */
+.adm-sk-hero {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  margin-bottom: 14px;
+}
+
+.adm-sk-score {
+  flex: 0 0 auto;
+  width: 104px;
+  height: 52px;
+  border-radius: 10px;
+}
+
+.adm-sk-hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.adm-sk-line {
+  height: 13px;
+  border-radius: 7px;
+}
+
+.adm-sk-line-1 {
+  width: min(260px, 55%);
+  margin-bottom: 10px;
+  height: 16px;
+}
+
+.adm-sk-line-2 {
+  width: min(420px, 85%);
+}
+
+/* Paanch paimane */
+.adm-sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.adm-sk-card {
+  height: 92px;
+  border: 1px solid var(--line);
+}
+
+/* Band pari hui sections ki pattiyan */
+.adm-sk-strip {
+  height: 54px;
+  margin-bottom: 9px;
+  border: 1px solid var(--line);
+}
+
+/* Neeche ka jumla aur ghoomta hua chhota halqa */
+.adm-sk-keh {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.adm-sk-ghoom {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--ink-3);
+  border-radius: 50%;
+  animation: adm-sk-ghoomo 0.8s linear infinite;
+}
+
+@keyframes adm-sk-ghoomo {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Jin ko harkat se takleef ho — un ke liye sab saakin */
+@media (prefers-reduced-motion: reduce) {
+  .adm-sk::after,
+  .adm-sk-ghoom {
+    animation: none;
+  }
 }
