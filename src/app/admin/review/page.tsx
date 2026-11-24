@@ -26,7 +26,7 @@ import { unstable_noStore as noStore } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 import { MANUAL_REASON_LABEL, CHANGE_REASONS, ISSUE_REASONS } from '@/lib/intents'
 import type { ManualReason } from '@/lib/intents'
-import { ThemeBoot, ThemeToggle } from '../ThemeBits'
+import { ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -255,7 +255,6 @@ export default async function ReviewPage({
 
   return (
     <main className="adm">
-      <ThemeBoot />
       <div className="adm-wrap">
         <nav className="adm-bar adm-in">
           <span className="adm-brand">

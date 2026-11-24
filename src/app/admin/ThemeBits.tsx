@@ -15,6 +15,10 @@
 
 const SCRIPT = [
   '(function(){',
+  // Script do dafa chal jaye to click ka listener bhi do dafa lagta hai,
+  // aur roop ek hi click par do dafa palat kar wapas wohi ban jata hai.
+  // Is nishan se wo soorat hi nahi banti.
+  'if(window.__myzanRoop)return;window.__myzanRoop=1;',
   'var KEY="myzan-theme";',
   'var d=document.documentElement;',
   'var mq=window.matchMedia("(prefers-color-scheme: light)");',

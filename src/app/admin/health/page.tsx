@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { sehatLo } from '@/lib/sehat'
 import { dohreSawaal, sawaalDhoondo } from '@/lib/sawaalSafai'
 import type { SawaalJagah, TopicChota } from '@/lib/sawaalSafai'
-import { ThemeBoot, ThemeToggle } from '../ThemeBits'
+import { ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -275,7 +275,6 @@ export default async function HealthPage({
 
   return (
     <main className="adm">
-      <ThemeBoot />
       <KholoScript />
       <div className="adm-wrap">
         <nav className="adm-bar adm-in">

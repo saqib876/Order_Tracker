@@ -16,7 +16,7 @@ import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { aiProvider, aiMode, aiModel, aiAvailable, aajKiGinti } from '@/lib/aiTopic'
-import { ThemeBoot, ThemeToggle } from '../ThemeBits'
+import { ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -144,7 +144,6 @@ export default async function QnaPage({
 
   return (
     <main className="adm">
-      <ThemeBoot />
       <div className="adm-wrap">
         {/* Oopar ki patti */}
         <nav className="adm-bar adm-in">

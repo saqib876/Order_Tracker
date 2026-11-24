@@ -33,7 +33,7 @@ import { unstable_noStore as noStore } from 'next/cache'
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { ignoreKey } from '@/lib/qnaIgnore'
-import { ThemeBoot, ThemeToggle } from '../ThemeBits'
+import { ThemeToggle } from '../ThemeBits'
 import '../admin.css'
 
 export const dynamic = 'force-dynamic'
@@ -201,7 +201,6 @@ export default async function TopicsPage({
 
   return (
     <main className="adm">
-      <ThemeBoot />
       <div className="adm-wrap">
         {/* Oopar ki patti */}
         <nav className="adm-bar adm-in">
